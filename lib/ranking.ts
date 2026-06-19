@@ -13,11 +13,18 @@ const HAZARD_LABEL: Record<HazardKey, string> = {
   volcano: "火山",
 };
 
+const ATTR_LABEL: { key: keyof UserAttrs; label: string }[] = [
+  { key: "wheelchair", label: "車椅子" },
+  { key: "elderly", label: "高齢・歩行不安" },
+  { key: "stroller", label: "乳幼児連れ" },
+  { key: "visual_impairment", label: "視覚障害" },
+  { key: "hearing_impairment", label: "聴覚障害" },
+  { key: "foreign_language", label: "外国語" },
+  { key: "has_caregiver", label: "介助者あり" },
+];
+
 // ハーバサイン距離(km)
-export function distanceKm(
-  a: [number, number],
-  b: [number, number]
-): number {
+export function distanceKm(a: [number, number], b: [number, number]): number {
   const R = 6371;
   const dLat = ((b[1] - a[1]) * Math.PI) / 180;
   const dLon = ((b[0] - a[0]) * Math.PI) / 180;
@@ -34,90 +41,142 @@ function needsBarrierFree(attrs: UserAttrs): boolean {
   return attrs.wheelchair || attrs.elderly || attrs.stroller;
 }
 
-/**
- * 避難所候補をスコアリングして上位順に返す。
- * スコア = バリアフリー適合 + ハザード回避 - 距離ペナルティ
- */
+// 1施設をスコアリング
+function scoreOne(
+  feature: EvacFeature,
+  origin: [number, number],
+  attrs: UserAttrs
+): RankedEvac {
+  const p = feature.properties;
+  const reasons: string[] = [];
+  const cautions: string[] = [];
+  let score = 100;
+
+  const d = distanceKm(origin, feature.geometry.coordinates);
+  score -= d * 8; // 距離ペナルティ
+
+  // 災害種別の適否(避難場所のみ)
+  if (attrs.hazard && p.hazards) {
+    if (p.hazards[attrs.hazard]) {
+      score += 25;
+      reasons.push(`${HAZARD_LABEL[attrs.hazard]}時に避難できる指定場所`);
+    } else {
+      score -= 60;
+      cautions.push(`${HAZARD_LABEL[attrs.hazard]}に対応していない可能性`);
+    }
+  }
+
+  const bf = needsBarrierFree(attrs);
+  if (bf) {
+    if (attrs.wheelchair) {
+      if (p.a11y.ground_or_elevator) {
+        score += 15;
+        reasons.push("1階に避難スペース/エレベーター有");
+      } else {
+        score -= 25;
+        cautions.push("段差・階段の可能性(1階/EV情報なし)");
+      }
+      if (p.a11y.slope) {
+        score += 10;
+        reasons.push("スロープあり");
+      }
+      if (p.a11y.wheelchair_toilet) {
+        score += 10;
+        reasons.push("車椅子対応トイレあり");
+      } else {
+        cautions.push("車椅子対応トイレ情報なし");
+      }
+    }
+    if (attrs.stroller && p.a11y.ground_or_elevator) {
+      score += 8;
+      reasons.push("ベビーカーでも入りやすい(1階/EV)");
+    }
+    if (attrs.elderly && (p.a11y.slope || p.a11y.ground_or_elevator)) {
+      score += 6;
+      reasons.push("段差が少なく高齢者も移動しやすい");
+    }
+  }
+
+  if (attrs.visual_impairment) {
+    if (p.a11y.braille) {
+      score += 10;
+      reasons.push("点字ブロックあり");
+    } else {
+      cautions.push("点字ブロック情報なし");
+    }
+  }
+
+  if ((attrs.stroller || attrs.elderly || attrs.wheelchair) && p.kind === "center") {
+    score += 5;
+    reasons.push("屋内で滞在できる指定避難所");
+  }
+
+  return { feature, distanceKm: d, score, reasons, cautions };
+}
+
+/** 避難所候補をスコアリングして上位順に返す */
 export function rankEvacuations(
   features: EvacFeature[],
   origin: [number, number],
   attrs: UserAttrs,
   limit = 20
 ): RankedEvac[] {
-  const bf = needsBarrierFree(attrs);
+  return features
+    .map((f) => scoreOne(f, origin, attrs))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}
 
-  const ranked: RankedEvac[] = features.map((feature) => {
-    const p = feature.properties;
-    const reasons: string[] = [];
-    const cautions: string[] = [];
-    let score = 100;
+// 当事者の意思決定を支援する説明
+export interface Decision {
+  summary: string; // なぜ1位か
+  // より近いのに薦めなかった候補（あれば）
+  nearerRejected: { name: string; distanceKm: number; reason: string } | null;
+}
 
-    const d = distanceKm(origin, feature.geometry.coordinates);
-    // 距離ペナルティ(1kmあたり-8、近いほど高い)
-    score -= d * 8;
+function activeAttrLabels(attrs: UserAttrs): string[] {
+  const xs = ATTR_LABEL.filter((a) => attrs[a.key]).map((a) => a.label);
+  if (attrs.hazard) xs.push(`${HAZARD_LABEL[attrs.hazard]}を想定`);
+  return xs;
+}
 
-    // 災害種別の適否(避難場所のみ)
-    if (attrs.hazard && p.hazards) {
-      if (p.hazards[attrs.hazard]) {
-        score += 25;
-        reasons.push(`${HAZARD_LABEL[attrs.hazard]}時に避難できる指定場所`);
-      } else {
-        score -= 60;
-        cautions.push(`${HAZARD_LABEL[attrs.hazard]}には対応していない可能性`);
-      }
+/**
+ * 1位の根拠説明と、「より近いのに見送った候補とその理由」を生成する。
+ * 既存サービスの“最寄り順リスト”との差別化（当事者の意思決定支援）。
+ */
+export function explainDecision(
+  features: EvacFeature[],
+  origin: [number, number],
+  attrs: UserAttrs,
+  ranked: RankedEvac[]
+): Decision | null {
+  const top = ranked[0];
+  if (!top) return null;
+
+  const attrText = activeAttrLabels(attrs).join("・") || "一般";
+  const r = top.reasons.slice(0, 3).join("、");
+  const summary =
+    `あなたの状況（${attrText}）に最も適した避難先です。` +
+    (r ? `${r}。` : "") +
+    `現在地から約${top.distanceKm.toFixed(1)}km。`;
+
+  // より近いのに見送った候補: topより明確に近く、注意点があり、スコアが低いもの
+  let nearerRejected: Decision["nearerRejected"] = null;
+  let best: { d: number; name: string; reason: string } | null = null;
+  for (const f of features) {
+    const d = distanceKm(origin, f.geometry.coordinates);
+    if (d >= top.distanceKm - 0.05) continue; // topより近いものだけ
+    const s = scoreOne(f, origin, attrs);
+    if (s.score >= top.score || s.cautions.length === 0) continue; // 見送り理由が要る
+    if (!best || d < best.d) {
+      best = { d, name: f.properties.name, reason: s.cautions[0] };
     }
+  }
+  if (best) {
+    nearerRejected = { name: best.name, distanceKm: best.d, reason: best.reason };
+  }
 
-    // バリアフリー適合
-    if (bf) {
-      if (attrs.wheelchair) {
-        if (p.a11y.ground_or_elevator) {
-          score += 15;
-          reasons.push("1階に避難スペース/エレベーター有");
-        } else {
-          score -= 25;
-          cautions.push("段差・階段の可能性(1階/EV情報なし)");
-        }
-        if (p.a11y.slope) {
-          score += 10;
-          reasons.push("スロープあり");
-        }
-        if (p.a11y.wheelchair_toilet) {
-          score += 10;
-          reasons.push("車椅子対応トイレあり");
-        } else {
-          cautions.push("車椅子対応トイレ情報なし");
-        }
-      }
-      if (attrs.stroller && p.a11y.ground_or_elevator) {
-        score += 8;
-        reasons.push("ベビーカーでも入りやすい(1階/EV)");
-      }
-      if (attrs.elderly && (p.a11y.slope || p.a11y.ground_or_elevator)) {
-        score += 6;
-        reasons.push("段差が少なく高齢者も移動しやすい");
-      }
-    }
-
-    // 視覚障害 → 点字ブロック
-    if (attrs.visual_impairment) {
-      if (p.a11y.braille) {
-        score += 10;
-        reasons.push("点字ブロックあり");
-      } else {
-        cautions.push("点字ブロック情報なし");
-      }
-    }
-
-    // 滞在が必要そう(乳幼児/高齢/車椅子)なら指定避難所(center)を優遇
-    if ((attrs.stroller || attrs.elderly || attrs.wheelchair) && p.kind === "center") {
-      score += 5;
-      reasons.push("屋内で滞在できる指定避難所");
-    }
-
-    return { feature, distanceKm: d, score, reasons, cautions };
-  });
-
-  return ranked.sort((a, b) => b.score - a.score).slice(0, limit);
+  return { summary, nearerRejected };
 }
 
 export { HAZARD_LABEL };

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import type { EvacCollection, EvacFeature, RankedEvac, UserAttrs, HazardKey } from "@/lib/types";
 import { DEFAULT_ATTRS } from "@/lib/types";
-import { rankEvacuations } from "@/lib/ranking";
+import { rankEvacuations, explainDecision } from "@/lib/ranking";
 
 // MapLibreはSSR不可なのでクライアント専用で読み込む
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
@@ -70,6 +70,12 @@ export default function Home() {
     if (!submitted || all.length === 0) return [];
     return rankEvacuations(all, origin, attrs, 20);
   }, [submitted, all, origin, attrs]);
+
+  // 1位の根拠 ＋「より近いのに見送った候補」（意思決定支援）
+  const decision = useMemo(() => {
+    if (!submitted || ranked.length === 0) return null;
+    return explainDecision(all, origin, attrs, ranked);
+  }, [submitted, all, origin, attrs, ranked]);
 
   async function handleSubmit() {
     if (!text.trim()) return;
@@ -171,6 +177,28 @@ export default function Home() {
           </div>
           <p className="mt-1 text-[10px] text-gray-400">出典: ハザードマップポータルサイト(国土交通省)</p>
         </div>
+
+        {/* 1位の根拠 ＋ 行けない理由（意思決定支援） */}
+        {decision && (
+          <div className="flex flex-col gap-2">
+            {ranked[0] && (
+              <div className="rounded-lg border border-red-300 bg-red-50 p-3">
+                <div className="text-xs font-bold text-red-700">
+                  なぜ「{ranked[0].feature.properties.name}」が1位？
+                </div>
+                <p className="mt-1 text-sm text-gray-800">{decision.summary}</p>
+              </div>
+            )}
+            {decision.nearerRejected && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                💡 より近い「{decision.nearerRejected.name}」（
+                {decision.nearerRejected.distanceKm.toFixed(1)}km）もありますが、
+                <b>{decision.nearerRejected.reason}</b>
+                のため、上記を推奨します。
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 結果リスト */}
         <div className="flex flex-col gap-2">
