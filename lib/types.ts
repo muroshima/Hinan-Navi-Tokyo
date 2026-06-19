@@ -77,4 +77,5 @@ export interface RankedEvac {
   score: number;
   reasons: string[]; // おすすめ理由
   cautions: string[]; // 注意・不適合点
+  babyChangeM?: number | null; // 最寄りのおむつ替え台までの距離(m) ※乳幼児連れ時
 }

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import type { EvacCollection, EvacFeature, RankedEvac, UserAttrs, HazardKey } from "@/lib/types";
 import { DEFAULT_ATTRS } from "@/lib/types";
-import { rankEvacuations, explainDecision } from "@/lib/ranking";
+import { rankEvacuations, explainDecision, enrichInfantCare } from "@/lib/ranking";
 
 // MapLibreはSSR不可なのでクライアント専用で読み込む
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
@@ -45,6 +45,7 @@ const HAZARD_LAYERS: { key: HazardKey; label: string }[] = [
 
 export default function Home() {
   const [all, setAll] = useState<EvacFeature[]>([]);
+  const [babyCoords, setBabyCoords] = useState<[number, number][]>([]);
   const [origin, setOrigin] = useState<[number, number]>(TOKYO_STATION);
   const [text, setText] = useState("");
   const [attrs, setAttrs] = useState<UserAttrs>(DEFAULT_ATTRS);
@@ -67,6 +68,17 @@ export default function Home() {
       .then((r) => r.json())
       .then((fc: EvacCollection) => setAll(fc.features))
       .catch(() => setAll([]));
+    // おむつ替え台のあるトイレの座標（乳幼児連れ向け）
+    fetch("/data/toilets.geojson")
+      .then((r) => r.json())
+      .then((fc: { features: { geometry: { coordinates: [number, number] }; properties: { a11y: { baby_change: boolean } } }[] }) => {
+        setBabyCoords(
+          fc.features
+            .filter((f) => f.properties?.a11y?.baby_change)
+            .map((f) => f.geometry.coordinates)
+        );
+      })
+      .catch(() => setBabyCoords([]));
   }, []);
 
   // 現在地（取れなければ東京駅）
@@ -128,8 +140,9 @@ export default function Home() {
 
   const ranked: RankedEvac[] = useMemo(() => {
     if (!submitted || all.length === 0) return [];
-    return rankEvacuations(all, origin, attrs, 20);
-  }, [submitted, all, origin, attrs]);
+    const base = rankEvacuations(all, origin, attrs, 20);
+    return enrichInfantCare(base, babyCoords, attrs);
+  }, [submitted, all, origin, attrs, babyCoords]);
 
   // 1位の根拠 ＋「より近いのに見送った候補」（意思決定支援）
   const decision = useMemo(() => {

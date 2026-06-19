@@ -144,6 +144,35 @@ export function rankEvacuations(
     .slice(0, limit);
 }
 
+/**
+ * 乳幼児連れ(stroller)のとき、各避難所の近くに「おむつ替え台のあるトイレ」が
+ * あるかを車椅子対応トイレBFデータ(乳幼児用おむつ交換台)から紐づけて優遇・表示する。
+ * babyCoords: おむつ替え台のあるトイレの座標 [lon,lat][]
+ */
+export function enrichInfantCare(
+  ranked: RankedEvac[],
+  babyCoords: [number, number][],
+  attrs: UserAttrs
+): RankedEvac[] {
+  if (!attrs.stroller || babyCoords.length === 0) return ranked;
+  const enriched = ranked.map((r) => {
+    let min = Infinity;
+    for (const c of babyCoords) {
+      const d = distanceKm(r.feature.geometry.coordinates, c);
+      if (d < min) min = d;
+    }
+    const reasons = [...r.reasons];
+    let score = r.score;
+    const m = isFinite(min) ? Math.round(min * 1000) : null;
+    if (m !== null && min <= 0.3) {
+      reasons.unshift(`🍼 徒歩約${m}mにおむつ替え台あり`);
+      score += 6;
+    }
+    return { ...r, score, reasons, babyChangeM: m };
+  });
+  return enriched.sort((a, b) => b.score - a.score);
+}
+
 // 当事者の意思決定を支援する説明
 export interface Decision {
   summary: string; // なぜ1位か
