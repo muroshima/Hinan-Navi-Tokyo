@@ -1,0 +1,101 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { z } from "zod";
+import { NextRequest, NextResponse } from "next/server";
+
+// Claudeに抽出させる利用者属性のスキーマ
+const AttrsSchema = z.object({
+  wheelchair: z.boolean().describe("車椅子を利用している"),
+  elderly: z.boolean().describe("高齢者・歩行に不安がある"),
+  stroller: z.boolean().describe("ベビーカー・乳幼児を連れている"),
+  visual_impairment: z.boolean().describe("視覚障害がある"),
+  hearing_impairment: z.boolean().describe("聴覚障害がある"),
+  foreign_language: z.boolean().describe("日本語が不自由・外国語話者である"),
+  has_caregiver: z.boolean().describe("介助者・付き添いがいる"),
+  hazard: z
+    .enum([
+      "flood",
+      "landslide",
+      "storm_surge",
+      "earthquake",
+      "tsunami",
+      "fire",
+      "inland_flood",
+      "volcano",
+      "none",
+    ])
+    .describe("想定している災害。明示がなければ none"),
+});
+
+const SYSTEM = `あなたは防災避難支援アシスタントです。利用者が自然文で伝える状況から、避難所選定に必要な属性を抽出します。
+本人だけでなく同行者（例: 車椅子の母と避難）の配慮要件も該当属性を true にします。
+明示されていない属性は false、災害種別の言及がなければ hazard は none にしてください。推測しすぎないこと。`;
+
+// キー未設定時のルールベース簡易抽出（スケルトンをキーなしでも動かすため）
+function fallbackExtract(text: string) {
+  const has = (...kw: string[]) => kw.some((k) => text.includes(k));
+  return {
+    wheelchair: has("車椅子", "車いす", "车椅子"),
+    elderly: has("高齢", "祖母", "祖父", "お年寄り", "歩けない", "足が悪い"),
+    stroller: has("ベビーカー", "乳児", "赤ちゃん", "子連れ", "幼児", "子ども", "子供"),
+    visual_impairment: has("視覚障害", "目が不自由", "盲", "見えない"),
+    hearing_impairment: has("聴覚障害", "耳が不自由", "聞こえない"),
+    foreign_language: has("English", "英語", "中文", "한국", "わからない言葉"),
+    has_caregiver: has("介助", "付き添い", "一緒", "母と", "父と", "家族と"),
+    hazard: (text.includes("洪水") || text.includes("浸水")
+      ? "flood"
+      : text.includes("土砂") || text.includes("崖")
+        ? "landslide"
+        : text.includes("高潮")
+          ? "storm_surge"
+          : text.includes("地震")
+            ? "earthquake"
+            : text.includes("津波")
+              ? "tsunami"
+              : "none") as
+      | "flood"
+      | "landslide"
+      | "storm_surge"
+      | "earthquake"
+      | "tsunami"
+      | "none",
+  };
+}
+
+export async function POST(req: NextRequest) {
+  let text = "";
+  try {
+    const body = await req.json();
+    text = (body?.text ?? "").toString().slice(0, 1000);
+  } catch {
+    return NextResponse.json({ error: "invalid body" }, { status: 400 });
+  }
+  if (!text.trim()) {
+    return NextResponse.json({ error: "text is required" }, { status: 400 });
+  }
+
+  // APIキーが無ければルールベースにフォールバック
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return NextResponse.json({ attrs: fallbackExtract(text), source: "fallback" });
+  }
+
+  try {
+    const client = new Anthropic();
+    const res = await client.messages.parse({
+      model: "claude-opus-4-8",
+      max_tokens: 1024,
+      system: SYSTEM,
+      messages: [{ role: "user", content: text }],
+      output_config: { format: zodOutputFormat(AttrsSchema) },
+    });
+    const attrs = res.parsed_output;
+    if (!attrs) {
+      return NextResponse.json({ attrs: fallbackExtract(text), source: "fallback" });
+    }
+    return NextResponse.json({ attrs, source: "claude" });
+  } catch (err) {
+    // 失敗時もスケルトンを止めない
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ attrs: fallbackExtract(text), source: "fallback", warning: message });
+  }
+}

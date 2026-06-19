@@ -1,0 +1,78 @@
+// 避難所/避難場所・利用者属性・ランキング結果の型定義
+
+export type EvacKind = "center" | "area"; // center=指定避難所(滞在) / area=指定緊急避難場所(一時退避)
+
+export interface A11y {
+  ground_or_elevator: boolean; // 1階に避難スペース or エレベーター有
+  slope: boolean; // スロープ等
+  braille: boolean; // 点字ブロック
+  wheelchair_toilet: boolean; // 車椅子使用者対応トイレ
+}
+
+// 避難場所(area)のみ災害種別ごとの適否
+export interface Hazards {
+  flood: boolean;
+  landslide: boolean;
+  storm_surge: boolean;
+  earthquake: boolean;
+  tsunami: boolean;
+  fire: boolean;
+  inland_flood: boolean;
+  volcano: boolean;
+}
+
+export type HazardKey = keyof Hazards;
+
+export interface EvacProps {
+  id: string;
+  name: string;
+  kind: EvacKind;
+  city: string;
+  address: string;
+  a11y: A11y;
+  hazards: Hazards | null;
+  note: string;
+}
+
+export interface EvacFeature {
+  type: "Feature";
+  geometry: { type: "Point"; coordinates: [number, number] }; // [lon, lat]
+  properties: EvacProps;
+}
+
+export interface EvacCollection {
+  type: "FeatureCollection";
+  features: EvacFeature[];
+}
+
+// Claudeが自然文から抽出する利用者の状況属性
+export interface UserAttrs {
+  wheelchair: boolean; // 車椅子
+  elderly: boolean; // 高齢・歩行に不安
+  stroller: boolean; // ベビーカー・乳幼児連れ
+  visual_impairment: boolean; // 視覚障害
+  hearing_impairment: boolean; // 聴覚障害
+  foreign_language: boolean; // 日本語が不自由
+  has_caregiver: boolean; // 介助者がいる
+  hazard: HazardKey | null; // 想定している災害(あれば)
+}
+
+export const DEFAULT_ATTRS: UserAttrs = {
+  wheelchair: false,
+  elderly: false,
+  stroller: false,
+  visual_impairment: false,
+  hearing_impairment: false,
+  foreign_language: false,
+  has_caregiver: false,
+  hazard: null,
+};
+
+// ランキング結果(避難所 + スコアと理由)
+export interface RankedEvac {
+  feature: EvacFeature;
+  distanceKm: number;
+  score: number;
+  reasons: string[]; // おすすめ理由
+  cautions: string[]; // 注意・不適合点
+}
