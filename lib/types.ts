@@ -54,6 +54,7 @@ export interface UserAttrs {
   hearing_impairment: boolean; // 聴覚障害
   foreign_language: boolean; // 日本語が不自由
   has_caregiver: boolean; // 介助者がいる
+  bad_weather: boolean; // 雨・荒天（屋内/近距離を優先）
   hazard: HazardKey | null; // 想定している災害(あれば)
 }
 
@@ -65,6 +66,7 @@ export const DEFAULT_ATTRS: UserAttrs = {
   hearing_impairment: false,
   foreign_language: false,
   has_caregiver: false,
+  bad_weather: false,
   hazard: null,
 };
 

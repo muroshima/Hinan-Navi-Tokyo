@@ -21,6 +21,7 @@ const ATTR_LABEL: { key: keyof UserAttrs; label: string }[] = [
   { key: "hearing_impairment", label: "聴覚障害" },
   { key: "foreign_language", label: "外国語" },
   { key: "has_caregiver", label: "介助者あり" },
+  { key: "bad_weather", label: "雨・荒天" },
 ];
 
 // ハーバサイン距離(km)
@@ -109,6 +110,22 @@ function scoreOne(
   if ((attrs.stroller || attrs.elderly || attrs.wheelchair) && p.kind === "center") {
     score += 5;
     reasons.push("屋内で滞在できる指定避難所");
+  }
+
+  // 雨・荒天: 屋内(指定避難所)を優先。屋外の一時退避場所は不利
+  if (attrs.bad_weather) {
+    if (p.kind === "center") {
+      score += 10;
+      reasons.push("雨でも濡れにくい屋内の指定避難所");
+    } else {
+      score -= 12;
+      cautions.push("屋外の一時退避場所（雨天時は滞在に不向き）");
+    }
+    // 要配慮者は濡れての長距離移動が負担 → 近さをさらに重視
+    if (needsBarrierFree(attrs)) {
+      score -= d * 5;
+      if (d <= 0.7) reasons.push("雨でも濡れずに行ける近さ");
+    }
   }
 
   return { feature, distanceKm: d, score, reasons, cautions };

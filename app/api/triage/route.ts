@@ -12,6 +12,7 @@ const AttrsSchema = z.object({
   hearing_impairment: z.boolean().describe("聴覚障害がある"),
   foreign_language: z.boolean().describe("日本語が不自由・外国語話者である"),
   has_caregiver: z.boolean().describe("介助者・付き添いがいる"),
+  bad_weather: z.boolean().describe("雨・大雨・荒天・台風・雪など悪天候の状況である"),
   hazard: z
     .enum([
       "flood",
@@ -29,6 +30,7 @@ const AttrsSchema = z.object({
 
 const SYSTEM = `あなたは防災避難支援アシスタントです。利用者が自然文で伝える状況から、避難所選定に必要な属性を抽出します。
 本人だけでなく同行者（例: 車椅子の母と避難）の配慮要件も該当属性を true にします。
+雨・大雨・台風・雪などの悪天候への言及があれば bad_weather を true にします。
 明示されていない属性は false、災害種別の言及がなければ hazard は none にしてください。推測しすぎないこと。`;
 
 // キー未設定時のルールベース簡易抽出（スケルトンをキーなしでも動かすため）
@@ -42,6 +44,7 @@ function fallbackExtract(text: string) {
     hearing_impairment: has("聴覚障害", "耳が不自由", "聞こえない"),
     foreign_language: has("English", "英語", "中文", "한국", "わからない言葉"),
     has_caregiver: has("介助", "付き添い", "一緒", "母と", "父と", "家族と"),
+    bad_weather: has("雨", "大雨", "荒天", "台風", "嵐", "暴風", "雪", "悪天候"),
     hazard: (text.includes("洪水") || text.includes("浸水")
       ? "flood"
       : text.includes("土砂") || text.includes("崖")

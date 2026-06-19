@@ -19,6 +19,7 @@ const ATTR_LABELS: { key: keyof UserAttrs; label: string }[] = [
   { key: "hearing_impairment", label: "聴覚障害" },
   { key: "foreign_language", label: "外国語" },
   { key: "has_caregiver", label: "介助者あり" },
+  { key: "bad_weather", label: "☂ 雨・荒天" },
 ];
 
 const SAMPLES = [
