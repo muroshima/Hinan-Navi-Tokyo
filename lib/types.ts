@@ -32,6 +32,8 @@ export interface EvacProps {
   a11y: A11y;
   hazards: Hazards | null;
   note: string;
+  agingRate?: number | null; // 市区町村の高齢化率(%) ※文脈情報
+  cityPop?: number | null; // 市区町村の総人口
 }
 
 export interface EvacFeature {

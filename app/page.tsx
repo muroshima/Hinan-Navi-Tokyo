@@ -432,6 +432,11 @@ export default function Home() {
                   {routeInfo[r.feature.properties.id] && (
                     <span className="ml-1 text-gray-400">(道路距離)</span>
                   )}
+                  {r.feature.properties.agingRate != null && (
+                    <span className="ml-1 text-gray-400">
+                      🧓 高齢化率{r.feature.properties.agingRate}%
+                    </span>
+                  )}
                 </span>
                 <a
                   href={gmapsWalkingUrl(origin, r.feature.geometry.coordinates)}

@@ -51,8 +51,56 @@ def records(rows, header_idx, header):
         yield dict(zip(header, [c.strip() for c in r]))
 
 
+def build_city_aging():
+    """市区町村別 年齢3区分人口(第3-1表)から 高齢化率(65歳以上比) と総人口を算出。
+    返り値: { 市区町村名: {'rate': float(%), 'pop': int} }"""
+    try:
+        rows = read_csv('city_age.csv')
+    except Exception:
+        return {}
+    if not rows:
+        return {}
+    header = rows[0]
+
+    def col(keyword):
+        for i, c in enumerate(header):
+            if keyword in (c or ''):
+                return i
+        return None
+    # 各区分の「総数」列（最初に現れるもの）
+    i_name = 2
+    i_young = next((i for i, c in enumerate(header) if '年少' in c and '総数' in c), 3)
+    i_work = next((i for i, c in enumerate(header) if '生産年齢' in c and '総数' in c), 6)
+    i_old = next((i for i, c in enumerate(header) if '老年' in c and '総数' in c), 9)
+    out = {}
+    skip = {'総数', '区部', '市部', '郡部', '島部', '都計'}
+    for r in rows[1:]:
+        if len(r) <= i_old:
+            continue
+        name = (r[i_name] or '').strip()
+        if not name or name in skip:
+            continue
+        if not (name.endswith('区') or name.endswith('市') or name.endswith('町') or name.endswith('村')):
+            continue
+        try:
+            young = int(r[i_young]); work = int(r[i_work]); old = int(r[i_old])
+        except ValueError:
+            continue
+        total = young + work + old
+        if total <= 0:
+            continue
+        out[name] = {'rate': round(old / total * 100, 1), 'pop': total}
+    return out
+
+
 def build_evacuation():
     feats = []
+    aging = build_city_aging()
+
+    def attach_aging(props):
+        a = aging.get(props.get('city', ''))
+        props['agingRate'] = a['rate'] if a else None  # 市区町村の高齢化率(%)
+        props['cityPop'] = a['pop'] if a else None
 
     # 避難所 (center): 施設に直接バリアフリー列
     rows = read_csv('evacuation_center.csv')
@@ -83,6 +131,7 @@ def build_evacuation():
                 'note': d.get('その他', ''),
             },
         })
+        attach_aging(feats[-1]['properties'])
 
     # 避難場所 (area): 災害種別ごとの適否フラグつき
     rows = read_csv('evacuation_area.csv')
@@ -117,6 +166,7 @@ def build_evacuation():
                 'note': d.get('その他', ''),
             },
         })
+        attach_aging(feats[-1]['properties'])
     return feats
 
 
