@@ -27,6 +27,13 @@ const SAMPLES = [
   "高齢の祖父と一緒です。洪水のとき逃げられる所を教えて",
 ];
 
+// 現在地→避難所 の徒歩ルートをGoogleマップで開くURL
+function gmapsWalkingUrl(origin: [number, number], dest: [number, number]): string {
+  const o = `${origin[1]},${origin[0]}`; // lat,lng
+  const d = `${dest[1]},${dest[0]}`;
+  return `https://www.google.com/maps/dir/?api=1&origin=${o}&destination=${d}&travelmode=walking`;
+}
+
 // MapViewのHAZARD_TILESと対応（重ね表示できるハザード）
 const HAZARD_LAYERS: { key: HazardKey; label: string }[] = [
   { key: "flood", label: "洪水" },
@@ -45,6 +52,10 @@ export default function Home() {
   const [submitted, setSubmitted] = useState(false);
   const [hazards, setHazards] = useState<HazardKey[]>([]);
   const [threeD, setThreeD] = useState(false);
+  const [originLabel, setOriginLabel] = useState("自動取得 / 東京駅");
+  const [placeInput, setPlaceInput] = useState("");
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [geoError, setGeoError] = useState<string | null>(null);
 
   const toggleHazard = (key: HazardKey) =>
     setHazards((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
@@ -61,11 +72,58 @@ export default function Home() {
   useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
-      (pos) => setOrigin([pos.coords.longitude, pos.coords.latitude]),
+      (pos) => {
+        setOrigin([pos.coords.longitude, pos.coords.latitude]);
+        setOriginLabel("現在地（GPS）");
+      },
       () => {},
       { timeout: 5000 }
     );
   }, []);
+
+  // GPSで現在地を取得
+  function useMyLocation() {
+    if (!navigator.geolocation) {
+      setGeoError("この端末では位置情報が使えません");
+      return;
+    }
+    setGeoLoading(true);
+    setGeoError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setOrigin([pos.coords.longitude, pos.coords.latitude]);
+        setOriginLabel("現在地（GPS）");
+        setGeoLoading(false);
+      },
+      () => {
+        setGeoError("位置情報を取得できませんでした");
+        setGeoLoading(false);
+      },
+      { timeout: 8000 }
+    );
+  }
+
+  // 住所・地名から現在地を設定
+  async function geocodePlace() {
+    const q = placeInput.trim();
+    if (!q) return;
+    setGeoLoading(true);
+    setGeoError(null);
+    try {
+      const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`);
+      if (!res.ok) {
+        setGeoError(res.status === 404 ? "場所が見つかりませんでした" : "変換に失敗しました");
+        return;
+      }
+      const d = await res.json();
+      setOrigin([d.lng, d.lat]);
+      setOriginLabel(d.label?.split(",").slice(0, 2).join("・") || q);
+    } catch {
+      setGeoError("通信に失敗しました");
+    } finally {
+      setGeoLoading(false);
+    }
+  }
 
   const ranked: RankedEvac[] = useMemo(() => {
     if (!submitted || all.length === 0) return [];
@@ -112,6 +170,41 @@ export default function Home() {
             ことばで状況を伝えると、あなたが行ける避難所を探します
           </p>
         </header>
+
+        {/* 現在地（手動入力 or GPS） */}
+        <div className="rounded-lg border border-gray-200 p-2">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs font-bold text-gray-700">現在地</span>
+            <span className="max-w-[230px] truncate text-[11px] text-gray-500" title={originLabel}>
+              📍 {originLabel}
+            </span>
+          </div>
+          <div className="flex gap-1">
+            <input
+              value={placeInput}
+              onChange={(e) => setPlaceInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && geocodePlace()}
+              placeholder="住所・地名（例: 千代田区神田、新宿駅）"
+              className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+            />
+            <button
+              onClick={geocodePlace}
+              disabled={geoLoading || !placeInput.trim()}
+              className="shrink-0 rounded-md bg-gray-700 px-2 py-1 text-xs text-white hover:bg-gray-800 disabled:opacity-40"
+            >
+              設定
+            </button>
+            <button
+              onClick={useMyLocation}
+              disabled={geoLoading}
+              title="GPSで現在地を取得"
+              className="shrink-0 rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 disabled:opacity-40"
+            >
+              📍GPS
+            </button>
+          </div>
+          {geoError && <p className="mt-1 text-[11px] text-red-600">{geoError}</p>}
+        </div>
 
         <textarea
           value={text}
@@ -221,15 +314,31 @@ export default function Home() {
               }`}
             >
               <div className="flex items-baseline justify-between">
-                <span className="font-bold text-gray-900">
+                <a
+                  href={gmapsWalkingUrl(origin, r.feature.geometry.coordinates)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Googleマップで徒歩ルートを開く"
+                  className="font-bold text-blue-700 underline decoration-dotted underline-offset-2 hover:text-blue-900"
+                >
                   {i === 0 ? "★ " : `${i + 1}. `}
                   {r.feature.properties.name}
-                </span>
+                </a>
                 <span className="text-xs text-gray-500">{r.distanceKm.toFixed(1)}km</span>
               </div>
-              <div className="text-xs text-gray-600">
-                {r.feature.properties.city}・
-                {r.feature.properties.kind === "center" ? "指定避難所" : "避難場所"}
+              <div className="flex items-center justify-between text-xs text-gray-600">
+                <span>
+                  {r.feature.properties.city}・
+                  {r.feature.properties.kind === "center" ? "指定避難所" : "避難場所"}
+                </span>
+                <a
+                  href={gmapsWalkingUrl(origin, r.feature.geometry.coordinates)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded border border-blue-300 px-1.5 py-0.5 text-blue-700 hover:bg-blue-50"
+                >
+                  🗺 ルート
+                </a>
               </div>
               {r.reasons.slice(0, 3).map((reason) => (
                 <div key={reason} className="text-xs text-green-700">
