@@ -54,6 +54,9 @@ export interface UserAttrs {
   hearing_impairment: boolean; // 聴覚障害
   foreign_language: boolean; // 日本語が不自由
   has_caregiver: boolean; // 介助者がいる
+  ostomate: boolean; // オストメイト（人工肛門・ストーマ）
+  severe_care: boolean; // 寝たきり・重度・要介護（大型ベッド等が必要）
+  night: boolean; // 夜間の避難
   bad_weather: boolean; // 雨・荒天（屋内/近距離を優先）
   hazard: HazardKey | null; // 想定している災害(あれば)
 }
@@ -66,6 +69,9 @@ export const DEFAULT_ATTRS: UserAttrs = {
   hearing_impairment: false,
   foreign_language: false,
   has_caregiver: false,
+  ostomate: false,
+  severe_care: false,
+  night: false,
   bad_weather: false,
   hazard: null,
 };
@@ -78,4 +84,9 @@ export interface RankedEvac {
   reasons: string[]; // おすすめ理由
   cautions: string[]; // 注意・不適合点
   babyChangeM?: number | null; // 最寄りのおむつ替え台までの距離(m) ※乳幼児連れ時
+  ostomateM?: number | null; // 最寄りオストメイト対応トイレ(m)
+  largeBedM?: number | null; // 最寄り大型ベッド付きトイレ(m)
+  callM?: number | null; // 最寄り非常用ボタン付きトイレ(m)
+  walkM?: number | null; // 実経路の徒歩距離(m) ※OSRM
+  walkMin?: number | null; // 実経路の徒歩所要(分)
 }

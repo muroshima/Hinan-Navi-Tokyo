@@ -4,7 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import type { EvacCollection, EvacFeature, RankedEvac, UserAttrs, HazardKey } from "@/lib/types";
 import { DEFAULT_ATTRS } from "@/lib/types";
-import { rankEvacuations, explainDecision, enrichInfantCare } from "@/lib/ranking";
+import {
+  rankEvacuations,
+  explainDecision,
+  enrichToiletNeeds,
+  activeAttrLabels,
+  type ToiletIndex,
+} from "@/lib/ranking";
 
 // MapLibreはSSR不可なのでクライアント専用で読み込む
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
@@ -19,8 +25,13 @@ const ATTR_LABELS: { key: keyof UserAttrs; label: string }[] = [
   { key: "hearing_impairment", label: "聴覚障害" },
   { key: "foreign_language", label: "外国語" },
   { key: "has_caregiver", label: "介助者あり" },
+  { key: "ostomate", label: "オストメイト" },
+  { key: "severe_care", label: "重度・要介護" },
+  { key: "night", label: "🌙 夜間" },
   { key: "bad_weather", label: "☂ 雨・荒天" },
 ];
+
+const EMPTY_TOILET_IDX: ToiletIndex = { baby: [], ostomate: [], largeBed: [], call: [] };
 
 const SAMPLES = [
   "雨の日、車椅子の母と避難したい。介助は私がします",
@@ -45,7 +56,8 @@ const HAZARD_LAYERS: { key: HazardKey; label: string }[] = [
 
 export default function Home() {
   const [all, setAll] = useState<EvacFeature[]>([]);
-  const [babyCoords, setBabyCoords] = useState<[number, number][]>([]);
+  const [toiletIdx, setToiletIdx] = useState<ToiletIndex>(EMPTY_TOILET_IDX);
+  const [routeInfo, setRouteInfo] = useState<Record<string, { m: number; min: number }>>({});
   const [origin, setOrigin] = useState<[number, number]>(TOKYO_STATION);
   const [text, setText] = useState("");
   const [attrs, setAttrs] = useState<UserAttrs>(DEFAULT_ATTRS);
@@ -68,17 +80,37 @@ export default function Home() {
       .then((r) => r.json())
       .then((fc: EvacCollection) => setAll(fc.features))
       .catch(() => setAll([]));
-    // おむつ替え台のあるトイレの座標（乳幼児連れ向け）
+    // 車椅子対応トイレBFデータ → 機能別に座標索引化
     fetch("/data/toilets.geojson")
       .then((r) => r.json())
-      .then((fc: { features: { geometry: { coordinates: [number, number] }; properties: { a11y: { baby_change: boolean } } }[] }) => {
-        setBabyCoords(
-          fc.features
-            .filter((f) => f.properties?.a11y?.baby_change)
-            .map((f) => f.geometry.coordinates)
-        );
-      })
-      .catch(() => setBabyCoords([]));
+      .then(
+        (fc: {
+          features: {
+            geometry: { coordinates: [number, number] };
+            properties: {
+              a11y: {
+                baby_change: boolean;
+                ostomate: boolean;
+                large_bed: boolean;
+                call_button: boolean;
+              };
+            };
+          }[];
+        }) => {
+          const idx: ToiletIndex = { baby: [], ostomate: [], largeBed: [], call: [] };
+          for (const f of fc.features) {
+            const a = f.properties?.a11y;
+            if (!a) continue;
+            const c = f.geometry.coordinates;
+            if (a.baby_change) idx.baby.push(c);
+            if (a.ostomate) idx.ostomate.push(c);
+            if (a.large_bed) idx.largeBed.push(c);
+            if (a.call_button) idx.call.push(c);
+          }
+          setToiletIdx(idx);
+        }
+      )
+      .catch(() => setToiletIdx(EMPTY_TOILET_IDX));
   }, []);
 
   // 現在地（取れなければ東京駅）
@@ -141,14 +173,53 @@ export default function Home() {
   const ranked: RankedEvac[] = useMemo(() => {
     if (!submitted || all.length === 0) return [];
     const base = rankEvacuations(all, origin, attrs, 20);
-    return enrichInfantCare(base, babyCoords, attrs);
-  }, [submitted, all, origin, attrs, babyCoords]);
+    return enrichToiletNeeds(base, toiletIdx, attrs);
+  }, [submitted, all, origin, attrs, toiletIdx]);
 
   // 1位の根拠 ＋「より近いのに見送った候補」（意思決定支援）
   const decision = useMemo(() => {
     if (!submitted || ranked.length === 0) return null;
     return explainDecision(all, origin, attrs, ranked);
   }, [submitted, all, origin, attrs, ranked]);
+
+  // 実経路の徒歩距離・所要（上位8件をOSRMでまとめて取得）
+  useEffect(() => {
+    const top = ranked.slice(0, 8);
+    if (top.length === 0) {
+      setRouteInfo({});
+      return;
+    }
+    let aborted = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/route", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ origin, dests: top.map((r) => r.feature.geometry.coordinates) }),
+        });
+        if (!res.ok) return;
+        const { result } = await res.json();
+        if (aborted || !Array.isArray(result)) return;
+        const map: Record<string, { m: number; min: number }> = {};
+        top.forEach((r, i) => {
+          const d = result[i];
+          // 距離は道路ネットワーク値を使い、所要は徒歩速度80m/分で概算（OSRM公開デモのdurationは車速のため不採用）
+          if (d?.distM != null) {
+            map[r.feature.properties.id] = { m: Math.round(d.distM), min: Math.max(1, Math.round(d.distM / 80)) };
+          }
+        });
+        setRouteInfo(map);
+      } catch {
+        /* 失敗時は直線距離のみ表示 */
+      }
+    })();
+    return () => {
+      aborted = true;
+    };
+  }, [ranked, origin]);
+
+  // 複合ニーズ（同時最適している配慮要件）のラベル
+  const activeNeeds = useMemo(() => (submitted ? activeAttrLabels(attrs) : []), [submitted, attrs]);
 
   async function handleSubmit() {
     if (!text.trim()) return;
@@ -261,6 +332,14 @@ export default function Home() {
           </div>
         )}
 
+        {/* 複合ニーズの同時最適を明示（既存サービスが扱えない強み） */}
+        {submitted && activeNeeds.length >= 2 && (
+          <div className="rounded-lg border border-violet-300 bg-violet-50 p-2 text-xs text-violet-900">
+            🎯 <b>複合ニーズを同時に最適化</b>: {activeNeeds.join(" × ")}
+            <span className="ml-1 text-violet-500">— {activeNeeds.length}条件を同時に考慮しています</span>
+          </div>
+        )}
+
         {/* ハザードレイヤ トグル */}
         <div className="rounded-lg border border-gray-200 p-2">
           <div className="mb-1 text-xs font-bold text-gray-700">ハザード重ね表示</div>
@@ -338,12 +417,21 @@ export default function Home() {
                   {i === 0 ? "★ " : `${i + 1}. `}
                   {r.feature.properties.name}
                 </a>
-                <span className="text-xs text-gray-500">{r.distanceKm.toFixed(1)}km</span>
+                <span className="text-xs text-gray-500">
+                  {routeInfo[r.feature.properties.id]
+                    ? `徒歩約${routeInfo[r.feature.properties.id].min}分・${(
+                        routeInfo[r.feature.properties.id].m / 1000
+                      ).toFixed(1)}km`
+                    : `直線${r.distanceKm.toFixed(1)}km`}
+                </span>
               </div>
               <div className="flex items-center justify-between text-xs text-gray-600">
                 <span>
                   {r.feature.properties.city}・
                   {r.feature.properties.kind === "center" ? "指定避難所" : "避難場所"}
+                  {routeInfo[r.feature.properties.id] && (
+                    <span className="ml-1 text-gray-400">(道路距離)</span>
+                  )}
                 </span>
                 <a
                   href={gmapsWalkingUrl(origin, r.feature.geometry.coordinates)}

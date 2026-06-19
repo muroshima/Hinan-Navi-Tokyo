@@ -43,7 +43,12 @@ function fallbackExtract(text: string) {
     visual_impairment: has("視覚障害", "目が不自由", "盲", "見えない"),
     hearing_impairment: has("聴覚障害", "耳が不自由", "聞こえない"),
     foreign_language: has("English", "英語", "中文", "한국", "わからない言葉"),
-    has_caregiver: has("介助", "付き添い", "一緒", "母と", "父と", "家族と"),
+    has_caregiver:
+      has("介助", "付き添い", "一緒", "母と", "父と", "家族と") &&
+      !has("介助者なし", "介助なし", "付き添いなし", "一人で", "ひとりで", "独りで", "1人で"),
+    ostomate: has("オストメイト", "人工肛門", "ストーマ"),
+    severe_care: has("寝たきり", "重度", "要介護", "大型ベッド", "着替え介助", "介護が必要", "車いす全介助"),
+    night: has("夜", "夜間", "今夜", "未明", "暗い", "深夜"),
     bad_weather: has("雨", "大雨", "荒天", "台風", "嵐", "暴風", "雪", "悪天候"),
     hazard: (text.includes("洪水") || text.includes("浸水")
       ? "flood"
