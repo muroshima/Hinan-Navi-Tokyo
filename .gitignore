@@ -42,3 +42,6 @@ next-env.d.ts
 
 # project data
 /data-raw/
+
+shot_*.jpeg
+shot_*.jpg

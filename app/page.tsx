@@ -27,6 +27,14 @@ const SAMPLES = [
   "高齢の祖父と一緒です。洪水のとき逃げられる所を教えて",
 ];
 
+// MapViewのHAZARD_TILESと対応（重ね表示できるハザード）
+const HAZARD_LAYERS: { key: HazardKey; label: string }[] = [
+  { key: "flood", label: "洪水" },
+  { key: "storm_surge", label: "高潮" },
+  { key: "tsunami", label: "津波" },
+  { key: "landslide", label: "土砂" },
+];
+
 export default function Home() {
   const [all, setAll] = useState<EvacFeature[]>([]);
   const [origin, setOrigin] = useState<[number, number]>(TOKYO_STATION);
@@ -35,6 +43,10 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [source, setSource] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [hazards, setHazards] = useState<HazardKey[]>([]);
+
+  const toggleHazard = (key: HazardKey) =>
+    setHazards((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
 
   // データ読み込み
   useEffect(() => {
@@ -74,6 +86,10 @@ export default function Home() {
       setAttrs({ ...DEFAULT_ATTRS, ...a, hazard });
       setSource(data.source ?? null);
       setSubmitted(true);
+      // 抽出された災害に対応するハザードレイヤを自動でON
+      if (hazard && HAZARD_LAYERS.some((h) => h.key === hazard)) {
+        setHazards((prev) => (prev.includes(hazard) ? prev : [...prev, hazard]));
+      }
     } finally {
       setLoading(false);
     }
@@ -131,6 +147,31 @@ export default function Home() {
           </div>
         )}
 
+        {/* ハザードレイヤ トグル */}
+        <div className="rounded-lg border border-gray-200 p-2">
+          <div className="mb-1 text-xs font-bold text-gray-700">ハザード重ね表示</div>
+          <div className="flex flex-wrap gap-1">
+            {HAZARD_LAYERS.map((h) => {
+              const on = hazards.includes(h.key);
+              return (
+                <button
+                  key={h.key}
+                  onClick={() => toggleHazard(h.key)}
+                  className={`rounded-full border px-2 py-1 text-xs ${
+                    on
+                      ? "border-orange-500 bg-orange-100 text-orange-800"
+                      : "border-gray-300 text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  {on ? "● " : "○ "}
+                  {h.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1 text-[10px] text-gray-400">出典: ハザードマップポータルサイト(国土交通省)</p>
+        </div>
+
         {/* 結果リスト */}
         <div className="flex flex-col gap-2">
           {ranked.slice(0, 8).map((r, i) => (
@@ -168,7 +209,7 @@ export default function Home() {
 
       {/* 右: 地図 */}
       <main className="relative flex-1">
-        <MapView all={all} ranked={ranked} origin={origin} />
+        <MapView all={all} ranked={ranked} origin={origin} hazards={hazards} />
       </main>
     </div>
   );

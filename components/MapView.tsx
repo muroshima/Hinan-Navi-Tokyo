@@ -3,9 +3,31 @@
 import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { EvacFeature, RankedEvac } from "@/lib/types";
+import type { EvacFeature, RankedEvac, HazardKey } from "@/lib/types";
 
 const TOKYO: [number, number] = [139.7528, 35.6852];
+
+// 国交省ハザードマップポータルのラスタータイル（疎通確認済みの層のみ）
+const HAZARD_TILES: Partial<Record<HazardKey, { url: string; label: string }>> = {
+  flood: {
+    url: "https://disaportaldata.gsi.go.jp/raster/01_flood_l2_shinsuishin_data/{z}/{x}/{y}.png",
+    label: "洪水浸水想定",
+  },
+  storm_surge: {
+    url: "https://disaportaldata.gsi.go.jp/raster/03_hightide_l2_shinsuishin_data/{z}/{x}/{y}.png",
+    label: "高潮浸水想定",
+  },
+  tsunami: {
+    url: "https://disaportaldata.gsi.go.jp/raster/04_tsunami_newlegend_data/{z}/{x}/{y}.png",
+    label: "津波浸水想定",
+  },
+  landslide: {
+    url: "https://disaportaldata.gsi.go.jp/raster/05_kyukeishakeikaikuiki/{z}/{x}/{y}.png",
+    label: "土砂災害(急傾斜地)警戒区域",
+  },
+};
+
+const HAZARD_KEYS = Object.keys(HAZARD_TILES) as HazardKey[];
 
 // APIキー不要の OSM ラスタースタイル
 const OSM_STYLE: maplibregl.StyleSpecification = {
@@ -25,10 +47,10 @@ interface Props {
   all: EvacFeature[]; // 全避難所(背景表示)
   ranked: RankedEvac[]; // 絞り込み結果(強調)
   origin: [number, number] | null;
-  onPick?: (id: string) => void;
+  hazards?: HazardKey[]; // 表示するハザードレイヤ
 }
 
-export default function MapView({ all, ranked, origin }: Props) {
+export default function MapView({ all, ranked, origin, hazards = [] }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const loadedRef = useRef(false);
@@ -44,6 +66,24 @@ export default function MapView({ all, ranked, origin }: Props) {
     });
     map.addControl(new maplibregl.NavigationControl(), "top-right");
     map.on("load", () => {
+      // ハザードレイヤ（OSMの上、ポイントの下）。初期は非表示
+      for (const key of HAZARD_KEYS) {
+        const h = HAZARD_TILES[key]!;
+        map.addSource(`hz-${key}`, {
+          type: "raster",
+          tiles: [h.url],
+          tileSize: 256,
+          attribution: "ハザードマップポータルサイト(国土交通省)",
+        });
+        map.addLayer({
+          id: `hz-${key}`,
+          type: "raster",
+          source: `hz-${key}`,
+          layout: { visibility: "none" },
+          paint: { "raster-opacity": 0.55 },
+        });
+      }
+
       map.addSource("all", { type: "geojson", data: emptyFC() });
       map.addLayer({
         id: "all-pts",
@@ -51,8 +91,8 @@ export default function MapView({ all, ranked, origin }: Props) {
         source: "all",
         paint: {
           "circle-radius": 3,
-          "circle-color": "#9ca3af",
-          "circle-opacity": 0.5,
+          "circle-color": "#6b7280",
+          "circle-opacity": 0.45,
         },
       });
       map.addSource("ranked", { type: "geojson", data: emptyFC() });
@@ -82,6 +122,7 @@ export default function MapView({ all, ranked, origin }: Props) {
       loadedRef.current = true;
       updateAll();
       updateRanked();
+      updateHazards();
     });
     mapRef.current = map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -110,7 +151,6 @@ export default function MapView({ all, ranked, origin }: Props) {
     }));
     const src = map.getSource("ranked") as maplibregl.GeoJSONSource | undefined;
     src?.setData({ type: "FeatureCollection", features: feats });
-    // 1位 or 現在地にフィット
     if (ranked.length > 0) {
       const b = new maplibregl.LngLatBounds();
       ranked.slice(0, 8).forEach((r) => b.extend(r.feature.geometry.coordinates));
@@ -119,6 +159,21 @@ export default function MapView({ all, ranked, origin }: Props) {
     }
   };
   useEffect(updateRanked, [ranked, origin]);
+
+  // ハザードレイヤの表示切替
+  const updateHazards = () => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    for (const key of HAZARD_KEYS) {
+      if (!map.getLayer(`hz-${key}`)) continue;
+      map.setLayoutProperty(
+        `hz-${key}`,
+        "visibility",
+        hazards.includes(key) ? "visible" : "none"
+      );
+    }
+  };
+  useEffect(updateHazards, [hazards]);
 
   // 現在地マーカー
   const originMarker = useRef<maplibregl.Marker | null>(null);
@@ -138,3 +193,5 @@ export default function MapView({ all, ranked, origin }: Props) {
 function emptyFC(): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features: [] };
 }
+
+export { HAZARD_TILES };
