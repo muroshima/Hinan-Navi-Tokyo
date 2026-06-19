@@ -48,9 +48,10 @@ interface Props {
   ranked: RankedEvac[]; // 絞り込み結果(強調)
   origin: [number, number] | null;
   hazards?: HazardKey[]; // 表示するハザードレイヤ
+  threeD?: boolean; // 3D地形(坂・起伏)表示
 }
 
-export default function MapView({ all, ranked, origin, hazards = [] }: Props) {
+export default function MapView({ all, ranked, origin, hazards = [], threeD = false }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const loadedRef = useRef(false);
@@ -83,6 +84,23 @@ export default function MapView({ all, ranked, origin, hazards = [] }: Props) {
           paint: { "raster-opacity": 0.55 },
         });
       }
+
+      // 3D地形用のDEM（AWS Terrarium、MapLibreネイティブ対応）＋陰影起伏
+      map.addSource("dem", {
+        type: "raster-dem",
+        tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        encoding: "terrarium",
+        maxzoom: 15,
+        attribution: "Terrain: Mapzen/AWS Open Data",
+      });
+      map.addLayer({
+        id: "hillshade",
+        type: "hillshade",
+        source: "dem",
+        layout: { visibility: "none" },
+        paint: { "hillshade-exaggeration": 0.6 },
+      });
 
       map.addSource("all", { type: "geojson", data: emptyFC() });
       map.addLayer({
@@ -123,6 +141,7 @@ export default function MapView({ all, ranked, origin, hazards = [] }: Props) {
       updateAll();
       updateRanked();
       updateHazards();
+      updateThreeD();
     });
     mapRef.current = map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -174,6 +193,22 @@ export default function MapView({ all, ranked, origin, hazards = [] }: Props) {
     }
   };
   useEffect(updateHazards, [hazards]);
+
+  // 3D地形(坂・起伏)の切替
+  const updateThreeD = () => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    if (threeD) {
+      map.setTerrain({ source: "dem", exaggeration: 1.4 });
+      if (map.getLayer("hillshade")) map.setLayoutProperty("hillshade", "visibility", "visible");
+      map.easeTo({ pitch: 62, duration: 800 });
+    } else {
+      map.setTerrain(null);
+      if (map.getLayer("hillshade")) map.setLayoutProperty("hillshade", "visibility", "none");
+      map.easeTo({ pitch: 0, duration: 600 });
+    }
+  };
+  useEffect(updateThreeD, [threeD]);
 
   // 現在地マーカー
   const originMarker = useRef<maplibregl.Marker | null>(null);

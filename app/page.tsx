@@ -44,6 +44,7 @@ export default function Home() {
   const [source, setSource] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [hazards, setHazards] = useState<HazardKey[]>([]);
+  const [threeD, setThreeD] = useState(false);
 
   const toggleHazard = (key: HazardKey) =>
     setHazards((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
@@ -176,6 +177,16 @@ export default function Home() {
             })}
           </div>
           <p className="mt-1 text-[10px] text-gray-400">出典: ハザードマップポータルサイト(国土交通省)</p>
+          <button
+            onClick={() => setThreeD((v) => !v)}
+            className={`mt-2 w-full rounded-md border px-2 py-1 text-xs ${
+              threeD
+                ? "border-emerald-500 bg-emerald-100 text-emerald-800"
+                : "border-gray-300 text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            {threeD ? "⛰ 3D地形 ON（坂・起伏を表示）" : "⛰ 3D地形で坂・起伏を見る"}
+          </button>
         </div>
 
         {/* 1位の根拠 ＋ 行けない理由（意思決定支援） */}
@@ -237,7 +248,7 @@ export default function Home() {
 
       {/* 右: 地図 */}
       <main className="relative flex-1">
-        <MapView all={all} ranked={ranked} origin={origin} hazards={hazards} />
+        <MapView all={all} ranked={ranked} origin={origin} hazards={hazards} threeD={threeD} />
       </main>
     </div>
   );
