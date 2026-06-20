@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.json({ lat, lng, label: hit.display_name });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 502 });
+    console.error("geocode error:", err instanceof Error ? err.message : String(err));
+    return NextResponse.json({ error: "geocoding failed" }, { status: 502 });
   }
 }

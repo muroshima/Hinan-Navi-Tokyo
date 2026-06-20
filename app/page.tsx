@@ -209,7 +209,7 @@ export default function Home() {
             map[r.feature.properties.id] = { m: Math.round(d.distM), min: Math.max(1, Math.round(d.distM / 80)) };
           }
         });
-        setRouteInfo(map);
+        if (!aborted) setRouteInfo(map);
       } catch {
         /* 失敗時は直線距離のみ表示 */
       }

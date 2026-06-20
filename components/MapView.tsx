@@ -153,9 +153,9 @@ export default function MapView({ all, ranked, origin, hazards = [], threeD = fa
     mapRef.current = map;
 
     return () => {
+      // アンマウント時は破棄のみ（setLoaded等のstate更新は不要）
       map.remove();
       mapRef.current = null;
-      setLoaded(false);
     };
   }, []);
 

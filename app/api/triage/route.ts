@@ -105,8 +105,8 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ attrs, source: "claude" });
   } catch (err) {
-    // 失敗時もスケルトンを止めない
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ attrs: fallbackExtract(text), source: "fallback", warning: message });
+    // 失敗時もスケルトンを止めない。詳細はサーバーログのみ（クライアントへ内部情報を出さない）
+    console.error("triage error:", err instanceof Error ? err.message : String(err));
+    return NextResponse.json({ attrs: fallbackExtract(text), source: "fallback" });
   }
 }

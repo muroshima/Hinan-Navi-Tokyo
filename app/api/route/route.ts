@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     }));
     return NextResponse.json({ result });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 502 });
+    console.error("route error:", err instanceof Error ? err.message : String(err));
+    return NextResponse.json({ error: "routing failed" }, { status: 502 });
   }
 }
