@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { EvacFeature, RankedEvac, HazardKey } from "@/lib/types";
@@ -51,14 +51,20 @@ interface Props {
   threeD?: boolean; // 3D地形(坂・起伏)表示
 }
 
+function emptyFC(): GeoJSON.FeatureCollection {
+  return { type: "FeatureCollection", features: [] };
+}
+
 export default function MapView({ all, ranked, origin, hazards = [], threeD = false }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const loadedRef = useRef(false);
+  // load完了をstateで管理し、各反映effectの依存に含める
+  // (loadより先にデータが届いても、loaded反転で確実に再反映される)
+  const [loaded, setLoaded] = useState(false);
 
-  // 初期化
+  // 初期化（マウント時に1回）＋アンマウントで破棄
   useEffect(() => {
-    if (mapRef.current || !containerRef.current) return;
+    if (!containerRef.current) return;
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: OSM_STYLE,
@@ -84,8 +90,7 @@ export default function MapView({ all, ranked, origin, hazards = [], threeD = fa
           paint: { "raster-opacity": 0.55 },
         });
       }
-
-      // 3D地形用のDEM（AWS Terrarium、MapLibreネイティブ対応）＋陰影起伏
+      // 3D地形用DEM（AWS Terrarium）＋陰影起伏
       map.addSource("dem", {
         type: "raster-dem",
         tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
@@ -137,29 +142,32 @@ export default function MapView({ all, ranked, origin, hazards = [], threeD = fa
         },
         paint: { "text-halo-width": 1.5, "text-halo-color": "#fff" },
       });
-      loadedRef.current = true;
-      updateAll();
-      updateRanked();
-      updateHazards();
-      updateThreeD();
+      // 反映は loaded 依存の各 effect に任せる（load時のクロージャで古い値を焼かない）
+      setLoaded(true);
     });
     mapRef.current = map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      setLoaded(false);
+    };
   }, []);
 
-  // 全避難所の反映
-  const updateAll = () => {
+  // 全避難所の反映（all か loaded が変わるたび最新値で setData）
+  useEffect(() => {
     const map = mapRef.current;
-    if (!map || !loadedRef.current) return;
-    const src = map.getSource("all") as maplibregl.GeoJSONSource | undefined;
-    src?.setData({ type: "FeatureCollection", features: all });
-  };
-  useEffect(updateAll, [all]);
+    if (!map || !loaded) return;
+    (map.getSource("all") as maplibregl.GeoJSONSource | undefined)?.setData({
+      type: "FeatureCollection",
+      features: all,
+    });
+  }, [all, loaded]);
 
   // 絞り込み結果の反映
-  const updateRanked = () => {
+  useEffect(() => {
     const map = mapRef.current;
-    if (!map || !loadedRef.current) return;
+    if (!map || !loaded) return;
     const feats = ranked.map((r, i) => ({
       type: "Feature" as const,
       geometry: r.feature.geometry,
@@ -168,36 +176,32 @@ export default function MapView({ all, ranked, origin, hazards = [], threeD = fa
         label: i === 0 ? `★ ${r.feature.properties.name}` : r.feature.properties.name,
       },
     }));
-    const src = map.getSource("ranked") as maplibregl.GeoJSONSource | undefined;
-    src?.setData({ type: "FeatureCollection", features: feats });
+    (map.getSource("ranked") as maplibregl.GeoJSONSource | undefined)?.setData({
+      type: "FeatureCollection",
+      features: feats,
+    });
     if (ranked.length > 0) {
       const b = new maplibregl.LngLatBounds();
       ranked.slice(0, 8).forEach((r) => b.extend(r.feature.geometry.coordinates));
       if (origin) b.extend(origin);
       map.fitBounds(b, { padding: 80, maxZoom: 15, duration: 600 });
     }
-  };
-  useEffect(updateRanked, [ranked, origin]);
+  }, [ranked, origin, loaded]);
 
   // ハザードレイヤの表示切替
-  const updateHazards = () => {
+  useEffect(() => {
     const map = mapRef.current;
-    if (!map || !loadedRef.current) return;
+    if (!map || !loaded) return;
     for (const key of HAZARD_KEYS) {
       if (!map.getLayer(`hz-${key}`)) continue;
-      map.setLayoutProperty(
-        `hz-${key}`,
-        "visibility",
-        hazards.includes(key) ? "visible" : "none"
-      );
+      map.setLayoutProperty(`hz-${key}`, "visibility", hazards.includes(key) ? "visible" : "none");
     }
-  };
-  useEffect(updateHazards, [hazards]);
+  }, [hazards, loaded]);
 
   // 3D地形(坂・起伏)の切替
-  const updateThreeD = () => {
+  useEffect(() => {
     const map = mapRef.current;
-    if (!map || !loadedRef.current) return;
+    if (!map || !loaded) return;
     if (threeD) {
       map.setTerrain({ source: "dem", exaggeration: 1.4 });
       if (map.getLayer("hillshade")) map.setLayoutProperty("hillshade", "visibility", "visible");
@@ -207,26 +211,23 @@ export default function MapView({ all, ranked, origin, hazards = [], threeD = fa
       if (map.getLayer("hillshade")) map.setLayoutProperty("hillshade", "visibility", "none");
       map.easeTo({ pitch: 0, duration: 600 });
     }
-  };
-  useEffect(updateThreeD, [threeD]);
+  }, [threeD, loaded]);
 
-  // 現在地マーカー
+  // 現在地マーカー（origin が null ならマーカーを除去）
   const originMarker = useRef<maplibregl.Marker | null>(null);
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !origin) return;
+    if (!map) return;
     originMarker.current?.remove();
+    originMarker.current = null;
+    if (!origin) return;
     originMarker.current = new maplibregl.Marker({ color: "#16a34a" })
       .setLngLat(origin)
       .setPopup(new maplibregl.Popup().setText("現在地"))
       .addTo(map);
-  }, [origin]);
+  }, [origin, loaded]);
 
   return <div ref={containerRef} className="h-full w-full" />;
-}
-
-function emptyFC(): GeoJSON.FeatureCollection {
-  return { type: "FeatureCollection", features: [] };
 }
 
 export { HAZARD_TILES };

@@ -66,6 +66,7 @@ export default function Home() {
   const [submitted, setSubmitted] = useState(false);
   const [hazards, setHazards] = useState<HazardKey[]>([]);
   const [threeD, setThreeD] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [originLabel, setOriginLabel] = useState("自動取得 / 東京駅");
   const [placeInput, setPlaceInput] = useState("");
   const [geoLoading, setGeoLoading] = useState(false);
@@ -224,12 +225,17 @@ export default function Home() {
   async function handleSubmit() {
     if (!text.trim()) return;
     setLoading(true);
+    setSubmitError(null);
     try {
       const res = await fetch("/api/triage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
+      if (!res.ok) {
+        setSubmitError("属性の抽出に失敗しました。少し待って再度お試しください。");
+        return; // submitted は変えない（前の結果を保持）
+      }
       const data = await res.json();
       const a = data.attrs ?? {};
       const hazard: HazardKey | null = a.hazard && a.hazard !== "none" ? a.hazard : null;
@@ -315,6 +321,7 @@ export default function Home() {
         >
           {loading ? "考えています…" : "避難所をさがす"}
         </button>
+        {submitError && <p className="text-xs text-red-600">{submitError}</p>}
 
         {submitted && (
           <div className="flex flex-wrap gap-1 text-xs">

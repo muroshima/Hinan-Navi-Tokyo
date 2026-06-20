@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# だれでも避難ナビ TOKYO
 
-## Getting Started
+ことばで状況を伝えると、**要配慮者が「本当に行ける」避難所**を提案する防災ナビ。東京都オープンデータを活用（都知事杯オープンデータ・ハッカソン向けプロトタイプ）。
 
-First, run the development server:
+自然文（例: 「雨の日、車椅子の母と避難したい」）から配慮属性（車椅子/高齢/乳幼児/視覚・聴覚障害/外国語/介助者/オストメイト/重度介護/夜間/天候/想定災害）を抽出し、避難所・避難場所を **バリアフリー × ハザード × 距離 × 当事者要件** で再ランキングします。
 
+## 主な機能
+- 自然文 → 配慮属性の抽出（`/api/triage`。LLM構造化出力、APIキー無い場合は語句一致のフォールバック）
+- 「その人が行ける順」の再ランキング ＋ 意思決定支援（なぜ1位か／より近いのに見送った理由）
+- ハザードレイヤ重ね（国交省: 洪水/高潮/津波/土砂）、3D地形（坂・起伏）
+- トイレ設備の近傍紐づけ（おむつ替え/オストメイト/大型ベッド/非常用ボタン）
+- 市区町村の高齢化率を文脈表示、実経路距離（OSRM）、現在地手動入力（Nominatim）、Googleマップ徒歩ルート
+
+## 技術スタック
+Next.js 16 / React 19 / TypeScript / Tailwind CSS / MapLibre GL JS
+
+## セットアップ
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+
+# データ生成（CSV → public/data/*.geojson）
+#   data-raw/ に元CSVを配置した上で実行
+#   （避難所/避難場所/車椅子対応トイレ/住民基本台帳 年齢別人口）
+python3 scripts/preprocess.py
+
+npm run dev   # http://localhost:3000
 ```
+`public/data/evacuation.geojson` / `toilets.geojson` が生成されていれば、地図・ランキングは動作します。
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 環境変数（任意）
+| 変数 | 用途 |
+|---|---|
+| `ANTHROPIC_API_KEY` | `/api/triage` のLLM属性抽出。未設定でも語句一致のフォールバックで動作 |
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+`.env.local.example` を参照。キー未設定でもアプリは起動・動作します。
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## データ出典
+- 東京都オープンデータ（避難所・避難場所一覧／車椅子対応トイレ バリアフリー情報／住民基本台帳 年齢別人口）
+- 国土交通省 ハザードマップポータルサイト（浸水想定・土砂災害警戒区域 タイル）
+- 地形: Mapzen / AWS Open Data（Terrarium DEM）、地図: © OpenStreetMap contributors
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 注意
+本リポジトリはハッカソン用プロトタイプです。避難の最終判断は自治体の公式情報に従ってください。
