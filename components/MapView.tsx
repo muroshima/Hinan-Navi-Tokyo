@@ -32,6 +32,9 @@ const HAZARD_KEYS = Object.keys(HAZARD_TILES) as HazardKey[];
 // APIキー不要の OSM ラスタースタイル
 const OSM_STYLE: maplibregl.StyleSpecification = {
   version: 8,
+  // ラベル(symbol)描画にはglyphsが必須。APIキー不要のMapLibreデモフォントを使用
+  // (日本語=CJKはMap側のlocalIdeographFontFamilyでローカル描画)
+  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
   sources: {
     osm: {
       type: "raster",
@@ -70,6 +73,7 @@ export default function MapView({ all, ranked, origin, hazards = [], threeD = fa
       style: OSM_STYLE,
       center: TOKYO,
       zoom: 11,
+      localIdeographFontFamily: "sans-serif", // CJK(日本語)ラベルをローカルフォントで描画
     });
     map.addControl(new maplibregl.NavigationControl(), "top-right");
     map.on("load", () => {
@@ -136,6 +140,7 @@ export default function MapView({ all, ranked, origin, hazards = [], threeD = fa
         source: "ranked",
         layout: {
           "text-field": ["get", "label"],
+          "text-font": ["Open Sans Regular"],
           "text-size": 11,
           "text-offset": [0, 1.4],
           "text-anchor": "top",

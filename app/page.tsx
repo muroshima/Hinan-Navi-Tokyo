@@ -128,7 +128,7 @@ export default function Home() {
   }, []);
 
   // GPSで現在地を取得
-  function useMyLocation() {
+  function handleMyLocation() {
     if (!navigator.geolocation) {
       setGeoError("この端末では位置情報が使えません");
       return;
@@ -185,13 +185,13 @@ export default function Home() {
 
   // 実経路の徒歩距離・所要（上位8件をOSRMでまとめて取得）
   useEffect(() => {
-    const top = ranked.slice(0, 8);
-    if (top.length === 0) {
-      setRouteInfo({});
-      return;
-    }
     let aborted = false;
     (async () => {
+      const top = ranked.slice(0, 8);
+      if (top.length === 0) {
+        if (!aborted) setRouteInfo({});
+        return;
+      }
       try {
         const res = await fetch("/api/route", {
           method: "POST",
@@ -246,6 +246,8 @@ export default function Home() {
       if (hazard && HAZARD_LAYERS.some((h) => h.key === hazard)) {
         setHazards((prev) => (prev.includes(hazard) ? prev : [...prev, hazard]));
       }
+    } catch {
+      setSubmitError("通信に失敗しました。接続を確認して再度お試しください。");
     } finally {
       setLoading(false);
     }
@@ -286,7 +288,7 @@ export default function Home() {
               設定
             </button>
             <button
-              onClick={useMyLocation}
+              onClick={handleMyLocation}
               disabled={geoLoading}
               title="GPSで現在地を取得"
               className="shrink-0 rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 disabled:opacity-40"
