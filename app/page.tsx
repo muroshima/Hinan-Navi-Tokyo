@@ -34,6 +34,7 @@ const ATTR_LABELS: { key: keyof UserAttrs; label: string }[] = [
 const EMPTY_TOILET_IDX: ToiletIndex = { baby: [], ostomate: [], largeBed: [], call: [] };
 
 const SAMPLES = [
+  "江戸川区で水害が心配。車椅子の母と避難したい",
   "雨の日、車椅子の母と避難したい。介助は私がします",
   "ベビーカーと0歳の子ども連れです。近くて入りやすい場所は？",
   "高齢の祖父と一緒です。洪水のとき逃げられる所を教えて",
@@ -237,7 +238,8 @@ export default function Home() {
         return; // submitted は変えない（前の結果を保持）
       }
       const data = await res.json();
-      const a = data.attrs ?? {};
+      // location(出発地)は属性とは別扱い（現在地に反映）
+      const { location, ...a } = data.attrs ?? {};
       const hazard: HazardKey | null = a.hazard && a.hazard !== "none" ? a.hazard : null;
       setAttrs({ ...DEFAULT_ATTRS, ...a, hazard });
       setSource(data.source ?? null);
@@ -245,6 +247,23 @@ export default function Home() {
       // 抽出された災害に対応するハザードレイヤを自動でON
       if (hazard && HAZARD_LAYERS.some((h) => h.key === hazard)) {
         setHazards((prev) => (prev.includes(hazard) ? prev : [...prev, hazard]));
+      }
+      // 文中に地名があれば現在地に反映。副作用なのでUI応答をブロックしない(fire-and-forget)
+      if (typeof location === "string" && location.trim()) {
+        const place = location.trim();
+        void (async () => {
+          try {
+            const gr = await fetch(`/api/geocode?q=${encodeURIComponent(place)}`);
+            if (!gr.ok) return;
+            const g = await gr.json();
+            if (Number.isFinite(g.lng) && Number.isFinite(g.lat)) {
+              setOrigin([g.lng, g.lat]);
+              setOriginLabel(g.label?.split(",").slice(0, 2).join("・") || place);
+            }
+          } catch {
+            /* 失敗時は現在地を変更しない */
+          }
+        })();
       }
     } catch {
       setSubmitError("通信に失敗しました。接続を確認して再度お試しください。");

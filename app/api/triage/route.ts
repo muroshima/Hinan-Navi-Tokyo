@@ -16,6 +16,7 @@ const AttrsSchema = z.object({
   severe_care: z.boolean().describe("寝たきり・重度障害・要介護（大型ベッド等が必要）である"),
   night: z.boolean().describe("夜間・暗い時間帯の避難である"),
   bad_weather: z.boolean().describe("雨・大雨・荒天・台風・雪など悪天候の状況である"),
+  location: z.string().optional().describe("文中の地名・住所・駅名など避難の出発地。無ければ省略可"),
   hazard: z
     .enum([
       "flood",
@@ -34,6 +35,8 @@ const AttrsSchema = z.object({
 const SYSTEM = `あなたは防災避難支援アシスタントです。利用者が自然文で伝える状況から、避難所選定に必要な属性を抽出します。
 本人だけでなく同行者（例: 車椅子の母と避難）の配慮要件も該当属性を true にします。
 オストメイト/人工肛門/ストーマ → ostomate、寝たきり/重度/要介護 → severe_care、夜間/暗い時間帯 → night、雨・大雨・台風・雪などの悪天候 → bad_weather を true にします。
+文中に地名・住所・駅名（例「江戸川区」「新宿駅」）があれば location に入れます（無ければ省略）。
+hazardは: 水害/氾濫/洪水/浸水→flood、土砂/崖崩れ→landslide、高潮→storm_surge、津波→tsunami、地震→earthquake、火災→fire。
 明示されていない属性は false、災害種別の言及がなければ hazard は none にしてください。推測しすぎないこと。`;
 
 // キー未設定時のルールベース簡易抽出（スケルトンをキーなしでも動かすため）
@@ -53,7 +56,8 @@ function fallbackExtract(text: string) {
     severe_care: has("寝たきり", "重度", "要介護", "大型ベッド", "着替え介助", "介護が必要", "車いす全介助"),
     night: has("夜", "夜間", "今夜", "未明", "暗い", "深夜"),
     bad_weather: has("雨", "大雨", "荒天", "台風", "嵐", "暴風", "雪", "悪天候"),
-    hazard: (text.includes("洪水") || text.includes("浸水")
+    location: (text.match(/[^\s、。,（）()]{1,8}?(?:区|市|町|村)/) || text.match(/[^\s、。,（）()]{1,12}?駅/) || [""])[0],
+    hazard: (text.includes("洪水") || text.includes("浸水") || text.includes("水害") || text.includes("氾濫")
       ? "flood"
       : text.includes("土砂") || text.includes("崖")
         ? "landslide"
