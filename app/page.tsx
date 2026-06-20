@@ -248,20 +248,22 @@ export default function Home() {
       if (hazard && HAZARD_LAYERS.some((h) => h.key === hazard)) {
         setHazards((prev) => (prev.includes(hazard) ? prev : [...prev, hazard]));
       }
-      // 文中に地名があれば現在地に反映（ジオコーディング）
+      // 文中に地名があれば現在地に反映。副作用なのでUI応答をブロックしない(fire-and-forget)
       if (typeof location === "string" && location.trim()) {
-        try {
-          const gr = await fetch(`/api/geocode?q=${encodeURIComponent(location.trim())}`);
-          if (gr.ok) {
+        const place = location.trim();
+        void (async () => {
+          try {
+            const gr = await fetch(`/api/geocode?q=${encodeURIComponent(place)}`);
+            if (!gr.ok) return;
             const g = await gr.json();
             if (Number.isFinite(g.lng) && Number.isFinite(g.lat)) {
               setOrigin([g.lng, g.lat]);
-              setOriginLabel(g.label?.split(",").slice(0, 2).join("・") || location.trim());
+              setOriginLabel(g.label?.split(",").slice(0, 2).join("・") || place);
             }
+          } catch {
+            /* 失敗時は現在地を変更しない */
           }
-        } catch {
-          /* 失敗時は現在地を変更しない */
-        }
+        })();
       }
     } catch {
       setSubmitError("通信に失敗しました。接続を確認して再度お試しください。");
