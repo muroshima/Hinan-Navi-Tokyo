@@ -22,5 +22,6 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* layout.tsx で設定した Geist(--font-sans) を実際に使う。日本語等は sans-serif にフォールバック */
+  font-family: var(--font-sans), sans-serif;
 }

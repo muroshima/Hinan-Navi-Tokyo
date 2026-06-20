@@ -10,10 +10,15 @@ export async function GET(req: NextRequest) {
     encodeURIComponent(q);
 
   try {
+    // Nominatim利用ポリシー: 連絡可能な情報をUser-Agent/Refererに含める（環境変数で設定、未設定でも動作）
+    const contact = process.env.NOMINATIM_CONTACT_EMAIL;
+    const ua = contact
+      ? `dare-hinan-navi/0.1 (${contact})`
+      : "dare-hinan-navi/0.1 (Tokyo OpenData Hackathon prototype)";
     const res = await fetch(url, {
       headers: {
-        // Nominatim利用ポリシー: 識別可能なUser-Agentを付与
-        "User-Agent": "dare-hinan-navi/0.1 (Tokyo OpenData Hackathon prototype)",
+        "User-Agent": ua,
+        ...(contact ? { Referer: `mailto:${contact}` } : {}),
         "Accept-Language": "ja",
       },
       signal: AbortSignal.timeout(8000), // ネットワーク不調でぶら下がらないように

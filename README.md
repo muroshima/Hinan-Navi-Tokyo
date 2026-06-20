@@ -31,6 +31,7 @@ npm run dev   # http://localhost:3000
 | 変数 | 用途 |
 |---|---|
 | `ANTHROPIC_API_KEY` | `/api/triage` のLLM属性抽出。未設定でも語句一致のフォールバックで動作 |
+| `NOMINATIM_CONTACT_EMAIL` | `/api/geocode` が Nominatim に付与する連絡先（任意・利用ポリシー対応。未設定でも動作） |
 
 `.env.local.example` を参照。キー未設定でもアプリは起動・動作します。
 

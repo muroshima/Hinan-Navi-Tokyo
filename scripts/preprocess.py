@@ -60,21 +60,19 @@ def build_city_aging():
         return {}
     if not rows:
         return {}
-    header = rows[0]
-
-    def col(keyword):
-        for i, c in enumerate(header):
-            if keyword in (c or ''):
-                return i
-        return None
+    # 先頭の空行/注記行に耐えるよう、本物のヘッダ行を検出（他CSVと同様）
+    try:
+        hi, header = find_header(rows, ['年少', '老年'])
+    except RuntimeError:
+        return {}
     # 各区分の「総数」列（最初に現れるもの）
-    i_name = 2
+    i_name = next((i for i, c in enumerate(header) if c.strip() == '地域'), 2)
     i_young = next((i for i, c in enumerate(header) if '年少' in c and '総数' in c), 3)
     i_work = next((i for i, c in enumerate(header) if '生産年齢' in c and '総数' in c), 6)
     i_old = next((i for i, c in enumerate(header) if '老年' in c and '総数' in c), 9)
     out = {}
     skip = {'総数', '区部', '市部', '郡部', '島部', '都計'}
-    for r in rows[1:]:
+    for r in rows[hi + 1:]:
         if len(r) <= i_old:
             continue
         name = (r[i_name] or '').strip()
