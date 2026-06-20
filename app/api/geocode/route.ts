@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
         "User-Agent": "dare-hinan-navi/0.1 (Tokyo OpenData Hackathon prototype)",
         "Accept-Language": "ja",
       },
+      signal: AbortSignal.timeout(8000), // ネットワーク不調でぶら下がらないように
     });
     if (!res.ok) {
       return NextResponse.json({ error: `geocoder ${res.status}` }, { status: 502 });
@@ -25,11 +26,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "not found" }, { status: 404 });
     }
     const hit = arr[0];
-    return NextResponse.json({
-      lat: parseFloat(hit.lat),
-      lng: parseFloat(hit.lon),
-      label: hit.display_name,
-    });
+    const lat = parseFloat(hit.lat);
+    const lng = parseFloat(hit.lon);
+    // 不正な数値はクライアントの地図処理を壊すので弾く
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return NextResponse.json({ error: "invalid coordinates" }, { status: 502 });
+    }
+    return NextResponse.json({ lat, lng, label: hit.display_name });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: message }, { status: 502 });

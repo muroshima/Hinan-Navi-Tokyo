@@ -12,6 +12,9 @@ const AttrsSchema = z.object({
   hearing_impairment: z.boolean().describe("聴覚障害がある"),
   foreign_language: z.boolean().describe("日本語が不自由・外国語話者である"),
   has_caregiver: z.boolean().describe("介助者・付き添いがいる"),
+  ostomate: z.boolean().describe("オストメイト（人工肛門・ストーマ）である"),
+  severe_care: z.boolean().describe("寝たきり・重度障害・要介護（大型ベッド等が必要）である"),
+  night: z.boolean().describe("夜間・暗い時間帯の避難である"),
   bad_weather: z.boolean().describe("雨・大雨・荒天・台風・雪など悪天候の状況である"),
   hazard: z
     .enum([
@@ -30,7 +33,7 @@ const AttrsSchema = z.object({
 
 const SYSTEM = `あなたは防災避難支援アシスタントです。利用者が自然文で伝える状況から、避難所選定に必要な属性を抽出します。
 本人だけでなく同行者（例: 車椅子の母と避難）の配慮要件も該当属性を true にします。
-雨・大雨・台風・雪などの悪天候への言及があれば bad_weather を true にします。
+オストメイト/人工肛門/ストーマ → ostomate、寝たきり/重度/要介護 → severe_care、夜間/暗い時間帯 → night、雨・大雨・台風・雪などの悪天候 → bad_weather を true にします。
 明示されていない属性は false、災害種別の言及がなければ hazard は none にしてください。推測しすぎないこと。`;
 
 // キー未設定時のルールベース簡易抽出（スケルトンをキーなしでも動かすため）

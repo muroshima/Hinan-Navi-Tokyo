@@ -5,7 +5,7 @@
 - バリアフリー列・災害種別列を bool に正規化
 出力: public/data/{evacuation.geojson, toilets.geojson}
 """
-import csv, json, os, re
+import csv, json, os
 
 RAW = os.path.join(os.path.dirname(__file__), '..', 'data-raw')
 OUT = os.path.join(os.path.dirname(__file__), '..', 'public', 'data')

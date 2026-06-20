@@ -12,8 +12,12 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "invalid body" }, { status: 400 });
   }
-  if (!origin || dests.length === 0) {
-    return NextResponse.json({ error: "origin and dests required" }, { status: 400 });
+
+  // [lng,lat] かつ有限数の座標ペアか検証（不正入力でOSRMリクエストが壊れるのを防ぐ）
+  const isCoord = (c: unknown): c is [number, number] =>
+    Array.isArray(c) && c.length === 2 && Number.isFinite(c[0]) && Number.isFinite(c[1]);
+  if (!isCoord(origin) || dests.length === 0 || !dests.every(isCoord)) {
+    return NextResponse.json({ error: "origin and dests must be [lng,lat] pairs" }, { status: 400 });
   }
 
   const coords = [origin, ...dests].map((c) => `${c[0]},${c[1]}`).join(";");
