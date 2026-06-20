@@ -56,7 +56,7 @@ function fallbackExtract(text: string) {
     severe_care: has("寝たきり", "重度", "要介護", "大型ベッド", "着替え介助", "介護が必要", "車いす全介助"),
     night: has("夜", "夜間", "今夜", "未明", "暗い", "深夜"),
     bad_weather: has("雨", "大雨", "荒天", "台風", "嵐", "暴風", "雪", "悪天候"),
-    location: (text.match(/[^\s、。,]{1,10}(?:区|市|町|村)/) || text.match(/[^\s、。,]{1,12}駅/) || [""])[0],
+    location: (text.match(/[^\s、。,（）()]{1,8}?(?:区|市|町|村)/) || text.match(/[^\s、。,（）()]{1,12}?駅/) || [""])[0],
     hazard: (text.includes("洪水") || text.includes("浸水") || text.includes("水害") || text.includes("氾濫")
       ? "flood"
       : text.includes("土砂") || text.includes("崖")
