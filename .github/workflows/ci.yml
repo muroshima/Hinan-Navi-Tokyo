@@ -10,6 +10,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# 既定は最小権限（各ジョブで必要に応じて拡張する）
+permissions:
+  contents: read
+
 jobs:
   lint-build:
     name: lint / type-check / build
