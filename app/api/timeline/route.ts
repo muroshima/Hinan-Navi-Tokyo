@@ -55,7 +55,17 @@ const InputSchema = z.object({
   destName: z.string().max(100).optional().catch(undefined),
   hazardLabel: z.string().max(40).optional().catch(undefined),
   distanceKm: z.number().finite().optional().catch(undefined), // Infinity/NaNはundefinedへ
+  language: z.enum(["ja-easy", "ja", "en", "zh"]).optional().catch(undefined),
 });
+
+// 出力言語の指示（LLM版のみ。fallbackは日本語固定）
+const LANG_INSTRUCTION: Record<string, string> = {
+  ja: "出力は日本語で書いてください。",
+  "ja-easy":
+    "出力はやさしい日本語で書いてください（短い文・難しい言葉や漢語を避け、外国人や子どもにも分かる表現にする）。",
+  en: "Write the output in English.",
+  zh: "请用简体中文输出。",
+};
 
 // 返却型は @/lib/types の TimelinePhase に統一（PhaseSchemaと構造一致。二重定義を避ける）
 
@@ -140,6 +150,7 @@ export async function POST(req: NextRequest) {
   }
   const attrs: UserAttrs = parsed.data.attrs;
   const { destName, hazardLabel, distanceKm } = parsed.data;
+  const language = parsed.data.language ?? "ja";
 
   // APIキーが無ければルールベースにフォールバック
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -164,7 +175,7 @@ export async function POST(req: NextRequest) {
     const res = await client.messages.parse({
       model: "claude-opus-4-8",
       max_tokens: 2048,
-      system: SYSTEM,
+      system: `${SYSTEM}\n\n出力言語: ${LANG_INSTRUCTION[language]}`,
       messages: [{ role: "user", content: prompt }],
       output_config: { format: zodOutputFormat(TimelineSchema) },
     });

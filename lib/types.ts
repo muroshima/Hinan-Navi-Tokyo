@@ -93,6 +93,16 @@ export interface ScoreFactor {
   category: ScoreCategory;
 }
 
+// 回答の出力言語（やさしい日本語・日本語・英語・中文）
+export type Lang = "ja-easy" | "ja" | "en" | "zh";
+
+export const LANGS: { code: Lang; label: string }[] = [
+  { code: "ja", label: "日本語" },
+  { code: "ja-easy", label: "やさしい日本語" },
+  { code: "en", label: "English" },
+  { code: "zh", label: "中文" },
+];
+
 // マイ・タイムライン（局面別の避難行動。/api/timeline が生成）
 export interface TimelinePhase {
   phase: string; // 局面名（例: 避難開始）

@@ -9,9 +9,11 @@ import type {
   UserAttrs,
   HazardKey,
   TimelinePhase,
+  Lang,
 } from "@/lib/types";
-import { DEFAULT_ATTRS } from "@/lib/types";
+import { DEFAULT_ATTRS, LANGS } from "@/lib/types";
 import { fallbackExtract, type FallbackAttrs } from "@/lib/triageFallback";
+import { createRecognition, canRecognize, canSpeak, speak, type SpeechRecognitionLike } from "@/lib/speech";
 import {
   rankEvacuations,
   explainDecision,
@@ -155,6 +157,48 @@ export default function Home() {
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineSource, setTimelineSource] = useState<string | null>(null);
   const timelineReqId = useRef(0); // 最新リクエスト以外のレスポンスを破棄するための識別子
+  // 出力言語・音声入出力（アクセシビリティ／多言語）
+  const [lang, setLang] = useState<Lang>("ja");
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const [voiceIn, setVoiceIn] = useState(false);
+  const [voiceOut, setVoiceOut] = useState(false);
+  useEffect(() => {
+    // 音声機能の対応可否はマウント後に判定（SSRと不一致を避ける）。
+    // setStateはマイクロタスクに逃がす（effect内の同期setStateを避ける）
+    queueMicrotask(() => {
+      setVoiceIn(canRecognize());
+      setVoiceOut(canSpeak());
+    });
+  }, []);
+
+  // 音声入力の開始/停止（Web Speech API・対応ブラウザのみ）
+  function toggleVoiceInput() {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const rec = createRecognition(lang);
+    if (!rec) return;
+    rec.onresult = (e) => {
+      const t = e.results[0]?.[0]?.transcript ?? "";
+      if (t) setText((prev) => (prev ? `${prev} ${t}` : t));
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recognitionRef.current = rec;
+    setListening(true);
+    rec.start();
+  }
+
+  // タイムラインを読み上げる（SpeechSynthesis）
+  function speakTimeline() {
+    if (!timeline) return;
+    const text = timeline
+      .map((p) => `${p.phase}。${p.level}。${p.actions.join("。")}`)
+      .join("。");
+    speak(text, lang);
+  }
 
   const toggleHazard = (key: HazardKey) =>
     setHazards((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
@@ -372,6 +416,7 @@ export default function Home() {
           destName: top.feature.properties.name,
           distanceKm: top.distanceKm,
           hazardLabel: attrs.hazard ? HAZARD_LABEL[attrs.hazard] : undefined,
+          language: lang,
         }),
       });
       // 新しい検索/再生成が走っていたら、古いレスポンスは破棄（不整合防止）
@@ -470,6 +515,38 @@ export default function Home() {
             ことばで状況を伝えると、あなたが行ける避難所を探します
           </p>
         </header>
+
+        {/* 出力言語（やさしい日本語・多言語）＋ 音声入力 */}
+        <div className="flex items-center gap-2">
+          <label htmlFor="lang" className="text-xs font-bold text-gray-700">
+            言語
+          </label>
+          <select
+            id="lang"
+            value={lang}
+            onChange={(e) => setLang(e.target.value as Lang)}
+            className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-800 focus:border-blue-500 focus:outline-none"
+          >
+            {LANGS.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+          {voiceIn && (
+            <button
+              onClick={toggleVoiceInput}
+              aria-pressed={listening}
+              className={`ml-auto rounded-md border px-2 py-1 text-xs ${
+                listening
+                  ? "border-red-500 bg-red-50 text-red-700"
+                  : "border-gray-300 text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              {listening ? "● 録音中…停止" : "🎤 音声入力"}
+            </button>
+          )}
+        </div>
 
         {/* 現在地（手動入力 or GPS） */}
         <div className="rounded-lg border border-gray-200 p-2">
@@ -616,15 +693,26 @@ export default function Home() {
         {/* マイ・タイムライン（属性×災害×推奨避難先 → 時系列の避難行動） */}
         {submitted && ranked.length > 0 && (
           <div className="rounded-lg border border-sky-300 bg-sky-50 p-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-1">
               <span className="text-xs font-bold text-sky-800">📋 あなたのマイ・タイムライン</span>
-              <button
-                onClick={genTimeline}
-                disabled={timelineLoading}
-                className="rounded-md bg-sky-600 px-2 py-1 text-xs text-white hover:bg-sky-700 disabled:opacity-40"
-              >
-                {timelineLoading ? "作成中…" : timeline ? "作り直す" : "行動計画をつくる"}
-              </button>
+              <div className="flex gap-1">
+                {timeline && voiceOut && (
+                  <button
+                    onClick={speakTimeline}
+                    title="タイムラインを読み上げる"
+                    className="rounded-md border border-sky-400 px-2 py-1 text-xs text-sky-700 hover:bg-sky-100"
+                  >
+                    🔊 読み上げ
+                  </button>
+                )}
+                <button
+                  onClick={genTimeline}
+                  disabled={timelineLoading}
+                  className="rounded-md bg-sky-600 px-2 py-1 text-xs text-white hover:bg-sky-700 disabled:opacity-40"
+                >
+                  {timelineLoading ? "作成中…" : timeline ? "作り直す" : "行動計画をつくる"}
+                </button>
+              </div>
             </div>
             {!timeline && !timelineLoading && (
               <p className="mt-1 text-[11px] text-sky-700">
