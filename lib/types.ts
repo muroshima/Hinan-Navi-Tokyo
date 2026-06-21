@@ -93,6 +93,23 @@ export interface ScoreFactor {
   category: ScoreCategory;
 }
 
+// 回答の出力言語（やさしい日本語・日本語・英語・中文）
+// 言語コードの単一ソース。Lang型・Zod schema・BCP47・LANGS はすべてこれに従う
+export const LANG_CODES = ["ja", "ja-easy", "en", "zh"] as const;
+export type Lang = (typeof LANG_CODES)[number];
+
+// ラベルは Record<Lang> で型固定し、LANG_CODES から LANGS を生成（漏れ・順序ズレを型で検出）
+const LANG_LABELS: Record<Lang, string> = {
+  ja: "日本語",
+  "ja-easy": "やさしい日本語",
+  en: "English",
+  zh: "中文",
+};
+export const LANGS: { code: Lang; label: string }[] = LANG_CODES.map((code) => ({
+  code,
+  label: LANG_LABELS[code],
+}));
+
 // マイ・タイムライン（局面別の避難行動。/api/timeline が生成）
 export interface TimelinePhase {
   phase: string; // 局面名（例: 避難開始）
