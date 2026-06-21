@@ -59,6 +59,19 @@ const SAMPLES = [
   "高齢の祖父と一緒です。洪水のとき逃げられる所を教えて",
 ];
 
+// 共有URLの座標を検証して [lng, lat] で返す（両方が数値かつ範囲内のときのみ）
+function parseSharedCoords(search: string): [number, number] | null {
+  const sp = new URLSearchParams(search);
+  const latRaw = sp.get("lat");
+  const lngRaw = sp.get("lng");
+  const lat = latRaw ? Number(latRaw) : NaN;
+  const lng = lngRaw ? Number(lngRaw) : NaN;
+  if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+    return [lng, lat];
+  }
+  return null;
+}
+
 // 現在地→避難所 の徒歩ルートをGoogleマップで開くURL
 function gmapsWalkingUrl(origin: [number, number], dest: [number, number]): string {
   const o = `${origin[1]},${origin[0]}`; // lat,lng
@@ -146,6 +159,7 @@ export default function Home() {
   const [routeInfo, setRouteInfo] = useState<Record<string, { m: number; min: number }>>({});
   const [origin, setOrigin] = useState<[number, number]>(TOKYO_STATION);
   const [text, setText] = useState("");
+  const [submittedText, setSubmittedText] = useState(""); // 最後に検索に使った入力文（共有URL用）
   const [attrs, setAttrs] = useState<UserAttrs>(DEFAULT_ATTRS);
   const [loading, setLoading] = useState(false);
   const [source, setSource] = useState<string | null>(null);
@@ -342,9 +356,9 @@ export default function Home() {
       .catch(() => setToiletIdx(EMPTY_TOILET_IDX));
   }, []);
 
-  // 現在地（取れなければ東京駅）。共有URLに座標がある場合はGPSで上書きしない
+  // 現在地（取れなければ東京駅）。共有URLに有効な座標がある場合はGPSで上書きしない
   useEffect(() => {
-    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("lat")) return;
+    if (typeof window !== "undefined" && parseSharedCoords(window.location.search)) return;
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -514,6 +528,7 @@ export default function Home() {
       setAttrs({ ...DEFAULT_ATTRS, ...a, hazard });
       setSource(source);
       setSubmitted(true);
+      setSubmittedText(q); // 共有URLは画面に反映された入力文を使う（編集中textとのズレ防止）
       // 抽出された災害に対応するハザードレイヤを自動でON
       if (hazard && HAZARD_LAYERS.some((h) => h.key === hazard)) {
         setHazards((prev) => (prev.includes(hazard) ? prev : [...prev, hazard]));
@@ -561,7 +576,8 @@ export default function Home() {
   // 家族・支援者に共有するURL（入力文＋現在地＋言語）を生成
   function buildShareUrl(): string {
     const params = new URLSearchParams();
-    if (text.trim()) params.set("q", text.trim());
+    const shareText = submittedText.trim();
+    if (shareText) params.set("q", shareText);
     params.set("lat", origin[1].toFixed(6));
     params.set("lng", origin[0].toFixed(6));
     params.set("lang", lang);
@@ -587,25 +603,20 @@ export default function Home() {
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     const q = sp.get("q");
-    const latRaw = sp.get("lat");
-    const lngRaw = sp.get("lng");
-    const latN = latRaw ? Number(latRaw) : NaN;
-    const lngN = lngRaw ? Number(lngRaw) : NaN;
-    const hasCoords =
-      Number.isFinite(latN) && Number.isFinite(lngN) && Math.abs(latN) <= 90 && Math.abs(lngN) <= 180;
+    const coords = parseSharedCoords(window.location.search);
     const l = sp.get("lang");
     const validLang = !!l && (LANG_CODES as readonly string[]).includes(l);
-    if (!q && !hasCoords && !validLang) return;
+    if (!q && !coords && !validLang) return;
     // setStateはマイクロタスクに逃がす（effect内の同期setStateを避ける）
     Promise.resolve().then(() => {
       if (validLang) setLang(l as Lang);
-      if (hasCoords) {
-        setOrigin([lngN, latN]);
+      if (coords) {
+        setOrigin(coords);
         setOriginLabel("共有された地点");
       }
       if (q) {
         setText(q);
-        void handleSubmit({ overrideText: q, skipGeocode: hasCoords });
+        void handleSubmit({ overrideText: q, skipGeocode: !!coords });
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
