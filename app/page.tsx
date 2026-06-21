@@ -2,13 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import type { EvacCollection, EvacFeature, RankedEvac, UserAttrs, HazardKey } from "@/lib/types";
+import type {
+  EvacCollection,
+  EvacFeature,
+  RankedEvac,
+  UserAttrs,
+  HazardKey,
+  TimelinePhase,
+} from "@/lib/types";
 import { DEFAULT_ATTRS } from "@/lib/types";
 import {
   rankEvacuations,
   explainDecision,
   enrichToiletNeeds,
   activeAttrLabels,
+  HAZARD_LABEL,
   type ToiletIndex,
 } from "@/lib/ranking";
 
@@ -141,6 +149,11 @@ export default function Home() {
   // サイドバー可変幅(デスクトップのみ)
   const [sidebarWidth, setSidebarWidth] = useState(400);
   const [isDesktop, setIsDesktop] = useState(false);
+  // マイ・タイムライン（属性×災害×推奨避難先 → LLM行動リスト）
+  const [timeline, setTimeline] = useState<TimelinePhase[] | null>(null);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelineSource, setTimelineSource] = useState<string | null>(null);
+  const timelineReqId = useRef(0); // 最新リクエスト以外のレスポンスを破棄するための識別子
 
   const toggleHazard = (key: HazardKey) =>
     setHazards((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
@@ -341,10 +354,50 @@ export default function Home() {
   // 複合ニーズ（同時最適している配慮要件）のラベル
   const activeNeeds = useMemo(() => (submitted ? activeAttrLabels(attrs) : []), [submitted, attrs]);
 
+  // マイ・タイムラインを生成（推奨1位・属性・想定災害をもとに）
+  async function genTimeline() {
+    const top = ranked[0];
+    if (!top) return;
+    const myId = ++timelineReqId.current; // このリクエストの識別子
+    setTimelineLoading(true);
+    setTimeline(null); // 再生成・失敗時に前回の結果が残らないよう先にクリア
+    setTimelineSource(null);
+    try {
+      const res = await fetch("/api/timeline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          attrs,
+          destName: top.feature.properties.name,
+          distanceKm: top.distanceKm,
+          hazardLabel: attrs.hazard ? HAZARD_LABEL[attrs.hazard] : undefined,
+        }),
+      });
+      // 新しい検索/再生成が走っていたら、古いレスポンスは破棄（不整合防止）
+      if (myId !== timelineReqId.current) return;
+      if (!res.ok) return;
+      const data = await res.json();
+      if (myId !== timelineReqId.current) return;
+      if (Array.isArray(data.timeline)) {
+        setTimeline(data.timeline);
+        setTimelineSource(data.source ?? null);
+      }
+    } catch {
+      /* 失敗時は何も表示しない */
+    } finally {
+      if (myId === timelineReqId.current) setTimelineLoading(false);
+    }
+  }
+
   async function handleSubmit() {
     if (!text.trim()) return;
     setLoading(true);
     setSubmitError(null);
+    // 新しい検索のたびに前回のタイムラインを破棄し、進行中の生成も無効化
+    timelineReqId.current++;
+    setTimeline(null);
+    setTimelineSource(null);
+    setTimelineLoading(false);
     try {
       const res = await fetch("/api/triage", {
         method: "POST",
@@ -541,6 +594,48 @@ export default function Home() {
                 {decision.nearerRejected.distanceKm.toFixed(1)}km）もありますが、
                 <b>{decision.nearerRejected.reason}</b>
                 のため、上記を推奨します。
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* マイ・タイムライン（属性×災害×推奨避難先 → 時系列の避難行動） */}
+        {submitted && ranked.length > 0 && (
+          <div className="rounded-lg border border-sky-300 bg-sky-50 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-sky-800">📋 あなたのマイ・タイムライン</span>
+              <button
+                onClick={genTimeline}
+                disabled={timelineLoading}
+                className="rounded-md bg-sky-600 px-2 py-1 text-xs text-white hover:bg-sky-700 disabled:opacity-40"
+              >
+                {timelineLoading ? "作成中…" : timeline ? "作り直す" : "行動計画をつくる"}
+              </button>
+            </div>
+            {!timeline && !timelineLoading && (
+              <p className="mt-1 text-[11px] text-sky-700">
+                あなたの状況と推奨避難先「{ranked[0].feature.properties.name}」に合わせ、警戒レベルに沿った避難の手順を作成します
+              </p>
+            )}
+            {timeline && (
+              <div className="mt-2 flex flex-col gap-2">
+                {timeline.map((ph, pi) => (
+                  <div key={`${ph.phase}-${pi}`} className="relative pl-4">
+                    <span className="absolute left-0 top-1.5 h-2 w-2 rounded-full bg-sky-500" />
+                    <div className="text-xs font-bold text-sky-900">{ph.phase}</div>
+                    <div className="text-[10px] text-sky-600">{ph.level}</div>
+                    <ul className="mt-0.5 list-disc pl-4 text-xs text-gray-700">
+                      {ph.actions.map((a, ai) => (
+                        <li key={ai}>{a}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+                {timelineSource && (
+                  <span className="text-[10px] text-gray-400">
+                    （生成: {timelineSource === "claude" ? "AI" : "簡易ルール"}・参考情報です。最終判断は自治体の情報に従ってください）
+                  </span>
+                )}
               </div>
             )}
           </div>

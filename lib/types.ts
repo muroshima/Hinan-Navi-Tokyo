@@ -93,6 +93,13 @@ export interface ScoreFactor {
   category: ScoreCategory;
 }
 
+// マイ・タイムライン（局面別の避難行動。/api/timeline が生成）
+export interface TimelinePhase {
+  phase: string; // 局面名（例: 避難開始）
+  level: string; // 対応する警戒レベル/時点
+  actions: string[]; // その局面の具体的な行動
+}
+
 // ランキング結果(避難所 + スコアと理由)
 export interface RankedEvac {
   feature: EvacFeature;
