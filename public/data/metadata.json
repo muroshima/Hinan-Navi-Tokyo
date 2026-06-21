@@ -43,6 +43,19 @@
       "record_count": 950
     },
     {
+      "file": "bus_stops.geojson",
+      "datasets": [
+        "都営バス GTFS-JP（stops.txt 停留所）"
+      ],
+      "provider": "東京都交通局 / 公共交通オープンデータセンター(ODPT)",
+      "license": "CC BY 4.0",
+      "source_url": "https://ckan.odpt.org/dataset/b_bus_gtfs_jp-toei",
+      "retrieved": "2026-06",
+      "processing": "GTFS-JP zipのstops.txtからlocation_type=1の停留所を抽出。車椅子対応(wheelchair_boarding=1)を保持",
+      "attribution": "都営バス GTFS-JP（東京都交通局）／公共交通オープンデータセンター（CC BY 4.0）",
+      "record_count": 1674
+    },
+    {
       "file": "(高齢化率の付与に使用)",
       "datasets": [
         "住民基本台帳による東京都の世帯と人口(町丁別・年齢別) 第3-1表 区市町村,年齢3区分別人口"

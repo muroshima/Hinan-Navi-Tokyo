@@ -3,7 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { EvacFeature, RankedEvac, HazardKey, LifelineKind, LifelineFeature } from "@/lib/types";
+import type {
+  EvacFeature,
+  RankedEvac,
+  HazardKey,
+  LifelineKind,
+  LifelineFeature,
+  BusStopFeature,
+} from "@/lib/types";
 
 const TOKYO: [number, number] = [139.7528, 35.6852];
 
@@ -55,6 +62,8 @@ interface Props {
   lifeline?: LifelineFeature[]; // 生活継続レイヤー(給水/Wi-Fi)
   lifelineShow?: LifelineKind[]; // 表示する生活継続レイヤー種別
   buildings3d?: boolean; // PLATEAU建物3D（垂直避難先を高さで色分け）
+  busStops?: BusStopFeature[]; // 都営バス停
+  showBusStops?: boolean; // バス停レイヤ表示
 }
 
 function emptyFC(): GeoJSON.FeatureCollection {
@@ -78,6 +87,8 @@ export default function MapView({
   lifeline = [],
   lifelineShow = [],
   buildings3d = false,
+  busStops = [],
+  showBusStops = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -212,6 +223,47 @@ export default function MapView({
           "circle-stroke-width": 1,
           "circle-stroke-color": "#ffffff",
         },
+      });
+
+      // 都営バス停レイヤー（拡大時のみ）。初期は非表示
+      map.addSource("busstops", {
+        type: "geojson",
+        data: emptyFC(),
+        attribution: "都営バス GTFS-JP(東京都交通局)／公共交通オープンデータセンター CC BY 4.0",
+      });
+      map.addLayer({
+        id: "busstop-pts",
+        type: "circle",
+        source: "busstops",
+        minzoom: 12,
+        layout: { visibility: "none" },
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 2.5, 16, 5],
+          "circle-color": "#a855f7",
+          "circle-stroke-width": 1,
+          "circle-stroke-color": "#ffffff",
+        },
+      });
+      const busPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true });
+      map.on("click", "busstop-pts", (e) => {
+        const f = e.features?.[0];
+        if (!f) return;
+        const p = f.properties as { name?: string; wheelchair?: boolean | string };
+        const wc = p.wheelchair === true || p.wheelchair === "true";
+        busPopup
+          .setLngLat((f.geometry as GeoJSON.Point).coordinates as [number, number])
+          .setHTML(
+            `<div style="font-size:12px;line-height:1.4"><b>🚌 ${escapeHtml(p.name ?? "")}</b>` +
+              (wc ? "<br>車椅子対応" : "") +
+              "</div>"
+          )
+          .addTo(map);
+      });
+      map.on("mouseenter", "busstop-pts", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "busstop-pts", () => {
+        map.getCanvas().style.cursor = "";
       });
 
       // 生活継続レイヤーのクリックで詳細ポップアップ＋カーソル変化
@@ -371,6 +423,25 @@ export default function MapView({
       );
     }
   }, [lifelineShow, loaded]);
+
+  // バス停レイヤーの反映
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded) return;
+    (map.getSource("busstops") as maplibregl.GeoJSONSource | undefined)?.setData({
+      type: "FeatureCollection",
+      features: busStops,
+    });
+  }, [busStops, loaded]);
+
+  // バス停レイヤーの表示切替
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded) return;
+    if (map.getLayer("busstop-pts")) {
+      map.setLayoutProperty("busstop-pts", "visibility", showBusStops ? "visible" : "none");
+    }
+  }, [showBusStops, loaded]);
 
   // 3D地形(坂・起伏)の切替
   useEffect(() => {
