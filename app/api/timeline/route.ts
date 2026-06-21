@@ -134,7 +134,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid body" }, { status: 400 });
   }
   if (!parsed.success) {
-    return NextResponse.json({ error: "attrs is required" }, { status: 400 });
+    // attrs欠如に限らず入力不正全般で到達するため汎用文言にする
+    return NextResponse.json({ error: "invalid input" }, { status: 400 });
   }
   const attrs: UserAttrs = parsed.data.attrs;
   const { destName, hazardLabel, distanceKm } = parsed.data;
