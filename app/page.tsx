@@ -47,6 +47,42 @@ function gmapsWalkingUrl(origin: [number, number], dest: [number, number]): stri
   return `https://www.google.com/maps/dir/?api=1&origin=${o}&destination=${d}&travelmode=walking`;
 }
 
+// スコアの加減点内訳をバーで可視化（説明可能性）。正=緑/負=赤
+function ScoreBreakdown({ r }: { r: RankedEvac }) {
+  const maxAbs = Math.max(1, ...r.factors.map((f) => Math.abs(f.delta)));
+  return (
+    <div className="mt-1 rounded-md bg-gray-50 p-2">
+      <div className="mb-1 flex items-center justify-between text-[11px] font-bold text-gray-600">
+        <span>点数内訳</span>
+        <span className="tabular-nums">合計 {Math.round(r.score)}点</span>
+      </div>
+      <div className="flex flex-col gap-0.5">
+        {r.factors.map((f, i) => (
+          <div key={i} className="flex items-center gap-1 text-[11px]">
+            <span className="w-32 shrink-0 truncate text-gray-600" title={f.label}>
+              {f.label}
+            </span>
+            <div className="relative h-2.5 flex-1 rounded bg-gray-100">
+              <div
+                className={`absolute top-0 h-2.5 rounded ${f.delta >= 0 ? "bg-green-400" : "bg-red-400"}`}
+                style={{ width: `${(Math.abs(f.delta) / maxAbs) * 100}%` }}
+              />
+            </div>
+            <span
+              className={`w-9 shrink-0 text-right tabular-nums ${
+                f.delta >= 0 ? "text-green-700" : "text-red-600"
+              }`}
+            >
+              {f.delta >= 0 ? "+" : ""}
+              {Math.round(f.delta)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // MapViewのHAZARD_TILESと対応（重ね表示できるハザード）
 const HAZARD_LAYERS: { key: HazardKey; label: string }[] = [
   { key: "flood", label: "洪水" },
@@ -540,6 +576,13 @@ export default function Home() {
                   ⚠ {c}
                 </div>
               ))}
+              {/* 点数内訳（説明可能性）。1位は自動展開、他はトグル */}
+              <details open={i === 0} className="mt-1.5">
+                <summary className="cursor-pointer list-none text-[11px] font-bold text-gray-500 hover:text-gray-700">
+                  ▸ なぜこの点数？（内訳を{i === 0 ? "表示中" : "見る"}）
+                </summary>
+                <ScoreBreakdown r={r} />
+              </details>
             </div>
           ))}
         </div>

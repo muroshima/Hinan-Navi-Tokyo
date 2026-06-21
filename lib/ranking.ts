@@ -1,6 +1,13 @@
 // 利用者属性 × 避難所データ から「行ける避難所」をスコアリングする
 
-import type { EvacFeature, RankedEvac, UserAttrs, HazardKey } from "./types";
+import type {
+  EvacFeature,
+  RankedEvac,
+  UserAttrs,
+  HazardKey,
+  ScoreFactor,
+  ScoreCategory,
+} from "./types";
 
 const HAZARD_LABEL: Record<HazardKey, string> = {
   flood: "洪水",
@@ -59,18 +66,26 @@ function scoreOne(
   const p = feature.properties;
   const reasons: string[] = [];
   const cautions: string[] = [];
-  let score = 100;
+  const factors: ScoreFactor[] = [];
+  let score = 0;
+  // 加減点と内訳factorを同時に記録（score = Σ factor.delta を厳密に保つ）
+  const add = (label: string, delta: number, category: ScoreCategory) => {
+    score += delta;
+    factors.push({ label, delta, category });
+  };
+
+  add("基準点", 100, "base");
 
   const d = distanceKm(origin, feature.geometry.coordinates);
-  score -= d * 8; // 距離ペナルティ
+  add(`距離 ${d.toFixed(1)}km`, -d * 8, "distance"); // 距離ペナルティ
 
   // 災害種別の適否(避難場所のみ)
   if (attrs.hazard && p.hazards) {
     if (p.hazards[attrs.hazard]) {
-      score += 25;
+      add(`${HAZARD_LABEL[attrs.hazard]}に対応`, 25, "hazard");
       reasons.push(`${HAZARD_LABEL[attrs.hazard]}時に避難できる指定場所`);
     } else {
-      score -= 60;
+      add(`${HAZARD_LABEL[attrs.hazard]}に非対応`, -60, "hazard");
       cautions.push(`${HAZARD_LABEL[attrs.hazard]}に対応していない可能性`);
     }
   }
@@ -79,38 +94,38 @@ function scoreOne(
   if (bf) {
     if (attrs.wheelchair) {
       if (p.a11y.ground_or_elevator) {
-        score += 15;
+        add("1階/エレベーター有", 15, "barrier_free");
         reasons.push("1階に避難スペース/エレベーター有");
       } else {
-        score -= 25;
+        add("1階/EV情報なし", -25, "barrier_free");
         cautions.push("段差・階段の可能性(1階/EV情報なし)");
       }
       if (p.a11y.slope) {
-        score += 10;
+        add("スロープ有", 10, "barrier_free");
         reasons.push("スロープあり");
       }
       if (p.a11y.wheelchair_toilet) {
-        score += 10;
+        add("車椅子対応トイレ有", 10, "barrier_free");
         reasons.push("車椅子対応トイレあり");
       } else {
         cautions.push("車椅子対応トイレ情報なし");
       }
     }
     if (attrs.stroller && p.a11y.ground_or_elevator) {
-      score += 8;
+      add("ベビーカーで入りやすい", 8, "barrier_free");
       reasons.push("ベビーカーでも入りやすい(1階/EV)");
     }
     if (attrs.elderly && (p.a11y.slope || p.a11y.ground_or_elevator)) {
-      score += 6;
+      add("高齢者も移動しやすい", 6, "barrier_free");
       reasons.push("段差が少なく高齢者も移動しやすい");
     }
     // 重度・要介護: 段差なく搬送できる屋内を強く優先
     if (attrs.severe_care) {
       if (p.a11y.ground_or_elevator) {
-        score += 12;
+        add("段差なく搬送しやすい", 12, "barrier_free");
         reasons.push("段差なく搬送しやすい(1階/EV)");
       } else {
-        score -= 20;
+        add("段差・階段(搬送困難)", -20, "barrier_free");
         cautions.push("段差・階段（要介護者の移動が困難）");
       }
     }
@@ -118,7 +133,7 @@ function scoreOne(
 
   if (attrs.visual_impairment) {
     if (p.a11y.braille) {
-      score += 10;
+      add("点字ブロック有", 10, "barrier_free");
       reasons.push("点字ブロックあり");
     } else {
       cautions.push("点字ブロック情報なし");
@@ -130,7 +145,7 @@ function scoreOne(
     (attrs.stroller || attrs.elderly || attrs.wheelchair || attrs.severe_care) &&
     p.kind === "center"
   ) {
-    score += 5;
+    add("屋内滞在できる指定避難所", 5, "facility");
     reasons.push("屋内で滞在できる指定避難所");
   }
 
@@ -138,10 +153,10 @@ function scoreOne(
   if (isAloneHighNeed(attrs)) {
     const full = p.a11y.ground_or_elevator && p.a11y.slope && p.a11y.wheelchair_toilet;
     if (full) {
-      score += 8;
+      add("設備が揃う(介助者なし向き)", 8, "facility");
       reasons.push("介助者なしでも動きやすい(設備が揃う)");
     } else {
-      score -= 6;
+      add("設備がやや不十分", -6, "facility");
       cautions.push("介助者なしには設備がやや不十分");
     }
   }
@@ -149,32 +164,32 @@ function scoreOne(
   // 夜間: 屋内・近さ・安全を重視
   if (attrs.night) {
     if (p.kind === "center") {
-      score += 8;
+      add("夜間も屋内で安心", 8, "context");
       reasons.push("夜間も屋内で安心の指定避難所");
     } else {
-      score -= 8;
+      add("夜間の屋外退避は注意", -8, "context");
       cautions.push("夜間の屋外退避は視界・安全に注意");
     }
-    score -= d * 4;
+    add("夜間は近さ重視", -d * 4, "context");
     if (d <= 0.6) reasons.push("夜道が短い近さ");
   }
 
   // 雨・荒天: 屋内(指定避難所)を優先。屋外の一時退避場所は不利
   if (attrs.bad_weather) {
     if (p.kind === "center") {
-      score += 10;
+      add("雨でも濡れにくい屋内", 10, "context");
       reasons.push("雨でも濡れにくい屋内の指定避難所");
     } else {
-      score -= 12;
+      add("屋外で雨天滞在に不向き", -12, "context");
       cautions.push("屋外の一時退避場所（雨天時は滞在に不向き）");
     }
     if (needsBarrierFree(attrs)) {
-      score -= d * 5;
+      add("荒天は近さ重視", -d * 5, "context");
       if (d <= 0.7) reasons.push("雨でも濡れずに行ける近さ");
     }
   }
 
-  return { feature, distanceKm: d, score, reasons, cautions };
+  return { feature, distanceKm: d, score, factors, reasons, cautions };
 }
 
 /** 避難所候補をスコアリングして上位順に返す */
@@ -229,15 +244,21 @@ export function enrichToiletNeeds(
   const enriched = ranked.map((r) => {
     const c = r.feature.geometry.coordinates;
     const reasons = [...r.reasons];
+    const factors = [...r.factors];
     let score = r.score;
     const add: Partial<RankedEvac> = {};
+    // 近傍トイレ設備の加点をscoreとfactorに同時反映
+    const addFactor = (label: string, delta: number) => {
+      score += delta;
+      factors.push({ label, delta, category: "facility" });
+    };
 
     if (want.baby) {
       const m = nearestMeters(c, idx.baby);
       add.babyChangeM = m;
       if (m !== null && m <= 300) {
         reasons.unshift(`🍼 徒歩約${m}mにおむつ替え台`);
-        score += 6;
+        addFactor("近傍におむつ替え台", 6);
       }
     }
     if (want.ostomate) {
@@ -245,7 +266,7 @@ export function enrichToiletNeeds(
       add.ostomateM = m;
       if (m !== null && m <= 400) {
         reasons.unshift(`🚻 徒歩約${m}mにオストメイト対応トイレ`);
-        score += 6;
+        addFactor("近傍にオストメイト対応", 6);
       }
     }
     if (want.largeBed) {
@@ -253,7 +274,7 @@ export function enrichToiletNeeds(
       add.largeBedM = m;
       if (m !== null && m <= 500) {
         reasons.unshift(`🛏 徒歩約${m}mに大型ベッド付きトイレ`);
-        score += 6;
+        addFactor("近傍に大型ベッド", 6);
       }
     }
     if (want.call) {
@@ -261,10 +282,10 @@ export function enrichToiletNeeds(
       add.callM = m;
       if (m !== null && m <= 400) {
         reasons.unshift(`🆘 徒歩約${m}mに非常用ボタン付きトイレ`);
-        score += 4;
+        addFactor("近傍に非常用ボタン", 4);
       }
     }
-    return { ...r, ...add, reasons, score };
+    return { ...r, ...add, reasons, factors, score };
   });
   return enriched.sort((a, b) => b.score - a.score);
 }
