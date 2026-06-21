@@ -207,7 +207,7 @@ def build_lifeline():
     try:
         rows = read_csv('water_station.csv')
         hi, h = find_header(rows, ['施設名'])
-        for d in records(rows, hi, h):
+        for i, d in enumerate(records(rows, hi, h)):
             lat, lon = to_float(d.get('緯度')), to_float(d.get('経度'))
             name = d.get('施設名', '')
             if not name or lat is None or lon is None:
@@ -216,11 +216,11 @@ def build_lifeline():
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [lon, lat]},
                 'properties': {
-                    'id': f'lw-{len(feats)}',
+                    'id': f'lw-{i}',  # 種別内の連番（行index・一意）
                     'kind': 'water',
                     'name': name,
                     'category': d.get('種別', ''),
-                    'capacity': d.get('確保水量（立方メートル）', ''),
+                    'capacity': to_float(d.get('確保水量（立方メートル）')),  # 立方メートル(数値)
                     'address': d.get('所在地', ''),
                 },
             })
@@ -230,7 +230,7 @@ def build_lifeline():
     try:
         rows = read_csv('wifi.csv')
         hi, h = find_header(rows, ['名称'])
-        for d in records(rows, hi, h):
+        for i, d in enumerate(records(rows, hi, h)):
             lat, lon = to_float(d.get('緯度')), to_float(d.get('経度'))
             name = d.get('名称', '')
             if not name or lat is None or lon is None:
@@ -239,7 +239,7 @@ def build_lifeline():
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [lon, lat]},
                 'properties': {
-                    'id': f'lf-{len(feats)}',
+                    'id': f'lf-{i}',  # 種別内の連番（行index・一意）
                     'kind': 'wifi',
                     'name': name,
                     'address': d.get('住所', ''),

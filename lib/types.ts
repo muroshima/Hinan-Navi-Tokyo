@@ -110,6 +110,18 @@ export const LANGS: { code: Lang; label: string }[] = LANG_CODES.map((code) => (
   label: LANG_LABELS[code],
 }));
 
+// 生活継続レイヤー（給水拠点・公衆Wi-Fi）
+export type LifelineKind = "water" | "wifi";
+export interface LifelineProps {
+  id: string;
+  kind: LifelineKind;
+  name: string;
+  category?: string; // 給水: 種別
+  capacity?: number | null; // 給水: 確保水量(立方メートル)
+  address?: string;
+}
+export type LifelineFeature = GeoJSON.Feature<GeoJSON.Point, LifelineProps>;
+
 // マイ・タイムライン（局面別の避難行動。/api/timeline が生成）
 export interface TimelinePhase {
   phase: string; // 局面名（例: 避難開始）

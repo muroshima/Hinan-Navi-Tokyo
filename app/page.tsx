@@ -10,6 +10,8 @@ import type {
   HazardKey,
   TimelinePhase,
   Lang,
+  LifelineFeature,
+  LifelineKind,
 } from "@/lib/types";
 import { DEFAULT_ATTRS, LANGS, LANG_CODES } from "@/lib/types";
 import { QRCodeSVG } from "qrcode.react";
@@ -167,9 +169,9 @@ export default function Home() {
   const [hazards, setHazards] = useState<HazardKey[]>([]);
   const [threeD, setThreeD] = useState(false);
   // 生活継続レイヤー（給水拠点・公衆Wi-Fi）
-  const [lifeline, setLifeline] = useState<GeoJSON.Feature[]>([]);
-  const [lifelineShow, setLifelineShow] = useState<("water" | "wifi")[]>([]);
-  const toggleLifeline = (k: "water" | "wifi") =>
+  const [lifeline, setLifeline] = useState<LifelineFeature[]>([]);
+  const [lifelineShow, setLifelineShow] = useState<LifelineKind[]>([]);
+  const toggleLifeline = (k: LifelineKind) =>
     setLifelineShow((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [originLabel, setOriginLabel] = useState("自動取得 / 東京駅");
@@ -362,8 +364,11 @@ export default function Home() {
     // 生活継続レイヤー（給水拠点・公衆Wi-Fi）
     fetch("/data/lifeline.geojson")
       .then((r) => r.json())
-      .then((fc: { features?: GeoJSON.Feature[] }) => setLifeline(fc.features ?? []))
-      .catch(() => setLifeline([]));
+      .then((fc: { features?: LifelineFeature[] }) => setLifeline(fc.features ?? []))
+      .catch((e) => {
+        console.warn("lifeline load failed", e);
+        setLifeline([]);
+      });
   }, []);
 
   // 現在地（取れなければ東京駅）。共有URLに有効な座標がある場合はGPSで上書きしない
@@ -831,6 +836,7 @@ export default function Home() {
                 <button
                   key={it.key}
                   onClick={() => toggleLifeline(it.key)}
+                  aria-pressed={active}
                   className={`rounded-full border px-2 py-1 text-xs ${
                     active ? it.on : "border-gray-300 text-gray-600 hover:bg-gray-100"
                   }`}

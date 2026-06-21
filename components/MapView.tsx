@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { EvacFeature, RankedEvac, HazardKey } from "@/lib/types";
+import type { EvacFeature, RankedEvac, HazardKey, LifelineKind, LifelineFeature } from "@/lib/types";
 
 const TOKYO: [number, number] = [139.7528, 35.6852];
 
@@ -46,20 +46,26 @@ const OSM_STYLE: maplibregl.StyleSpecification = {
   layers: [{ id: "osm", type: "raster", source: "osm" }],
 };
 
-type LifelineKind = "water" | "wifi";
-
 interface Props {
   all: EvacFeature[]; // 全避難所(背景表示)
   ranked: RankedEvac[]; // 絞り込み結果(強調)
   origin: [number, number] | null;
   hazards?: HazardKey[]; // 表示するハザードレイヤ
   threeD?: boolean; // 3D地形(坂・起伏)表示
-  lifeline?: GeoJSON.Feature[]; // 生活継続レイヤー(給水/Wi-Fi)
+  lifeline?: LifelineFeature[]; // 生活継続レイヤー(給水/Wi-Fi)
   lifelineShow?: LifelineKind[]; // 表示する生活継続レイヤー種別
 }
 
 function emptyFC(): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features: [] };
+}
+
+// ポップアップにデータ由来の文字列を差し込む際のHTMLエスケープ
+function escapeHtml(s: string): string {
+  return s.replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string
+  );
 }
 
 export default function MapView({
@@ -123,8 +129,25 @@ export default function MapView({
         paint: { "hillshade-exaggeration": 0.6 },
       });
 
-      // 生活継続レイヤー（給水拠点・公衆Wi-Fi）。初期は非表示
-      map.addSource("lifeline", { type: "geojson", data: emptyFC() });
+      map.addSource("all", { type: "geojson", data: emptyFC() });
+      map.addLayer({
+        id: "all-pts",
+        type: "circle",
+        source: "all",
+        paint: {
+          "circle-radius": 3,
+          "circle-color": "#6b7280",
+          "circle-opacity": 0.45,
+        },
+      });
+
+      // 生活継続レイヤー（給水拠点・公衆Wi-Fi）。初期は非表示。
+      // all-ptsより上・rankedより下に積む（重要なランク済み避難所を最前面に保つ）。出典はsourceに付与
+      map.addSource("lifeline", {
+        type: "geojson",
+        data: emptyFC(),
+        attribution: "東京都オープンデータ(CC BY 4.0)",
+      });
       map.addLayer({
         id: "lifeline-water",
         type: "circle",
@@ -152,17 +175,41 @@ export default function MapView({
         },
       });
 
-      map.addSource("all", { type: "geojson", data: emptyFC() });
-      map.addLayer({
-        id: "all-pts",
-        type: "circle",
-        source: "all",
-        paint: {
-          "circle-radius": 3,
-          "circle-color": "#6b7280",
-          "circle-opacity": 0.45,
-        },
-      });
+      // 生活継続レイヤーのクリックで詳細ポップアップ＋カーソル変化
+      const lifelinePopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true });
+      for (const lk of ["lifeline-water", "lifeline-wifi"] as const) {
+        map.on("click", lk, (e) => {
+          const f = e.features?.[0];
+          if (!f) return;
+          const p = f.properties as {
+            kind?: string;
+            name?: string;
+            category?: string;
+            capacity?: number | null;
+            address?: string;
+          };
+          const lines: string[] = [];
+          if (p.kind === "water") {
+            lines.push(`<b>💧 ${escapeHtml(p.name ?? "")}</b>`);
+            if (p.category) lines.push(escapeHtml(p.category));
+            if (p.capacity != null) lines.push(`確保水量: ${escapeHtml(String(p.capacity))} ㎥`);
+          } else {
+            lines.push(`<b>📶 ${escapeHtml(p.name ?? "")}</b>`);
+          }
+          if (p.address) lines.push(escapeHtml(p.address));
+          lifelinePopup
+            .setLngLat((f.geometry as GeoJSON.Point).coordinates as [number, number])
+            .setHTML(`<div style="font-size:12px;line-height:1.4">${lines.join("<br>")}</div>`)
+            .addTo(map);
+        });
+        map.on("mouseenter", lk, () => {
+          map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", lk, () => {
+          map.getCanvas().style.cursor = "";
+        });
+      }
+
       map.addSource("ranked", { type: "geojson", data: emptyFC() });
       map.addLayer({
         id: "ranked-pts",
