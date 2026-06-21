@@ -903,12 +903,13 @@ export default function Home() {
             {shareUrl && (
               <div className="mt-2 flex flex-col items-center gap-2">
                 <div className="rounded-md bg-white p-2">
-                  <QRCodeSVG value={shareUrl} size={140} />
+                  <QRCodeSVG value={shareUrl} size={140} title="避難先を共有するQRコード" />
                 </div>
                 <div className="flex w-full gap-1">
                   <input
                     readOnly
                     value={shareUrl}
+                    aria-label="避難先を共有するURL（選択してコピーできます）"
                     onFocus={(e) => e.currentTarget.select()}
                     className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1 text-[11px] text-gray-700"
                   />
