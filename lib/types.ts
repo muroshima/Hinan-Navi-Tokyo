@@ -78,11 +78,27 @@ export const DEFAULT_ATTRS: UserAttrs = {
   hazard: null,
 };
 
+// スコア内訳（説明可能性: なぜその点数か）
+export type ScoreCategory =
+  | "base" // 基準点
+  | "distance" // 距離ペナルティ
+  | "hazard" // 想定災害への適否
+  | "barrier_free" // バリアフリー設備
+  | "facility" // 屋内/設備の充実
+  | "context"; // 夜間・天候など状況
+
+export interface ScoreFactor {
+  label: string; // 例: "車椅子対応トイレ"
+  delta: number; // 加減点(正=加点 / 負=減点)
+  category: ScoreCategory;
+}
+
 // ランキング結果(避難所 + スコアと理由)
 export interface RankedEvac {
   feature: EvacFeature;
   distanceKm: number;
   score: number;
+  factors: ScoreFactor[]; // スコアの加減点内訳（可視化用）
   reasons: string[]; // おすすめ理由
   cautions: string[]; // 注意・不適合点
   babyChangeM?: number | null; // 最寄りのおむつ替え台までの距離(m) ※乳幼児連れ時

@@ -47,6 +47,72 @@ function gmapsWalkingUrl(origin: [number, number], dest: [number, number]): stri
   return `https://www.google.com/maps/dir/?api=1&origin=${o}&destination=${d}&travelmode=walking`;
 }
 
+// スコアの加減点内訳をバーで可視化（説明可能性）。正=緑/負=赤
+function ScoreBreakdown({ r }: { r: RankedEvac }) {
+  // 表示用に各deltaを整数へ丸め、合計も「丸め後の各行の和」にする。
+  // これで「各行を足すと合計に一致」が保証され、内訳としての整合性が崩れない
+  const shown = r.factors.map((f) => ({ f, d: Math.round(f.delta) }));
+  const maxAbs = Math.max(1, ...shown.map((s) => Math.abs(s.d)));
+  const total = shown.reduce((s, x) => s + x.d, 0);
+  return (
+    <div className="mt-1 rounded-md bg-gray-50 p-2">
+      <div className="mb-1 flex items-center justify-between text-[11px] font-bold text-gray-600">
+        <span>点数内訳</span>
+        <span className="tabular-nums">合計 {total}点</span>
+      </div>
+      <div className="flex flex-col gap-0.5">
+        {shown.map(({ f, d }) => (
+          <div key={`${f.category}-${f.label}`} className="flex items-center gap-1 text-[11px]">
+            <span className="w-32 shrink-0 truncate text-gray-600" title={f.label}>
+              {f.label}
+            </span>
+            <div className="relative h-2.5 flex-1 rounded bg-gray-100">
+              <div
+                className={`absolute top-0 h-2.5 rounded ${d >= 0 ? "bg-green-400" : "bg-red-400"}`}
+                style={{ width: `${(Math.abs(d) / maxAbs) * 100}%` }}
+              />
+            </div>
+            <span
+              className={`w-9 shrink-0 text-right tabular-nums ${
+                d >= 0 ? "text-green-700" : "text-red-600"
+              }`}
+            >
+              {d >= 0 ? "+" : ""}
+              {d}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// スコア内訳の開閉カード。openはstateで完全制御し、
+// ユーザー未操作の間はdefaultOpenの変化(新1位など)に追従して自動展開する。
+// summaryのonClickでユーザー操作のみを捕捉する(onToggleだとプログラム変更も発火し誤検知するため)
+function CardBreakdown({ r, defaultOpen }: { r: RankedEvac; defaultOpen: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const touched = useRef(false);
+  useEffect(() => {
+    if (!touched.current) setOpen(defaultOpen);
+  }, [defaultOpen]);
+  return (
+    <details open={open} className="mt-1.5">
+      <summary
+        onClick={(e) => {
+          e.preventDefault(); // ネイティブtoggleを止めてstateで制御
+          touched.current = true; // 以降はユーザー操作を優先（defaultOpen追従を停止）
+          setOpen((o) => !o);
+        }}
+        className="cursor-pointer list-none text-[11px] font-bold text-gray-500 hover:text-gray-700"
+      >
+        {open ? "▾" : "▸"} なぜこの点数？（内訳を{open ? "表示中" : "見る"}）
+      </summary>
+      <ScoreBreakdown r={r} />
+    </details>
+  );
+}
+
 // MapViewのHAZARD_TILESと対応（重ね表示できるハザード）
 const HAZARD_LAYERS: { key: HazardKey; label: string }[] = [
   { key: "flood", label: "洪水" },
@@ -540,6 +606,8 @@ export default function Home() {
                   ⚠ {c}
                 </div>
               ))}
+              {/* 点数内訳（説明可能性）。1位は自動展開、他はトグル */}
+              <CardBreakdown r={r} defaultOpen={i === 0} />
             </div>
           ))}
         </div>
