@@ -4,7 +4,8 @@
 //  - アプリシェル(/)と避難所データ(/data/*)を precache し、圏外でも検索できるようにする
 //  - /api/* はサーバー必須のため network-only（キャッシュしない）
 const VERSION = "v1";
-const CACHE = `hinan-navi-${VERSION}`;
+const PREFIX = "hinan-navi-";
+const CACHE = `${PREFIX}${VERSION}`;
 const PRECACHE = [
   "/",
   "/data/evacuation.geojson",
@@ -38,7 +39,10 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
       const keys = await caches.keys();
-      await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+      // 自分のプレフィックスの旧バージョンのみ削除（他用途のCacheを消さない）
+      await Promise.all(
+        keys.filter((k) => k.startsWith(PREFIX) && k !== CACHE).map((k) => caches.delete(k))
+      );
       await self.clients.claim();
     })()
   );
@@ -97,8 +101,9 @@ self.addEventListener("fetch", (event) => {
       const cache = await caches.open(CACHE);
       const cached = await cache.match(req);
       const network = fetch(req)
-        .then((res) => {
-          if (res.ok) cache.put(req, res.clone());
+        .then(async (res) => {
+          // cache.putまでawaitし、waitUntilの生存保証を書き込み完了まで延ばす
+          if (res.ok) await cache.put(req, res.clone());
           return res;
         })
         .catch(() => null);
