@@ -29,6 +29,20 @@
       "record_count": 8320
     },
     {
+      "file": "lifeline.geojson",
+      "datasets": [
+        "災害時給水ステーション（給水拠点）一覧",
+        "東京都 公衆無線LAN（FREE Wi-Fi & TOKYO）アクセスポイント"
+      ],
+      "provider": "東京都水道局 / 東京都デジタルサービス局",
+      "license": "CC BY 4.0",
+      "source_url": "https://catalog.data.metro.tokyo.lg.jp/",
+      "retrieved": "2026-06",
+      "processing": "CSV(CP932)→統合GeoJSON。properties.kindで給水(water)/Wi-Fi(wifi)を区別",
+      "attribution": "東京都オープンデータ（CC BY 4.0）",
+      "record_count": 950
+    },
+    {
       "file": "(高齢化率の付与に使用)",
       "datasets": [
         "住民基本台帳による東京都の世帯と人口(町丁別・年齢別) 第3-1表 区市町村,年齢3区分別人口"
