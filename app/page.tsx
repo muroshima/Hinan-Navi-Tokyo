@@ -84,25 +84,32 @@ export default function Home() {
     const mq = window.matchMedia("(min-width: 768px)");
     const update = () => setIsDesktop(mq.matches);
     update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
+    // 旧Safari(addEventListener非対応)は addListener にフォールバック
+    if (mq.addEventListener) mq.addEventListener("change", update);
+    else mq.addListener(update);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", update);
+      else mq.removeListener(update);
+    };
   }, []);
 
   // サイドバー幅のドラッグ調整
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
+    const prevUserSelect = document.body.style.userSelect; // 既存値を保存して復元
     const onMove = (ev: MouseEvent) => {
-      const w = Math.min(640, Math.max(300, ev.clientX));
-      setSidebarWidth(w);
+      setSidebarWidth(Math.min(640, Math.max(300, ev.clientX)));
     };
-    const onUp = () => {
+    const end = () => {
       window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-      document.body.style.userSelect = "";
+      window.removeEventListener("mouseup", end);
+      window.removeEventListener("blur", end); // ウィンドウがフォーカスを失っても解除
+      document.body.style.userSelect = prevUserSelect;
     };
     document.body.style.userSelect = "none";
     window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    window.addEventListener("mouseup", end);
+    window.addEventListener("blur", end);
   }, []);
 
   // データ読み込み
@@ -522,11 +529,27 @@ export default function Home() {
         </div>
       </aside>
 
-      {/* リサイズハンドル（デスクトップのみ） */}
+      {/* リサイズハンドル（デスクトップのみ・キーボード操作対応） */}
       <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="サイドバーの幅を調整（左右キーで変更）"
+        aria-valuemin={300}
+        aria-valuemax={640}
+        aria-valuenow={Math.round(sidebarWidth)}
+        tabIndex={0}
         onMouseDown={startResize}
-        title="ドラッグで幅を調整"
-        className="hidden w-1 shrink-0 cursor-col-resize bg-gray-200 hover:bg-blue-400 md:block"
+        onKeyDown={(e) => {
+          if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            setSidebarWidth((w) => Math.max(300, w - 24));
+          } else if (e.key === "ArrowRight") {
+            e.preventDefault();
+            setSidebarWidth((w) => Math.min(640, w + 24));
+          }
+        }}
+        title="ドラッグ／左右キーで幅を調整"
+        className="hidden w-1 shrink-0 cursor-col-resize bg-gray-200 hover:bg-blue-400 focus:bg-blue-500 focus:outline-none md:block"
       />
 
       {/* 右: 地図 */}

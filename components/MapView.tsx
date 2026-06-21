@@ -153,12 +153,16 @@ export default function MapView({ all, ranked, origin, hazards = [], threeD = fa
     mapRef.current = map;
 
     // コンテナ幅/高さの変化(サイドバーのリサイズ・ウィンドウ変化)に地図を追従
-    const ro = new ResizeObserver(() => map.resize());
-    ro.observe(containerRef.current);
+    // ResizeObserver非対応環境でも地図がマウントできるようフィーチャ検出
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(() => map.resize());
+      ro.observe(containerRef.current);
+    }
 
     return () => {
       // アンマウント時は破棄のみ（setLoaded等のstate更新は不要）
-      ro.disconnect();
+      ro?.disconnect();
       map.remove();
       mapRef.current = null;
     };
