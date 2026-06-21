@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import type { EvacCollection, EvacFeature, RankedEvac, UserAttrs, HazardKey } from "@/lib/types";
 import { DEFAULT_ATTRS } from "@/lib/types";
@@ -72,9 +72,38 @@ export default function Home() {
   const [placeInput, setPlaceInput] = useState("");
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
+  // サイドバー可変幅(デスクトップのみ)
+  const [sidebarWidth, setSidebarWidth] = useState(400);
+  const [isDesktop, setIsDesktop] = useState(false);
 
   const toggleHazard = (key: HazardKey) =>
     setHazards((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+
+  // 画面幅でデスクトップ判定（md=768px）
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  // サイドバー幅のドラッグ調整
+  const startResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const onMove = (ev: MouseEvent) => {
+      const w = Math.min(640, Math.max(300, ev.clientX));
+      setSidebarWidth(w);
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+    };
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, []);
 
   // データ読み込み
   useEffect(() => {
@@ -274,8 +303,11 @@ export default function Home() {
 
   return (
     <div className="flex h-screen w-screen flex-col md:flex-row">
-      {/* 左: 操作パネル */}
-      <aside className="flex w-full flex-col gap-3 overflow-y-auto border-b border-gray-200 bg-white p-4 md:w-[400px] md:border-b-0 md:border-r">
+      {/* 左: 操作パネル（モバイルは上部、デスクトップは可変幅の左カラム） */}
+      <aside
+        style={isDesktop ? { width: sidebarWidth } : undefined}
+        className="flex h-[48vh] w-full shrink-0 flex-col gap-3 overflow-y-auto border-b border-gray-200 bg-white p-4 md:h-screen md:border-b-0 md:border-r"
+      >
         <header>
           <h1 className="text-xl font-bold text-gray-900">だれでも避難ナビ TOKYO</h1>
           <p className="text-sm text-gray-600">
@@ -490,8 +522,15 @@ export default function Home() {
         </div>
       </aside>
 
+      {/* リサイズハンドル（デスクトップのみ） */}
+      <div
+        onMouseDown={startResize}
+        title="ドラッグで幅を調整"
+        className="hidden w-1 shrink-0 cursor-col-resize bg-gray-200 hover:bg-blue-400 md:block"
+      />
+
       {/* 右: 地図 */}
-      <main className="relative flex-1">
+      <main className="relative min-h-0 flex-1">
         <MapView all={all} ranked={ranked} origin={origin} hazards={hazards} threeD={threeD} />
       </main>
     </div>
