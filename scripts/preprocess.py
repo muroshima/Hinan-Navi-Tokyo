@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""東京都オープンデータ(避難所/避難場所/車椅子対応トイレ)を統一スキーマGeoJSONに変換。
+"""東京都オープンデータ等(避難所/避難場所/車椅子対応トイレ/給水・Wi-Fi/都営バス停)を
+統一スキーマGeoJSONに変換。
 - エンコードはファイルごとに自動判定(utf-8-sig / cp932 / utf-8)
 - 先頭ゴミ空行を除去し、本物のヘッダ行を検出
 - バリアフリー列・災害種別列を bool に正規化
-出力: public/data/{evacuation.geojson, toilets.geojson}
+出力: public/data/{evacuation, toilets, lifeline, bus_stops}.geojson および metadata.json
 """
 import csv, io, json, os, zipfile
 
@@ -259,7 +260,7 @@ def build_bus_stops():
         return feats
     try:
         with zipfile.ZipFile(path) as z, z.open('stops.txt') as f:
-            r = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
+            r = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig', newline=''))
             for row in r:
                 # location_type=1 は停留所(親)。0=のりば(密集するため代表点の1を採用)
                 if (row.get('location_type') or '').strip() != '1':
