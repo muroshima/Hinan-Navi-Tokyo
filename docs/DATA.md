@@ -23,7 +23,7 @@
 | 配置パス（リネーム後） | データセット | 取得元 |
 |---|---|---|
 | `data-raw/evacuation_center.csv` | 避難所一覧 | `https://www.opendata.metro.tokyo.lg.jp/soumu/130001_evacuation_center.csv` |
-| `data-raw/wc_barrierfree.csv` | 車椅子使用者対応トイレ バリアフリー設備情報 | `https://www.opendata.metro.tokyo.lg.jp/fukushi/3_koukyoshisetsu_barieer_free_wc.csv` |
+| `data-raw/wc_barrierfree.csv` | 車椅子使用者対応トイレ バリアフリー設備情報 | `https://www.opendata.metro.tokyo.lg.jp/fukushi/3_koukyoshisetsu_barieer_free_wc.csv`（ファイル名の `barieer` は東京都側の綴り原文ママ・実在確認済み）。カタログ: https://catalog.data.metro.tokyo.lg.jp/dataset/t000010d0000000095 |
 | `data-raw/evacuation_area.csv` | 避難場所一覧（災害種別の適否フラグ付き） | 東京都オープンデータカタログ「避難所・避難場所一覧データ」 https://catalog.data.metro.tokyo.lg.jp/dataset/t000003d0000000093 から避難場所一覧のCSVを取得しリネーム |
 | `data-raw/city_age.csv` | 住民基本台帳 年齢別人口（第3-1表 区市町村・年齢3区分別） | 東京都の統計 住民基本台帳 https://www.toukei.metro.tokyo.lg.jp/juukiy/ から該当表のCSVを取得しリネーム |
 
