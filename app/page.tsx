@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { EvacCollection, EvacFeature, RankedEvac, UserAttrs, HazardKey } from "@/lib/types";
 import { DEFAULT_ATTRS } from "@/lib/types";
@@ -93,6 +93,10 @@ export default function Home() {
     };
   }, []);
 
+  // ドラッグ中の後始末関数を保持し、アンマウント時にも確実に解除する
+  const resizeCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => resizeCleanup.current?.(), []);
+
   // サイドバー幅のドラッグ調整
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -114,11 +118,13 @@ export default function Home() {
       window.removeEventListener("mouseup", end);
       window.removeEventListener("blur", end); // ウィンドウがフォーカスを失っても解除
       document.body.style.userSelect = prevUserSelect;
+      resizeCleanup.current = null;
     };
     document.body.style.userSelect = "none";
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", end);
     window.addEventListener("blur", end);
+    resizeCleanup.current = end; // ドラッグ中アンマウント時もこの関数で後始末
   }, []);
 
   // データ読み込み
