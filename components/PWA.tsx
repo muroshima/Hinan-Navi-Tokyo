@@ -7,7 +7,8 @@ export default function PWA() {
   const [offline, setOffline] = useState(false);
 
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
+    // 開発環境ではSWを登録しない（HMR/キャッシュで表示が不安定になるため本番のみ）
+    if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
         /* 登録失敗してもアプリは通常動作 */
       });

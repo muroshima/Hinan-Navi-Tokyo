@@ -44,6 +44,18 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// キャッシュ対象を必要なパスに限定（無制限蓄積・肥大化を防ぐ）
+//  - /_next/static/*: ビルドアセット（ハッシュ付き不変。オフラインのアプリシェルに必要）
+//  - /data/*: 避難所データ
+//  - PRECACHE 列挙パス（アプリシェル・アイコン・マニフェスト）
+function isCacheable(url) {
+  return (
+    url.pathname.startsWith("/_next/static/") ||
+    url.pathname.startsWith("/data/") ||
+    PRECACHE.includes(url.pathname)
+  );
+}
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
@@ -61,7 +73,7 @@ self.addEventListener("fetch", (event) => {
         try {
           const fresh = await fetch(req);
           const cache = await caches.open(CACHE);
-          cache.put("/", fresh.clone());
+          event.waitUntil(cache.put("/", fresh.clone())); // 更新を完走させる
           return fresh;
         } catch {
           const cache = await caches.open(CACHE);
@@ -72,7 +84,10 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 静的アセット・データ: stale-while-revalidate（即キャッシュ返却＋裏で更新）
+  // キャッシュ対象（アプリシェル資産・データ）のみ扱い、他は介入しない
+  if (!isCacheable(url)) return;
+
+  // stale-while-revalidate（即キャッシュ返却＋裏で更新）。裏更新はwaitUntilで完走保証
   event.respondWith(
     (async () => {
       const cache = await caches.open(CACHE);
@@ -83,7 +98,11 @@ self.addEventListener("fetch", (event) => {
           return res;
         })
         .catch(() => null);
-      return cached || (await network) || Response.error();
+      if (cached) {
+        event.waitUntil(network);
+        return cached;
+      }
+      return (await network) || Response.error();
     })()
   );
 });
