@@ -153,6 +153,7 @@ export default function Home() {
   const [timeline, setTimeline] = useState<TimelinePhase[] | null>(null);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineSource, setTimelineSource] = useState<string | null>(null);
+  const timelineReqId = useRef(0); // 最新リクエスト以外のレスポンスを破棄するための識別子
 
   const toggleHazard = (key: HazardKey) =>
     setHazards((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
@@ -357,6 +358,7 @@ export default function Home() {
   async function genTimeline() {
     const top = ranked[0];
     if (!top) return;
+    const myId = ++timelineReqId.current; // このリクエストの識別子
     setTimelineLoading(true);
     setTimeline(null); // 再生成・失敗時に前回の結果が残らないよう先にクリア
     setTimelineSource(null);
@@ -371,8 +373,11 @@ export default function Home() {
           hazardLabel: attrs.hazard ? HAZARD_LABEL[attrs.hazard] : undefined,
         }),
       });
+      // 新しい検索/再生成が走っていたら、古いレスポンスは破棄（不整合防止）
+      if (myId !== timelineReqId.current) return;
       if (!res.ok) return;
       const data = await res.json();
+      if (myId !== timelineReqId.current) return;
       if (Array.isArray(data.timeline)) {
         setTimeline(data.timeline);
         setTimelineSource(data.source ?? null);
@@ -380,7 +385,7 @@ export default function Home() {
     } catch {
       /* 失敗時は何も表示しない */
     } finally {
-      setTimelineLoading(false);
+      if (myId === timelineReqId.current) setTimelineLoading(false);
     }
   }
 
@@ -388,8 +393,11 @@ export default function Home() {
     if (!text.trim()) return;
     setLoading(true);
     setSubmitError(null);
-    setTimeline(null); // 新しい検索のたびに前回のタイムラインを破棄
+    // 新しい検索のたびに前回のタイムラインを破棄し、進行中の生成も無効化
+    timelineReqId.current++;
+    setTimeline(null);
     setTimelineSource(null);
+    setTimelineLoading(false);
     try {
       const res = await fetch("/api/triage", {
         method: "POST",

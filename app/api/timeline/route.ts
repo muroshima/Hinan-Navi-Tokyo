@@ -13,14 +13,14 @@ const PhaseSchema = z.object({
     .array(z.string().min(1))
     .min(1)
     .max(8)
-    .describe("その局面で取る具体的な行動。利用者の状況に即して2〜5個"),
+    .describe("その局面で取る具体的な行動。利用者の状況に即して目安2〜5個（最大8）"),
 });
 const TimelineSchema = z.object({
   phases: z
     .array(PhaseSchema)
     .min(1)
     .max(8)
-    .describe("時系列の避難行動タイムライン（4〜6局面）"),
+    .describe("時系列の避難行動タイムライン。目安4〜6局面（最大8）"),
 });
 
 // 入力の正規化（boolean以外やInfinity等の不正値で500にしない）
