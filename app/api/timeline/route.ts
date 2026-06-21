@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { NextRequest, NextResponse } from "next/server";
-import type { UserAttrs } from "@/lib/types";
+import type { UserAttrs, TimelinePhase } from "@/lib/types";
 
 // 生成する避難タイムラインのスキーマ（内閣府の警戒レベルに沿った局面別の行動）
 // 長さ制約で空配列・過剰件数の不正形を弾き、UIが空になるのを防ぐ（不正ならparse失敗→fallback）
@@ -57,7 +57,7 @@ const InputSchema = z.object({
   distanceKm: z.number().finite().optional().catch(undefined), // Infinity/NaNはundefinedへ
 });
 
-type TimelinePhase = z.infer<typeof PhaseSchema>;
+// 返却型は @/lib/types の TimelinePhase に統一（PhaseSchemaと構造一致。二重定義を避ける）
 
 const SYSTEM = `あなたは防災の避難計画（マイ・タイムライン）作成を支援するアシスタントです。
 利用者の状況（配慮属性・想定災害・推奨避難先）に合わせ、内閣府の「警戒レベル」(1〜5)に沿った時系列の避難行動を作成します。
@@ -127,12 +127,13 @@ function fallbackTimeline(
 }
 
 export async function POST(req: NextRequest) {
-  let parsed;
+  let body: unknown;
   try {
-    parsed = InputSchema.safeParse(await req.json());
+    body = await req.json();
   } catch {
     return NextResponse.json({ error: "invalid body" }, { status: 400 });
   }
+  const parsed = InputSchema.safeParse(body);
   if (!parsed.success) {
     // attrs欠如に限らず入力不正全般で到達するため汎用文言にする
     return NextResponse.json({ error: "invalid input" }, { status: 400 });
