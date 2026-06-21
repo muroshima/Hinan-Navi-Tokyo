@@ -97,10 +97,19 @@ export default function Home() {
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const prevUserSelect = document.body.style.userSelect; // 既存値を保存して復元
+    // mousemoveごとのsetStateを1フレーム1回に間引く（再レンダリング多発を防ぐ）
+    let raf = 0;
+    let lastX = 0;
     const onMove = (ev: MouseEvent) => {
-      setSidebarWidth(Math.min(640, Math.max(300, ev.clientX)));
+      lastX = ev.clientX;
+      if (raf) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = 0;
+        setSidebarWidth(Math.min(640, Math.max(300, lastX)));
+      });
     };
     const end = () => {
+      if (raf) window.cancelAnimationFrame(raf);
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", end);
       window.removeEventListener("blur", end); // ウィンドウがフォーカスを失っても解除
@@ -313,7 +322,7 @@ export default function Home() {
       {/* 左: 操作パネル（モバイルは上部、デスクトップは可変幅の左カラム） */}
       <aside
         style={isDesktop ? { width: sidebarWidth } : undefined}
-        className="flex h-[48vh] w-full shrink-0 flex-col gap-3 overflow-y-auto border-b border-gray-200 bg-white p-4 md:h-screen md:border-b-0 md:border-r"
+        className="flex h-[48vh] w-full shrink-0 flex-col gap-3 overflow-y-auto border-b border-gray-200 bg-white p-4 md:h-screen md:w-[400px] md:border-b-0 md:border-r"
       >
         <header>
           <h1 className="text-xl font-bold text-gray-900">だれでも避難ナビ TOKYO</h1>
