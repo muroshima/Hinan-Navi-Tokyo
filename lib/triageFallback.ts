@@ -20,6 +20,22 @@ export interface FallbackAttrs {
   hazard: FallbackHazard;
 }
 
+// 想定災害の語句一致。route.ts の hazard enum を全て網羅（順序＝優先度。内水氾濫を洪水より先に判定）
+function detectHazard(text: string): FallbackHazard {
+  const rules: [FallbackHazard, string[]][] = [
+    ["inland_flood", ["内水"]],
+    ["flood", ["洪水", "浸水", "水害", "氾濫"]],
+    ["landslide", ["土砂", "崖"]],
+    ["storm_surge", ["高潮"]],
+    ["tsunami", ["津波"]],
+    ["earthquake", ["地震"]],
+    ["fire", ["火災", "火事"]],
+    ["volcano", ["火山", "噴火"]],
+  ];
+  for (const [h, kws] of rules) if (kws.some((k) => text.includes(k))) return h;
+  return "none";
+}
+
 export function fallbackExtract(text: string): FallbackAttrs {
   const has = (...kw: string[]) => kw.some((k) => text.includes(k));
   return {
@@ -38,17 +54,6 @@ export function fallbackExtract(text: string): FallbackAttrs {
     bad_weather: has("雨", "大雨", "荒天", "台風", "嵐", "暴風", "雪", "悪天候"),
     location: (text.match(/[^\s、。,（）()]{1,8}?(?:区|市|町|村)/) ||
       text.match(/[^\s、。,（）()]{1,12}?駅/) || [""])[0],
-    hazard:
-      text.includes("洪水") || text.includes("浸水") || text.includes("水害") || text.includes("氾濫")
-        ? "flood"
-        : text.includes("土砂") || text.includes("崖")
-          ? "landslide"
-          : text.includes("高潮")
-            ? "storm_surge"
-            : text.includes("地震")
-              ? "earthquake"
-              : text.includes("津波")
-                ? "tsunami"
-                : "none",
+    hazard: detectHazard(text),
   };
 }

@@ -49,6 +49,7 @@ self.addEventListener("activate", (event) => {
 //  - /data/*: 避難所データ
 //  - PRECACHE 列挙パス（アプリシェル・アイコン・マニフェスト）
 function isCacheable(url) {
+  if (url.search) return false; // クエリ付きは別キーで蓄積されるためキャッシュ対象外
   return (
     url.pathname.startsWith("/_next/static/") ||
     url.pathname.startsWith("/data/") ||
@@ -72,8 +73,11 @@ self.addEventListener("fetch", (event) => {
       (async () => {
         try {
           const fresh = await fetch(req);
-          const cache = await caches.open(CACHE);
-          event.waitUntil(cache.put("/", fresh.clone())); // 更新を完走させる
+          // 成功レスポンスのみアプリシェルとして保存（500/404/メンテ画面を焼かない）
+          if (fresh.ok) {
+            const cache = await caches.open(CACHE);
+            event.waitUntil(cache.put("/", fresh.clone())); // 更新を完走させる
+          }
           return fresh;
         } catch {
           const cache = await caches.open(CACHE);
