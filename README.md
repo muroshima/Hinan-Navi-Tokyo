@@ -38,10 +38,14 @@ npm run dev   # http://localhost:3000
 
 `.env.local.example` を参照。キー未設定でもアプリは起動・動作します。
 
-## データ出典
-- 東京都オープンデータ（避難所・避難場所一覧／車椅子対応トイレ バリアフリー情報／住民基本台帳 年齢別人口）
-- 国土交通省 ハザードマップポータルサイト（浸水想定・土砂災害警戒区域 タイル）
-- 地形: Mapzen / AWS Open Data（Terrarium DEM）、地図: © OpenStreetMap contributors
+## データ出典・ライセンス
+各データ・タイル・APIの**出典/ライセンス/取得日/加工/利用規約上の留意点**は **[docs/DATA.md](docs/DATA.md)** に一覧（機械可読版は [`public/data/metadata.json`](public/data/metadata.json)）。要点:
+- 東京都オープンデータ（避難所・避難場所一覧／車椅子対応トイレ バリアフリー情報／住民基本台帳 年齢別人口）— **CC BY 4.0**
+- 国土交通省 ハザードマップポータルサイト（洪水/高潮/津波/土砂 タイル）— 出典表示が条件
+- 地形: Mapzen / AWS Open Data（Terrarium DEM）、地図: © OpenStreetMap contributors（ODbL）
+- ジオコーディング: Nominatim、徒歩経路: OSRM（**公開サーバは利用ポリシー上、本番常用に制限あり** → [docs/DATA.md](docs/DATA.md)参照）
+
+> コード本体のライセンスはデータのライセンスとは別に扱います（OSSライセンスの追加は Issue #19 で対応予定）。
 
 ## 注意
 本リポジトリはハッカソン用プロトタイプです。避難の最終判断は自治体の公式情報に従ってください。

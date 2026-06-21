@@ -1,0 +1,45 @@
+{
+  "generated_note": "scripts/preprocess.py による自動生成。出典・ライセンスの詳細は docs/DATA.md を参照",
+  "datasets": [
+    {
+      "file": "evacuation.geojson",
+      "datasets": [
+        "東京都防災マップ 避難所一覧データ",
+        "東京都防災マップ 避難場所一覧データ"
+      ],
+      "provider": "東京都",
+      "license": "CC BY 4.0",
+      "source_url": "https://catalog.data.metro.tokyo.lg.jp/dataset/t000022d0000000085",
+      "retrieved": "2026-06",
+      "processing": "CSV(CP932/UTF-8)→正規化GeoJSON。バリアフリー列のbool化、市区町村高齢化率の付与",
+      "attribution": "東京都オープンデータ（CC BY 4.0）",
+      "record_count": 4811
+    },
+    {
+      "file": "toilets.geojson",
+      "datasets": [
+        "車椅子使用者対応トイレのバリアフリー設備情報"
+      ],
+      "provider": "東京都(福祉局)",
+      "license": "CC BY 4.0",
+      "source_url": "https://catalog.data.metro.tokyo.lg.jp/dataset/t000010d0000000095",
+      "retrieved": "2026-06",
+      "processing": "CSV(CP932)→GeoJSON。おむつ替え/オストメイト/大型ベッド/非常用ボタン等をbool化",
+      "attribution": "東京都オープンデータ（CC BY 4.0）",
+      "record_count": 8320
+    },
+    {
+      "file": "(高齢化率の付与に使用)",
+      "datasets": [
+        "住民基本台帳による東京都の世帯と人口(町丁別・年齢別) 第3-1表 区市町村,年齢3区分別人口"
+      ],
+      "provider": "東京都",
+      "license": "CC BY 4.0（東京都オープンデータ利用規約に準拠）",
+      "source_url": "https://www.toukei.metro.tokyo.lg.jp/juukiy/",
+      "retrieved": "2026-06",
+      "processing": "65歳以上比から市区町村別高齢化率を算出し evacuation.geojson に付与",
+      "attribution": "東京都オープンデータ（CC BY 4.0）",
+      "record_count": null
+    }
+  ]
+}

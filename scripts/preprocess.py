@@ -204,9 +204,64 @@ def dump(name, feats):
     with open(os.path.join(OUT, name), 'w', encoding='utf-8') as f:
         json.dump(fc, f, ensure_ascii=False)
     print(f'{name}: {len(feats)} features')
+    return len(feats)
+
+
+# 出典・ライセンス等のメタデータ（DATA.md と整合。詳細・正確な条件は docs/DATA.md / 各公式を参照）
+SOURCES = [
+    {
+        'file': 'evacuation.geojson',
+        'datasets': [
+            '東京都防災マップ 避難所一覧データ',
+            '東京都防災マップ 避難場所一覧データ',
+        ],
+        'provider': '東京都',
+        'license': 'CC BY 4.0',
+        'source_url': 'https://catalog.data.metro.tokyo.lg.jp/dataset/t000022d0000000085',
+        'retrieved': '2026-06',
+        'processing': 'CSV(CP932/UTF-8)→正規化GeoJSON。バリアフリー列のbool化、市区町村高齢化率の付与',
+        'attribution': '東京都オープンデータ（CC BY 4.0）',
+    },
+    {
+        'file': 'toilets.geojson',
+        'datasets': ['車椅子使用者対応トイレのバリアフリー設備情報'],
+        'provider': '東京都(福祉局)',
+        'license': 'CC BY 4.0',
+        'source_url': 'https://catalog.data.metro.tokyo.lg.jp/dataset/t000010d0000000095',
+        'retrieved': '2026-06',
+        'processing': 'CSV(CP932)→GeoJSON。おむつ替え/オストメイト/大型ベッド/非常用ボタン等をbool化',
+        'attribution': '東京都オープンデータ（CC BY 4.0）',
+    },
+    {
+        'file': '(高齢化率の付与に使用)',
+        'datasets': ['住民基本台帳による東京都の世帯と人口(町丁別・年齢別) 第3-1表 区市町村,年齢3区分別人口'],
+        'provider': '東京都',
+        'license': 'CC BY 4.0（東京都オープンデータ利用規約に準拠）',
+        'source_url': 'https://www.toukei.metro.tokyo.lg.jp/juukiy/',
+        'retrieved': '2026-06',
+        'processing': '65歳以上比から市区町村別高齢化率を算出し evacuation.geojson に付与',
+        'attribution': '東京都オープンデータ（CC BY 4.0）',
+    },
+]
+
+
+def write_metadata(counts):
+    meta = {
+        'generated_note': 'scripts/preprocess.py による自動生成。出典・ライセンスの詳細は docs/DATA.md を参照',
+        'datasets': [],
+    }
+    for s in SOURCES:
+        entry = dict(s)
+        entry['record_count'] = counts.get(s['file'])
+        meta['datasets'].append(entry)
+    with open(os.path.join(OUT, 'metadata.json'), 'w', encoding='utf-8') as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
+    print('metadata.json written')
 
 
 if __name__ == '__main__':
-    dump('evacuation.geojson', build_evacuation())
-    dump('toilets.geojson', build_toilets())
+    counts = {}
+    counts['evacuation.geojson'] = dump('evacuation.geojson', build_evacuation())
+    counts['toilets.geojson'] = dump('toilets.geojson', build_toilets())
+    write_metadata(counts)
     print('done ->', os.path.relpath(OUT))
