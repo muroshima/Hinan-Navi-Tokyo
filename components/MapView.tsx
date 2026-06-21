@@ -138,7 +138,7 @@ export default function MapView({
         minzoom: 10,
         maxzoom: 16,
         attribution:
-          '建物: <a href="https://github.com/indigo-lab/plateau-tokyo23ku-building-mvt-2020" target="_blank" rel="noopener">PLATEAU TOKYO23ku MVT</a> / Project PLATEAU(国土交通省) CC BY 4.0',
+          '建物: <a href="https://github.com/indigo-lab/plateau-tokyo23ku-building-mvt-2020" target="_blank" rel="noopener noreferrer">PLATEAU TOKYO23ku MVT</a> / Project PLATEAU(国土交通省) CC BY 4.0',
       });
       map.addLayer({
         id: "plateau-bldg",
@@ -394,11 +394,10 @@ export default function MapView({
     if (map.getLayer("plateau-bldg")) {
       map.setLayoutProperty("plateau-bldg", "visibility", buildings3d ? "visible" : "none");
     }
-    if (buildings3d) {
-      map.easeTo({ pitch: 55, duration: 800 });
-    } else if (!threeD) {
-      // 3D地形もOFFなら水平に戻す（threeD ONなら3D地形側のeffectがpitchを管理）
-      map.easeTo({ pitch: 0, duration: 600 });
+    // pitchは3D地形(threeD)がOFFのときだけ建物3Dの状態で決める。
+    // threeD ON時はそちら(3D地形effect)がpitchを管理し、競合・残留を避ける
+    if (!threeD) {
+      map.easeTo({ pitch: buildings3d ? 55 : 0, duration: 700 });
     }
   }, [buildings3d, threeD, loaded]);
 
