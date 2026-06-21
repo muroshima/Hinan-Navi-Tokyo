@@ -285,7 +285,10 @@ export default function MapView({
             if (p.category) lines.push(escapeHtml(p.category));
             if (p.capacity != null) lines.push(`確保水量: ${escapeHtml(String(p.capacity))} ㎥`);
           } else {
-            lines.push(`<b>📶 ${escapeHtml(p.name ?? "")}</b>`);
+            // 公衆Wi-Fi: データの正体(FREE Wi-Fi & TOKYO)を明示し、設置場所名(公衆電話ボックス併設等)は補助表示
+            // ラベルも生テキストをescapeHtmlに通す（手書きの&amp;による二重エスケープ等を防ぐ）
+            lines.push(`<b>📶 ${escapeHtml("公衆Wi-Fi（FREE Wi-Fi & TOKYO）")}</b>`);
+            if (p.name) lines.push(`設置場所: ${escapeHtml(p.name)}`);
           }
           if (p.address) lines.push(escapeHtml(p.address));
           lifelinePopup
