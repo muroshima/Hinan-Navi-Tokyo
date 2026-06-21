@@ -45,7 +45,7 @@ npm run dev   # http://localhost:3000
 - 地形: Mapzen / AWS Open Data（Terrarium DEM）、地図: © OpenStreetMap contributors（ODbL）
 - ジオコーディング: Nominatim、徒歩経路: OSRM（**公開サーバは利用ポリシー上、本番常用に制限あり** → [docs/DATA.md](docs/DATA.md)参照）
 
-> コード本体のライセンスはデータのライセンスとは別に扱います（OSSライセンスの追加は Issue #19 で対応予定）。
+> コード本体は [Apache-2.0](LICENSE)。データのライセンスとは別に扱います。
 
 ## 注意
 本リポジトリはハッカソン用プロトタイプです。避難の最終判断は自治体の公式情報に従ってください。

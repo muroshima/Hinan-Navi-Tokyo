@@ -152,8 +152,26 @@ export default function MapView({ all, ranked, origin, hazards = [], threeD = fa
     });
     mapRef.current = map;
 
+    // コンテナ幅/高さの変化(サイドバーのリサイズ・ウィンドウ変化)に地図を追従
+    // ResizeObserver非対応環境でも地図がマウントできるようフィーチャ検出
+    let ro: ResizeObserver | null = null;
+    let resizeRaf = 0;
+    if (typeof ResizeObserver !== "undefined") {
+      // 高頻度の発火(ドラッグ中など)を1フレーム1回のmap.resize()に間引く
+      ro = new ResizeObserver(() => {
+        if (resizeRaf) return;
+        resizeRaf = requestAnimationFrame(() => {
+          resizeRaf = 0;
+          map.resize();
+        });
+      });
+      ro.observe(containerRef.current);
+    }
+
     return () => {
       // アンマウント時は破棄のみ（setLoaded等のstate更新は不要）
+      ro?.disconnect();
+      if (resizeRaf) cancelAnimationFrame(resizeRaf);
       map.remove();
       mapRef.current = null;
     };

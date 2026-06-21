@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { EvacCollection, EvacFeature, RankedEvac, UserAttrs, HazardKey } from "@/lib/types";
 import { DEFAULT_ATTRS } from "@/lib/types";
@@ -72,9 +72,61 @@ export default function Home() {
   const [placeInput, setPlaceInput] = useState("");
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
+  // サイドバー可変幅(デスクトップのみ)
+  const [sidebarWidth, setSidebarWidth] = useState(400);
+  const [isDesktop, setIsDesktop] = useState(false);
 
   const toggleHazard = (key: HazardKey) =>
     setHazards((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+
+  // 画面幅でデスクトップ判定（md=768px）
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    // 旧Safari(addEventListener非対応)は addListener にフォールバック
+    if (mq.addEventListener) mq.addEventListener("change", update);
+    else mq.addListener(update);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", update);
+      else mq.removeListener(update);
+    };
+  }, []);
+
+  // ドラッグ中の後始末関数を保持し、アンマウント時にも確実に解除する
+  const resizeCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => resizeCleanup.current?.(), []);
+
+  // サイドバー幅のドラッグ調整
+  const startResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    resizeCleanup.current?.(); // 既存ドラッグが残っていれば先に終了（二重登録防止）
+    const prevUserSelect = document.body.style.userSelect; // 既存値を保存して復元
+    // mousemoveごとのsetStateを1フレーム1回に間引く（再レンダリング多発を防ぐ）
+    let raf = 0;
+    let lastX = 0;
+    const onMove = (ev: MouseEvent) => {
+      lastX = ev.clientX;
+      if (raf) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = 0;
+        setSidebarWidth(Math.min(640, Math.max(300, lastX)));
+      });
+    };
+    const end = () => {
+      if (raf) window.cancelAnimationFrame(raf);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", end);
+      window.removeEventListener("blur", end); // ウィンドウがフォーカスを失っても解除
+      document.body.style.userSelect = prevUserSelect;
+      resizeCleanup.current = null;
+    };
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", end);
+    window.addEventListener("blur", end);
+    resizeCleanup.current = end; // ドラッグ中アンマウント時もこの関数で後始末
+  }, []);
 
   // データ読み込み
   useEffect(() => {
@@ -274,8 +326,11 @@ export default function Home() {
 
   return (
     <div className="flex h-screen w-screen flex-col md:flex-row">
-      {/* 左: 操作パネル */}
-      <aside className="flex w-full flex-col gap-3 overflow-y-auto border-b border-gray-200 bg-white p-4 md:w-[400px] md:border-b-0 md:border-r">
+      {/* 左: 操作パネル（モバイルは上部、デスクトップは可変幅の左カラム） */}
+      <aside
+        style={isDesktop ? { width: sidebarWidth } : undefined}
+        className="flex h-[48vh] w-full shrink-0 flex-col gap-3 overflow-y-auto border-b border-gray-200 bg-white p-4 md:h-screen md:w-[400px] md:border-b-0 md:border-r"
+      >
         <header>
           <h1 className="text-xl font-bold text-gray-900">だれでも避難ナビ TOKYO</h1>
           <p className="text-sm text-gray-600">
@@ -490,8 +545,31 @@ export default function Home() {
         </div>
       </aside>
 
+      {/* リサイズハンドル（デスクトップのみ・キーボード操作対応） */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="サイドバーの幅を調整（左右キーで変更）"
+        aria-valuemin={300}
+        aria-valuemax={640}
+        aria-valuenow={Math.round(sidebarWidth)}
+        tabIndex={0}
+        onMouseDown={startResize}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            setSidebarWidth((w) => Math.max(300, w - 24));
+          } else if (e.key === "ArrowRight") {
+            e.preventDefault();
+            setSidebarWidth((w) => Math.min(640, w + 24));
+          }
+        }}
+        title="ドラッグ／左右キーで幅を調整"
+        className="hidden w-1 shrink-0 cursor-col-resize bg-gray-200 hover:bg-blue-400 focus:bg-blue-500 focus:outline-none md:block"
+      />
+
       {/* 右: 地図 */}
-      <main className="relative flex-1">
+      <main className="relative min-h-0 flex-1">
         <MapView all={all} ranked={ranked} origin={origin} hazards={hazards} threeD={threeD} />
       </main>
     </div>
