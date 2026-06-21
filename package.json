@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "^0.105.0",
     "maplibre-gl": "^5.24.0",
     "next": "16.2.9",
+    "qrcode.react": "^4.2.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "zod": "^4.4.3"
