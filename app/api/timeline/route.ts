@@ -5,13 +5,56 @@ import { NextRequest, NextResponse } from "next/server";
 import type { UserAttrs } from "@/lib/types";
 
 // 生成する避難タイムラインのスキーマ（内閣府の警戒レベルに沿った局面別の行動）
+// 長さ制約で空配列・過剰件数の不正形を弾き、UIが空になるのを防ぐ（不正ならparse失敗→fallback）
 const PhaseSchema = z.object({
-  phase: z.string().describe("局面の名前。例: 事前の備え / 情報収集 / 避難開始 / 避難先で"),
-  level: z.string().describe("対応する警戒レベルや時点。例: 警戒レベル3（高齢者等避難）/ 平時"),
-  actions: z.array(z.string()).describe("その局面で取る具体的な行動。利用者の状況に即して2〜5個"),
+  phase: z.string().min(1).describe("局面の名前。例: 事前の備え / 情報収集 / 避難開始 / 避難先で"),
+  level: z.string().min(1).describe("対応する警戒レベルや時点。例: 警戒レベル3（高齢者等避難）/ 平時"),
+  actions: z
+    .array(z.string().min(1))
+    .min(1)
+    .max(8)
+    .describe("その局面で取る具体的な行動。利用者の状況に即して2〜5個"),
 });
 const TimelineSchema = z.object({
-  phases: z.array(PhaseSchema).describe("時系列の避難行動タイムライン（4〜6局面）"),
+  phases: z
+    .array(PhaseSchema)
+    .min(1)
+    .max(8)
+    .describe("時系列の避難行動タイムライン（4〜6局面）"),
+});
+
+// 入力の正規化（boolean以外やInfinity等の不正値で500にしない）
+const InputAttrsSchema = z.object({
+  wheelchair: z.boolean().catch(false),
+  elderly: z.boolean().catch(false),
+  stroller: z.boolean().catch(false),
+  visual_impairment: z.boolean().catch(false),
+  hearing_impairment: z.boolean().catch(false),
+  foreign_language: z.boolean().catch(false),
+  has_caregiver: z.boolean().catch(false),
+  ostomate: z.boolean().catch(false),
+  severe_care: z.boolean().catch(false),
+  night: z.boolean().catch(false),
+  bad_weather: z.boolean().catch(false),
+  hazard: z
+    .enum([
+      "flood",
+      "landslide",
+      "storm_surge",
+      "earthquake",
+      "tsunami",
+      "fire",
+      "inland_flood",
+      "volcano",
+    ])
+    .nullable()
+    .catch(null),
+});
+const InputSchema = z.object({
+  attrs: InputAttrsSchema,
+  destName: z.string().max(100).optional().catch(undefined),
+  hazardLabel: z.string().max(40).optional().catch(undefined),
+  distanceKm: z.number().finite().optional().catch(undefined), // Infinity/NaNはundefinedへ
 });
 
 type TimelinePhase = z.infer<typeof PhaseSchema>;
@@ -84,22 +127,17 @@ function fallbackTimeline(
 }
 
 export async function POST(req: NextRequest) {
-  let attrs: UserAttrs | null = null;
-  let destName: string | undefined;
-  let hazardLabel: string | undefined;
-  let distanceKm: number | undefined;
+  let parsed;
   try {
-    const body = await req.json();
-    attrs = body?.attrs ?? null;
-    destName = typeof body?.destName === "string" ? body.destName.slice(0, 100) : undefined;
-    hazardLabel = typeof body?.hazardLabel === "string" ? body.hazardLabel.slice(0, 40) : undefined;
-    distanceKm = typeof body?.distanceKm === "number" ? body.distanceKm : undefined;
+    parsed = InputSchema.safeParse(await req.json());
   } catch {
     return NextResponse.json({ error: "invalid body" }, { status: 400 });
   }
-  if (!attrs || typeof attrs !== "object") {
+  if (!parsed.success) {
     return NextResponse.json({ error: "attrs is required" }, { status: 400 });
   }
+  const attrs: UserAttrs = parsed.data.attrs;
+  const { destName, hazardLabel, distanceKm } = parsed.data;
 
   // APIキーが無ければルールベースにフォールバック
   if (!process.env.ANTHROPIC_API_KEY) {

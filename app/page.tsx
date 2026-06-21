@@ -358,6 +358,8 @@ export default function Home() {
     const top = ranked[0];
     if (!top) return;
     setTimelineLoading(true);
+    setTimeline(null); // 再生成・失敗時に前回の結果が残らないよう先にクリア
+    setTimelineSource(null);
     try {
       const res = await fetch("/api/timeline", {
         method: "POST",
