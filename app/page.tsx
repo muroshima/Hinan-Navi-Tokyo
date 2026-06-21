@@ -49,34 +49,36 @@ function gmapsWalkingUrl(origin: [number, number], dest: [number, number]): stri
 
 // スコアの加減点内訳をバーで可視化（説明可能性）。正=緑/負=赤
 function ScoreBreakdown({ r }: { r: RankedEvac }) {
-  const maxAbs = Math.max(1, ...r.factors.map((f) => Math.abs(f.delta)));
-  // 合計はscoreではなくfactorsの和から算出（score=Σdeltaの一貫性をUIでも担保）
-  const total = r.factors.reduce((s, f) => s + f.delta, 0);
+  // 表示用に各deltaを整数へ丸め、合計も「丸め後の各行の和」にする。
+  // これで「各行を足すと合計に一致」が保証され、内訳としての整合性が崩れない
+  const shown = r.factors.map((f) => ({ f, d: Math.round(f.delta) }));
+  const maxAbs = Math.max(1, ...shown.map((s) => Math.abs(s.d)));
+  const total = shown.reduce((s, x) => s + x.d, 0);
   return (
     <div className="mt-1 rounded-md bg-gray-50 p-2">
       <div className="mb-1 flex items-center justify-between text-[11px] font-bold text-gray-600">
         <span>点数内訳</span>
-        <span className="tabular-nums">合計 {Math.round(total)}点</span>
+        <span className="tabular-nums">合計 {total}点</span>
       </div>
       <div className="flex flex-col gap-0.5">
-        {r.factors.map((f) => (
+        {shown.map(({ f, d }) => (
           <div key={`${f.category}-${f.label}`} className="flex items-center gap-1 text-[11px]">
             <span className="w-32 shrink-0 truncate text-gray-600" title={f.label}>
               {f.label}
             </span>
             <div className="relative h-2.5 flex-1 rounded bg-gray-100">
               <div
-                className={`absolute top-0 h-2.5 rounded ${f.delta >= 0 ? "bg-green-400" : "bg-red-400"}`}
-                style={{ width: `${(Math.abs(f.delta) / maxAbs) * 100}%` }}
+                className={`absolute top-0 h-2.5 rounded ${d >= 0 ? "bg-green-400" : "bg-red-400"}`}
+                style={{ width: `${(Math.abs(d) / maxAbs) * 100}%` }}
               />
             </div>
             <span
               className={`w-9 shrink-0 text-right tabular-nums ${
-                f.delta >= 0 ? "text-green-700" : "text-red-600"
+                d >= 0 ? "text-green-700" : "text-red-600"
               }`}
             >
-              {f.delta >= 0 ? "+" : ""}
-              {Math.round(f.delta)}
+              {d >= 0 ? "+" : ""}
+              {d}
             </span>
           </div>
         ))}
