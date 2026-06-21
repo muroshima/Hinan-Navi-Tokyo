@@ -11,6 +11,7 @@ import type {
   TimelinePhase,
 } from "@/lib/types";
 import { DEFAULT_ATTRS } from "@/lib/types";
+import { fallbackExtract, type FallbackAttrs } from "@/lib/triageFallback";
 import {
   rankEvacuations,
   explainDecision,
@@ -398,29 +399,26 @@ export default function Home() {
     setTimeline(null);
     setTimelineSource(null);
     setTimelineLoading(false);
-    try {
-      const res = await fetch("/api/triage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      if (!res.ok) {
-        setSubmitError("属性の抽出に失敗しました。少し待って再度お試しください。");
-        return; // submitted は変えない（前の結果を保持）
-      }
-      const data = await res.json();
+    // 抽出結果(LLM or 語句一致fallback)を画面に反映する共通処理
+    const applyExtracted = (
+      extracted: FallbackAttrs,
+      source: string | null,
+      allowGeocode: boolean
+    ) => {
       // location(出発地)は属性とは別扱い（現在地に反映）
-      const { location, ...a } = data.attrs ?? {};
-      const hazard: HazardKey | null = a.hazard && a.hazard !== "none" ? a.hazard : null;
+      const { location, ...a } = extracted;
+      const hz = a.hazard;
+      const hazard: HazardKey | null =
+        typeof hz === "string" && hz !== "none" ? (hz as HazardKey) : null;
       setAttrs({ ...DEFAULT_ATTRS, ...a, hazard });
-      setSource(data.source ?? null);
+      setSource(source);
       setSubmitted(true);
       // 抽出された災害に対応するハザードレイヤを自動でON
       if (hazard && HAZARD_LAYERS.some((h) => h.key === hazard)) {
         setHazards((prev) => (prev.includes(hazard) ? prev : [...prev, hazard]));
       }
-      // 文中に地名があれば現在地に反映。副作用なのでUI応答をブロックしない(fire-and-forget)
-      if (typeof location === "string" && location.trim()) {
+      // 文中に地名があれば現在地に反映（ジオコーディングは要ネットワーク。オフライン時はスキップ）
+      if (allowGeocode && typeof location === "string" && location.trim()) {
         const place = location.trim();
         void (async () => {
           try {
@@ -436,8 +434,24 @@ export default function Home() {
           }
         })();
       }
+    };
+
+    try {
+      const res = await fetch("/api/triage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) {
+        setSubmitError("属性の抽出に失敗しました。少し待って再度お試しください。");
+        return; // submitted は変えない（前の結果を保持）
+      }
+      const data = await res.json();
+      applyExtracted(data.attrs ?? {}, data.source ?? null, true);
     } catch {
-      setSubmitError("通信に失敗しました。接続を確認して再度お試しください。");
+      // オフライン/通信失敗時はクライアント側の語句一致fallbackで検索を成立させる
+      // （避難所データはSWでキャッシュ済みのため圏外でも一覧・ランキングが動く）
+      applyExtracted(fallbackExtract(text), "offline", false);
     } finally {
       setLoading(false);
     }
