@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { NextRequest, NextResponse } from "next/server";
-import type { UserAttrs, TimelinePhase } from "@/lib/types";
+import type { UserAttrs, TimelinePhase, Lang } from "@/lib/types";
 
 // 生成する避難タイムラインのスキーマ（内閣府の警戒レベルに沿った局面別の行動）
 // 長さ制約で空配列・過剰件数の不正形を弾き、UIが空になるのを防ぐ（不正ならparse失敗→fallback）
@@ -58,14 +58,15 @@ const InputSchema = z.object({
   language: z.enum(["ja-easy", "ja", "en", "zh"]).optional().catch(undefined),
 });
 
-// 出力言語の指示（LLM版のみ。fallbackは日本語固定）
-const LANG_INSTRUCTION: Record<string, string> = {
+// 出力言語の指示（LLM版のみ。fallbackは日本語固定）。
+// satisfiesでキーをLang全網羅に固定し、言語の増減時に型でドリフトを検出する
+const LANG_INSTRUCTION = {
   ja: "出力は日本語で書いてください。",
   "ja-easy":
     "出力はやさしい日本語で書いてください（短い文・難しい言葉や漢語を避け、外国人や子どもにも分かる表現にする）。",
   en: "Write the output in English.",
   zh: "请用简体中文输出。",
-};
+} satisfies Record<Lang, string>;
 
 // 返却型は @/lib/types の TimelinePhase に統一（PhaseSchemaと構造一致。二重定義を避ける）
 

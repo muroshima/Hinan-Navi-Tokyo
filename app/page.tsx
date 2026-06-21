@@ -13,7 +13,14 @@ import type {
 } from "@/lib/types";
 import { DEFAULT_ATTRS, LANGS } from "@/lib/types";
 import { fallbackExtract, type FallbackAttrs } from "@/lib/triageFallback";
-import { createRecognition, canRecognize, canSpeak, speak, type SpeechRecognitionLike } from "@/lib/speech";
+import {
+  createRecognition,
+  canRecognize,
+  canSpeak,
+  speak,
+  stopSpeaking,
+  type SpeechRecognitionLike,
+} from "@/lib/speech";
 import {
   rankEvacuations,
   explainDecision,
@@ -165,11 +172,16 @@ export default function Home() {
   const [voiceOut, setVoiceOut] = useState(false);
   useEffect(() => {
     // 音声機能の対応可否はマウント後に判定（SSRと不一致を避ける）。
-    // setStateはマイクロタスクに逃がす（effect内の同期setStateを避ける）
-    queueMicrotask(() => {
+    // setStateはマイクロタスクに逃がす（effect内の同期setStateを避ける。Promiseは広く対応）
+    Promise.resolve().then(() => {
       setVoiceIn(canRecognize());
       setVoiceOut(canSpeak());
     });
+    // アンマウント時は音声認識・読み上げを停止（マイク取得や読み上げの継続を防ぐ）
+    return () => {
+      recognitionRef.current?.stop();
+      stopSpeaking();
+    };
   }, []);
 
   // 音声入力の開始/停止（Web Speech API・対応ブラウザのみ）
@@ -524,7 +536,15 @@ export default function Home() {
           <select
             id="lang"
             value={lang}
-            onChange={(e) => setLang(e.target.value as Lang)}
+            onChange={(e) => {
+              setLang(e.target.value as Lang);
+              // 既存タイムラインは別言語のため破棄し、進行中の生成・読み上げも無効化
+              timelineReqId.current++;
+              setTimeline(null);
+              setTimelineSource(null);
+              setTimelineLoading(false);
+              stopSpeaking();
+            }}
             className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-800 focus:border-blue-500 focus:outline-none"
           >
             {LANGS.map((l) => (
