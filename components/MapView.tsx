@@ -46,19 +46,31 @@ const OSM_STYLE: maplibregl.StyleSpecification = {
   layers: [{ id: "osm", type: "raster", source: "osm" }],
 };
 
+type LifelineKind = "water" | "wifi";
+
 interface Props {
   all: EvacFeature[]; // 全避難所(背景表示)
   ranked: RankedEvac[]; // 絞り込み結果(強調)
   origin: [number, number] | null;
   hazards?: HazardKey[]; // 表示するハザードレイヤ
   threeD?: boolean; // 3D地形(坂・起伏)表示
+  lifeline?: GeoJSON.Feature[]; // 生活継続レイヤー(給水/Wi-Fi)
+  lifelineShow?: LifelineKind[]; // 表示する生活継続レイヤー種別
 }
 
 function emptyFC(): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features: [] };
 }
 
-export default function MapView({ all, ranked, origin, hazards = [], threeD = false }: Props) {
+export default function MapView({
+  all,
+  ranked,
+  origin,
+  hazards = [],
+  threeD = false,
+  lifeline = [],
+  lifelineShow = [],
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   // load完了をstateで管理し、各反映effectの依存に含める
@@ -109,6 +121,35 @@ export default function MapView({ all, ranked, origin, hazards = [], threeD = fa
         source: "dem",
         layout: { visibility: "none" },
         paint: { "hillshade-exaggeration": 0.6 },
+      });
+
+      // 生活継続レイヤー（給水拠点・公衆Wi-Fi）。初期は非表示
+      map.addSource("lifeline", { type: "geojson", data: emptyFC() });
+      map.addLayer({
+        id: "lifeline-water",
+        type: "circle",
+        source: "lifeline",
+        filter: ["==", ["get", "kind"], "water"],
+        layout: { visibility: "none" },
+        paint: {
+          "circle-radius": 5,
+          "circle-color": "#0ea5e9",
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "#ffffff",
+        },
+      });
+      map.addLayer({
+        id: "lifeline-wifi",
+        type: "circle",
+        source: "lifeline",
+        filter: ["==", ["get", "kind"], "wifi"],
+        layout: { visibility: "none" },
+        paint: {
+          "circle-radius": 4,
+          "circle-color": "#10b981",
+          "circle-stroke-width": 1,
+          "circle-stroke-color": "#ffffff",
+        },
       });
 
       map.addSource("all", { type: "geojson", data: emptyFC() });
@@ -220,6 +261,30 @@ export default function MapView({ all, ranked, origin, hazards = [], threeD = fa
       map.setLayoutProperty(`hz-${key}`, "visibility", hazards.includes(key) ? "visible" : "none");
     }
   }, [hazards, loaded]);
+
+  // 生活継続レイヤーの反映
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded) return;
+    (map.getSource("lifeline") as maplibregl.GeoJSONSource | undefined)?.setData({
+      type: "FeatureCollection",
+      features: lifeline,
+    });
+  }, [lifeline, loaded]);
+
+  // 生活継続レイヤーの表示切替
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded) return;
+    for (const k of ["water", "wifi"] as const) {
+      if (!map.getLayer(`lifeline-${k}`)) continue;
+      map.setLayoutProperty(
+        `lifeline-${k}`,
+        "visibility",
+        lifelineShow.includes(k) ? "visible" : "none"
+      );
+    }
+  }, [lifelineShow, loaded]);
 
   // 3D地形(坂・起伏)の切替
   useEffect(() => {

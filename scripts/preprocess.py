@@ -199,6 +199,57 @@ def build_toilets():
     return feats
 
 
+def build_lifeline():
+    """生活継続レイヤー（災害時給水拠点・公衆Wi-Fi）を1つのGeoJSONに統合。
+    properties.kind で 'water' / 'wifi' を区別。"""
+    feats = []
+    # 災害時給水ステーション（東京都水道局）
+    try:
+        rows = read_csv('water_station.csv')
+        hi, h = find_header(rows, ['施設名'])
+        for d in records(rows, hi, h):
+            lat, lon = to_float(d.get('緯度')), to_float(d.get('経度'))
+            name = d.get('施設名', '')
+            if not name or lat is None or lon is None:
+                continue
+            feats.append({
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [lon, lat]},
+                'properties': {
+                    'id': f'lw-{len(feats)}',
+                    'kind': 'water',
+                    'name': name,
+                    'category': d.get('種別', ''),
+                    'capacity': d.get('確保水量（立方メートル）', ''),
+                    'address': d.get('所在地', ''),
+                },
+            })
+    except Exception as e:
+        print('water_station skip:', e)
+    # 公衆無線LAN（FREE Wi-Fi & TOKYO）
+    try:
+        rows = read_csv('wifi.csv')
+        hi, h = find_header(rows, ['名称'])
+        for d in records(rows, hi, h):
+            lat, lon = to_float(d.get('緯度')), to_float(d.get('経度'))
+            name = d.get('名称', '')
+            if not name or lat is None or lon is None:
+                continue
+            feats.append({
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [lon, lat]},
+                'properties': {
+                    'id': f'lf-{len(feats)}',
+                    'kind': 'wifi',
+                    'name': name,
+                    'address': d.get('住所', ''),
+                },
+            })
+    except Exception as e:
+        print('wifi skip:', e)
+    return feats
+
+
 def dump(name, feats):
     fc = {'type': 'FeatureCollection', 'features': feats}
     with open(os.path.join(OUT, name), 'w', encoding='utf-8') as f:
@@ -233,6 +284,19 @@ SOURCES = [
         'attribution': '東京都オープンデータ（CC BY 4.0）',
     },
     {
+        'file': 'lifeline.geojson',
+        'datasets': [
+            '災害時給水ステーション（給水拠点）一覧',
+            '東京都 公衆無線LAN（FREE Wi-Fi & TOKYO）アクセスポイント',
+        ],
+        'provider': '東京都水道局 / 東京都デジタルサービス局',
+        'license': 'CC BY 4.0',
+        'source_url': 'https://catalog.data.metro.tokyo.lg.jp/',
+        'retrieved': '2026-06',
+        'processing': 'CSV(CP932)→統合GeoJSON。properties.kindで給水(water)/Wi-Fi(wifi)を区別',
+        'attribution': '東京都オープンデータ（CC BY 4.0）',
+    },
+    {
         'file': '(高齢化率の付与に使用)',
         'datasets': ['住民基本台帳による東京都の世帯と人口(町丁別・年齢別) 第3-1表 区市町村,年齢3区分別人口'],
         'provider': '東京都',
@@ -263,5 +327,6 @@ if __name__ == '__main__':
     counts = {}
     counts['evacuation.geojson'] = dump('evacuation.geojson', build_evacuation())
     counts['toilets.geojson'] = dump('toilets.geojson', build_toilets())
+    counts['lifeline.geojson'] = dump('lifeline.geojson', build_lifeline())
     write_metadata(counts)
     print('done ->', os.path.relpath(OUT))

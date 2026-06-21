@@ -166,6 +166,11 @@ export default function Home() {
   const [submitted, setSubmitted] = useState(false);
   const [hazards, setHazards] = useState<HazardKey[]>([]);
   const [threeD, setThreeD] = useState(false);
+  // 生活継続レイヤー（給水拠点・公衆Wi-Fi）
+  const [lifeline, setLifeline] = useState<GeoJSON.Feature[]>([]);
+  const [lifelineShow, setLifelineShow] = useState<("water" | "wifi")[]>([]);
+  const toggleLifeline = (k: "water" | "wifi") =>
+    setLifelineShow((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [originLabel, setOriginLabel] = useState("自動取得 / 東京駅");
   const [placeInput, setPlaceInput] = useState("");
@@ -354,6 +359,11 @@ export default function Home() {
         }
       )
       .catch(() => setToiletIdx(EMPTY_TOILET_IDX));
+    // 生活継続レイヤー（給水拠点・公衆Wi-Fi）
+    fetch("/data/lifeline.geojson")
+      .then((r) => r.json())
+      .then((fc: { features?: GeoJSON.Feature[] }) => setLifeline(fc.features ?? []))
+      .catch(() => setLifeline([]));
   }, []);
 
   // 現在地（取れなければ東京駅）。共有URLに有効な座標がある場合はGPSで上書きしない
@@ -808,6 +818,34 @@ export default function Home() {
           </button>
         </div>
 
+        {/* 生活継続レイヤー（給水拠点・公衆Wi-Fi） */}
+        <div className="rounded-lg border border-gray-200 p-2">
+          <div className="mb-1 text-xs font-bold text-gray-700">生活継続レイヤー（避難後の備え）</div>
+          <div className="flex flex-wrap gap-1">
+            {([
+              { key: "water", label: "💧 給水拠点", on: "border-sky-500 bg-sky-100 text-sky-800" },
+              { key: "wifi", label: "📶 公衆Wi-Fi", on: "border-emerald-500 bg-emerald-100 text-emerald-800" },
+            ] as const).map((it) => {
+              const active = lifelineShow.includes(it.key);
+              return (
+                <button
+                  key={it.key}
+                  onClick={() => toggleLifeline(it.key)}
+                  className={`rounded-full border px-2 py-1 text-xs ${
+                    active ? it.on : "border-gray-300 text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  {active ? "● " : "○ "}
+                  {it.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1 text-[10px] text-gray-400">
+            出典: 東京都オープンデータ（災害時給水ステーション／FREE Wi-Fi & TOKYO・CC BY 4.0）
+          </p>
+        </div>
+
         {/* 1位の根拠 ＋ 行けない理由（意思決定支援） */}
         {decision && (
           <div className="flex flex-col gap-2">
@@ -1017,7 +1055,15 @@ export default function Home() {
 
       {/* 右: 地図 */}
       <main className="relative min-h-0 flex-1">
-        <MapView all={all} ranked={ranked} origin={origin} hazards={hazards} threeD={threeD} />
+        <MapView
+          all={all}
+          ranked={ranked}
+          origin={origin}
+          hazards={hazards}
+          threeD={threeD}
+          lifeline={lifeline}
+          lifelineShow={lifelineShow}
+        />
       </main>
     </div>
   );

@@ -10,6 +10,7 @@
 |---|---|---|---|---|---|
 | `public/data/evacuation.geojson` | 東京都防災マップ 避難所一覧／避難場所一覧データ | 東京都 | CC BY 4.0 | 2026-06 | CSV(CP932/UTF-8)→正規化GeoJSON、バリアフリー列のbool化、市区町村高齢化率の付与 |
 | `public/data/toilets.geojson` | 車椅子使用者対応トイレのバリアフリー設備情報 | 東京都(福祉局) | CC BY 4.0 | 2026-06 | CSV(CP932)→GeoJSON、設備項目（おむつ替え/オストメイト/大型ベッド/非常用ボタン等）のbool化 |
+| `public/data/lifeline.geojson` | 災害時給水ステーション（給水拠点）一覧／公衆無線LAN（FREE Wi-Fi & TOKYO） | 東京都(水道局／デジタルサービス局) | CC BY 4.0 | 2026-06 | CSV(CP932)→統合GeoJSON。`kind`で給水(water)/Wi-Fi(wifi)を区別。給水は確保水量・種別も保持 |
 | （高齢化率の付与に使用） | 住民基本台帳による東京都の世帯と人口（町丁別・年齢別）第3-1表 区市町村・年齢3区分別人口 | 東京都 | CC BY 4.0（東京都オープンデータ利用規約準拠） | 2026-06 | 65歳以上比から市区町村別高齢化率を算出し evacuation.geojson に付与 |
 
 - 出典カタログ: 東京都オープンデータカタログサイト https://catalog.data.metro.tokyo.lg.jp/
@@ -26,6 +27,8 @@
 | `data-raw/wc_barrierfree.csv` | 車椅子使用者対応トイレ バリアフリー設備情報 | `https://www.opendata.metro.tokyo.lg.jp/fukushi/3_koukyoshisetsu_barieer_free_wc.csv`（ファイル名の `barieer` は東京都側の綴り原文ママ・実在確認済み）。カタログ: https://catalog.data.metro.tokyo.lg.jp/dataset/t000010d0000000095 |
 | `data-raw/evacuation_area.csv` | 避難場所一覧（災害種別の適否フラグ付き） | 東京都オープンデータカタログ「避難所・避難場所一覧データ」 https://catalog.data.metro.tokyo.lg.jp/dataset/t000003d0000000093 から避難場所一覧のCSVを取得しリネーム |
 | `data-raw/city_age.csv` | 住民基本台帳 年齢別人口（第3-1表 区市町村・年齢3区分別） | 東京都の統計 住民基本台帳 https://www.toukei.metro.tokyo.lg.jp/juukiy/ から該当表のCSVを取得しリネーム |
+| `data-raw/water_station.csv` | 災害時給水ステーション（給水拠点）一覧 | `https://www.opendata.metro.tokyo.lg.jp/suidou/R7/kyoten_20251211.csv`（東京都水道局・都全域・座標付き） |
+| `data-raw/wifi.csv` | 公衆無線LAN（FREE Wi-Fi & TOKYO） | `https://www.opendata.metro.tokyo.lg.jp/suisyoudataset/130001_public_wireless_lan_20240901.csv`（東京都デジタルサービス局・座標付き） |
 
 ```bash
 # data-raw/ に上記4ファイルを配置後
