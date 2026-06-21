@@ -173,6 +173,7 @@ export default function Home() {
   const [lifelineShow, setLifelineShow] = useState<LifelineKind[]>([]);
   const toggleLifeline = (k: LifelineKind) =>
     setLifelineShow((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
+  const [buildings3d, setBuildings3d] = useState(false); // PLATEAU建物3D（垂直避難）
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [originLabel, setOriginLabel] = useState("自動取得 / 東京駅");
   const [placeInput, setPlaceInput] = useState("");
@@ -813,6 +814,7 @@ export default function Home() {
           <p className="mt-1 text-[10px] text-gray-400">出典: ハザードマップポータルサイト(国土交通省)</p>
           <button
             onClick={() => setThreeD((v) => !v)}
+            aria-pressed={threeD}
             className={`mt-2 w-full rounded-md border px-2 py-1 text-xs ${
               threeD
                 ? "border-emerald-500 bg-emerald-100 text-emerald-800"
@@ -821,6 +823,22 @@ export default function Home() {
           >
             {threeD ? "⛰ 3D地形 ON（坂・起伏を表示）" : "⛰ 3D地形で坂・起伏を見る"}
           </button>
+          <button
+            onClick={() => setBuildings3d((v) => !v)}
+            aria-pressed={buildings3d}
+            className={`mt-1 w-full rounded-md border px-2 py-1 text-xs ${
+              buildings3d
+                ? "border-green-600 bg-green-100 text-green-800"
+                : "border-gray-300 text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            {buildings3d
+              ? "🏢 建物3D ON（高い建物＝垂直避難先・拡大で表示）"
+              : "🏢 建物3Dで垂直避難先を見る（水害時・23区）"}
+          </button>
+          <p className="mt-1 text-[10px] text-gray-400">
+            建物: Project PLATEAU(国土交通省) CC BY 4.0。高いほど濃い緑＝上階避難に適す
+          </p>
         </div>
 
         {/* 生活継続レイヤー（給水拠点・公衆Wi-Fi） */}
@@ -1069,6 +1087,7 @@ export default function Home() {
           threeD={threeD}
           lifeline={lifeline}
           lifelineShow={lifelineShow}
+          buildings3d={buildings3d}
         />
       </main>
     </div>

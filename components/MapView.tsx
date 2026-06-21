@@ -54,6 +54,7 @@ interface Props {
   threeD?: boolean; // 3D地形(坂・起伏)表示
   lifeline?: LifelineFeature[]; // 生活継続レイヤー(給水/Wi-Fi)
   lifelineShow?: LifelineKind[]; // 表示する生活継続レイヤー種別
+  buildings3d?: boolean; // PLATEAU建物3D（垂直避難先を高さで色分け）
 }
 
 function emptyFC(): GeoJSON.FeatureCollection {
@@ -76,6 +77,7 @@ export default function MapView({
   threeD = false,
   lifeline = [],
   lifelineShow = [],
+  buildings3d = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -127,6 +129,43 @@ export default function MapView({
         source: "dem",
         layout: { visibility: "none" },
         paint: { "hillshade-exaggeration": 0.6 },
+      });
+
+      // PLATEAU建物3D（東京23区・LOD0、高さmで垂直避難先候補を色分け）。初期は非表示
+      map.addSource("plateau", {
+        type: "vector",
+        tiles: ["https://indigo-lab.github.io/plateau-tokyo23ku-building-mvt-2020/{z}/{x}/{y}.pbf"],
+        minzoom: 10,
+        maxzoom: 16,
+        attribution:
+          '建物: <a href="https://github.com/indigo-lab/plateau-tokyo23ku-building-mvt-2020" target="_blank" rel="noopener">PLATEAU TOKYO23ku MVT</a> / Project PLATEAU(国土交通省) CC BY 4.0',
+      });
+      map.addLayer({
+        id: "plateau-bldg",
+        type: "fill-extrusion",
+        source: "plateau",
+        "source-layer": "bldg",
+        minzoom: 13,
+        layout: { visibility: "none" },
+        paint: {
+          "fill-extrusion-height": ["coalesce", ["get", "measuredHeight"], 0],
+          "fill-extrusion-base": 0,
+          "fill-extrusion-opacity": 0.78,
+          // 高いほど濃い緑＝垂直避難に適す。低層は灰
+          "fill-extrusion-color": [
+            "interpolate",
+            ["linear"],
+            ["coalesce", ["get", "measuredHeight"], 0],
+            0,
+            "#cbd5e1",
+            10,
+            "#86efac",
+            20,
+            "#22c55e",
+            40,
+            "#15803d",
+          ],
+        },
       });
 
       map.addSource("all", { type: "geojson", data: emptyFC() });
@@ -347,6 +386,21 @@ export default function MapView({
       map.easeTo({ pitch: 0, duration: 600 });
     }
   }, [threeD, loaded]);
+
+  // PLATEAU建物3D（垂直避難）の表示切替。表示時はpitchを傾けて立体表示
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded) return;
+    if (map.getLayer("plateau-bldg")) {
+      map.setLayoutProperty("plateau-bldg", "visibility", buildings3d ? "visible" : "none");
+    }
+    if (buildings3d) {
+      map.easeTo({ pitch: 55, duration: 800 });
+    } else if (!threeD) {
+      // 3D地形もOFFなら水平に戻す（threeD ONなら3D地形側のeffectがpitchを管理）
+      map.easeTo({ pitch: 0, duration: 600 });
+    }
+  }, [buildings3d, threeD, loaded]);
 
   // 現在地マーカー（origin が null ならマーカーを除去）
   const originMarker = useRef<maplibregl.Marker | null>(null);

@@ -46,6 +46,7 @@ python3 scripts/preprocess.py
 | ベース地図タイル | OpenStreetMap | © OpenStreetMap contributors（データ: ODbL）。タイルは OSMF **Tile Usage Policy** | **公開アプリの既定ベースマップ用途は非推奨/禁止**。公開配信時は自前/商用タイルへ差替が必要（別Issue「公開タイル/ルーティングの本番依存是正」） |
 | ハザード（洪水/高潮/津波/土砂）タイル | 国土交通省 ハザードマップポータルサイト | 出典表示が条件（同サイト利用規約） | アプリ内に「ハザードマップポータルサイト(国土交通省)」と出典表示済み |
 | 3D地形 DEM | Mapzen / AWS Open Data（Terrain Tiles, Terrarium） | 出典表示。元標高は複数データ源 | アプリ内に「Terrain: Mapzen/AWS Open Data」と表示済み。エンドポイント終了/移行の可能性に留意 |
+| 建物3D（垂直避難・東京23区） | Project PLATEAU（国土交通省）の建物モデルを [indigo-lab/plateau-tokyo23ku-building-mvt-2020](https://github.com/indigo-lab/plateau-tokyo23ku-building-mvt-2020) がMVT化 | CC BY 4.0（PLATEAU/国交省クレジット＋変換リポジトリのリンク表示が条件） | 建物高さ `measuredHeight` で色分け表示。**2020年度版・第三者ホスティング**のため、本番運用時は自前のMVT再生成を推奨（別Issue「公開タイル本番化」）。地図のattribution controlに出典表示済み |
 | ラベル用フォント(glyphs) | MapLibre demotiles（Open Sans 系） | デモ用エンドポイント | **本番非保証**。公開時は自前 glyphs へ差替を推奨 |
 
 ## 3. 外部API（サーバー経由で呼び出し）
