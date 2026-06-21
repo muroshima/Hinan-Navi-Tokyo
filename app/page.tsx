@@ -11,7 +11,8 @@ import type {
   TimelinePhase,
   Lang,
 } from "@/lib/types";
-import { DEFAULT_ATTRS, LANGS } from "@/lib/types";
+import { DEFAULT_ATTRS, LANGS, LANG_CODES } from "@/lib/types";
+import { QRCodeSVG } from "qrcode.react";
 import { fallbackExtract, type FallbackAttrs } from "@/lib/triageFallback";
 import {
   createRecognition,
@@ -170,6 +171,9 @@ export default function Home() {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const [voiceIn, setVoiceIn] = useState(false);
   const [voiceOut, setVoiceOut] = useState(false);
+  // 家族・支援者への共有（URL/QR）
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   useEffect(() => {
     // 音声機能の対応可否はマウント後に判定（SSRと不一致を避ける）。
     // setStateはマイクロタスクに逃がす（effect内の同期setStateを避ける。Promiseは広く対応）
@@ -338,8 +342,9 @@ export default function Home() {
       .catch(() => setToiletIdx(EMPTY_TOILET_IDX));
   }, []);
 
-  // 現在地（取れなければ東京駅）
+  // 現在地（取れなければ東京駅）。共有URLに座標がある場合はGPSで上書きしない
   useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("lat")) return;
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -482,15 +487,19 @@ export default function Home() {
     }
   }
 
-  async function handleSubmit() {
-    if (!text.trim()) return;
+  // overrideText: 共有URL等から渡す入力 / skipGeocode: 座標が確定済みで地名再変換しない
+  async function handleSubmit(opts?: { overrideText?: string; skipGeocode?: boolean }) {
+    const q = (opts?.overrideText ?? text).trim();
+    if (!q) return;
+    const allowGeocodeBase = !opts?.skipGeocode;
     setLoading(true);
     setSubmitError(null);
-    // 新しい検索のたびに前回のタイムラインを破棄し、進行中の生成も無効化
+    // 新しい検索のたびに前回のタイムライン・共有リンクを破棄し、進行中の生成も無効化
     timelineReqId.current++;
     setTimeline(null);
     setTimelineSource(null);
     setTimelineLoading(false);
+    setShareUrl(null);
     // 抽出結果(LLM or 語句一致fallback)を画面に反映する共通処理
     const applyExtracted = (
       extracted: FallbackAttrs,
@@ -532,22 +541,75 @@ export default function Home() {
       const res = await fetch("/api/triage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text: q }),
       });
       if (!res.ok) {
         setSubmitError("属性の抽出に失敗しました。少し待って再度お試しください。");
         return; // submitted は変えない（前の結果を保持）
       }
       const data = await res.json();
-      applyExtracted(data.attrs ?? {}, data.source ?? null, true);
+      applyExtracted(data.attrs ?? {}, data.source ?? null, allowGeocodeBase);
     } catch {
       // オフライン/通信失敗時はクライアント側の語句一致fallbackで検索を成立させる
       // （避難所データはSWでキャッシュ済みのため圏外でも一覧・ランキングが動く）
-      applyExtracted(fallbackExtract(text), "offline", false);
+      applyExtracted(fallbackExtract(q), "offline", false);
     } finally {
       setLoading(false);
     }
   }
+
+  // 家族・支援者に共有するURL（入力文＋現在地＋言語）を生成
+  function buildShareUrl(): string {
+    const params = new URLSearchParams();
+    if (text.trim()) params.set("q", text.trim());
+    params.set("lat", origin[1].toFixed(6));
+    params.set("lng", origin[0].toFixed(6));
+    params.set("lang", lang);
+    return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+  }
+
+  function openShare() {
+    setShareUrl(buildShareUrl());
+    setCopied(false);
+  }
+
+  async function copyShare() {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+    } catch {
+      /* クリップボード不可時はURL表示のみ */
+    }
+  }
+
+  // 共有URLで開かれた場合は状態を復元して自動検索
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const q = sp.get("q");
+    const latRaw = sp.get("lat");
+    const lngRaw = sp.get("lng");
+    const latN = latRaw ? Number(latRaw) : NaN;
+    const lngN = lngRaw ? Number(lngRaw) : NaN;
+    const hasCoords =
+      Number.isFinite(latN) && Number.isFinite(lngN) && Math.abs(latN) <= 90 && Math.abs(lngN) <= 180;
+    const l = sp.get("lang");
+    const validLang = !!l && (LANG_CODES as readonly string[]).includes(l);
+    if (!q && !hasCoords && !validLang) return;
+    // setStateはマイクロタスクに逃がす（effect内の同期setStateを避ける）
+    Promise.resolve().then(() => {
+      if (validLang) setLang(l as Lang);
+      if (hasCoords) {
+        setOrigin([lngN, latN]);
+        setOriginLabel("共有された地点");
+      }
+      if (q) {
+        setText(q);
+        void handleSubmit({ overrideText: q, skipGeocode: hasCoords });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="flex h-screen w-screen flex-col md:flex-row">
@@ -575,11 +637,12 @@ export default function Home() {
               setLang(e.target.value as Lang);
               // 録音中なら停止（認識言語のズレ防止）
               stopRecognition();
-              // 既存タイムラインは別言語のため破棄し、進行中の生成・読み上げも無効化
+              // 既存タイムライン・共有リンクは別言語のため破棄し、進行中の生成・読み上げも無効化
               timelineReqId.current++;
               setTimeline(null);
               setTimelineSource(null);
               setTimelineLoading(false);
+              setShareUrl(null);
               stopSpeaking();
             }}
             className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-800 focus:border-blue-500 focus:outline-none"
@@ -658,7 +721,7 @@ export default function Home() {
           ))}
         </div>
         <button
-          onClick={handleSubmit}
+          onClick={() => handleSubmit()}
           disabled={loading || !text.trim()}
           className="rounded-lg bg-blue-600 px-4 py-3 text-base font-bold text-white hover:bg-blue-700 disabled:opacity-40"
         >
@@ -795,6 +858,47 @@ export default function Home() {
                     （生成: {timelineSource === "claude" ? "AI" : "簡易ルール"}・参考情報です。最終判断は自治体の情報に従ってください）
                   </span>
                 )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 家族・支援者への共有（URL/QR） */}
+        {submitted && ranked.length > 0 && (
+          <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3">
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-xs font-bold text-emerald-800">🔗 家族・支援者に共有</span>
+              <button
+                onClick={openShare}
+                className="rounded-md bg-emerald-600 px-2 py-1 text-xs text-white hover:bg-emerald-700"
+              >
+                {shareUrl ? "更新" : "共有リンク/QRを作る"}
+              </button>
+            </div>
+            {!shareUrl && (
+              <p className="mt-1 text-[11px] text-emerald-700">
+                今の状況・現在地・言語をリンク/QRにします。受け取った人が開くと同じ避難先が表示されます
+              </p>
+            )}
+            {shareUrl && (
+              <div className="mt-2 flex flex-col items-center gap-2">
+                <div className="rounded-md bg-white p-2">
+                  <QRCodeSVG value={shareUrl} size={140} />
+                </div>
+                <div className="flex w-full gap-1">
+                  <input
+                    readOnly
+                    value={shareUrl}
+                    onFocus={(e) => e.currentTarget.select()}
+                    className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1 text-[11px] text-gray-700"
+                  />
+                  <button
+                    onClick={copyShare}
+                    className="shrink-0 rounded-md border border-emerald-400 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-100"
+                  >
+                    {copied ? "✓ コピー" : "コピー"}
+                  </button>
+                </div>
               </div>
             )}
           </div>
