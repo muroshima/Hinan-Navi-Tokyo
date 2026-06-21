@@ -100,6 +100,7 @@ export default function Home() {
   // サイドバー幅のドラッグ調整
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
+    resizeCleanup.current?.(); // 既存ドラッグが残っていれば先に終了（二重登録防止）
     const prevUserSelect = document.body.style.userSelect; // 既存値を保存して復元
     // mousemoveごとのsetStateを1フレーム1回に間引く（再レンダリング多発を防ぐ）
     let raf = 0;
