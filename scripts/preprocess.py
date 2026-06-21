@@ -257,6 +257,7 @@ def build_bus_stops():
     feats = []
     path = os.path.join(RAW, 'ToeiBus-GTFS.zip')
     if not os.path.exists(path):
+        print('bus_stops skip: data-raw/ToeiBus-GTFS.zip が見つかりません（再現手順は docs/DATA.md）')
         return feats
     try:
         with zipfile.ZipFile(path) as z, z.open('stops.txt') as f:
