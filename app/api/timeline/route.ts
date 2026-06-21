@@ -3,6 +3,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { NextRequest, NextResponse } from "next/server";
 import type { UserAttrs, TimelinePhase, Lang } from "@/lib/types";
+import { LANG_CODES } from "@/lib/types";
 
 // 生成する避難タイムラインのスキーマ（内閣府の警戒レベルに沿った局面別の行動）
 // 長さ制約で空配列・過剰件数の不正形を弾き、UIが空になるのを防ぐ（不正ならparse失敗→fallback）
@@ -55,7 +56,7 @@ const InputSchema = z.object({
   destName: z.string().max(100).optional().catch(undefined),
   hazardLabel: z.string().max(40).optional().catch(undefined),
   distanceKm: z.number().finite().optional().catch(undefined), // Infinity/NaNはundefinedへ
-  language: z.enum(["ja-easy", "ja", "en", "zh"]).optional().catch(undefined),
+  language: z.enum(LANG_CODES).optional().catch(undefined),
 });
 
 // 出力言語の指示（LLM版のみ。fallbackは日本語固定）。

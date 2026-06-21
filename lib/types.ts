@@ -94,7 +94,9 @@ export interface ScoreFactor {
 }
 
 // 回答の出力言語（やさしい日本語・日本語・英語・中文）
-export type Lang = "ja-easy" | "ja" | "en" | "zh";
+// 言語コードの単一ソース。Lang型・Zod schema・BCP47・LANGS はすべてこれに従う
+export const LANG_CODES = ["ja-easy", "ja", "en", "zh"] as const;
+export type Lang = (typeof LANG_CODES)[number];
 
 export const LANGS: { code: Lang; label: string }[] = [
   { code: "ja", label: "日本語" },

@@ -179,7 +179,15 @@ export default function Home() {
     });
     // アンマウント時は音声認識・読み上げを停止（マイク取得や読み上げの継続を防ぐ）
     return () => {
-      recognitionRef.current?.stop();
+      const rec = recognitionRef.current;
+      if (rec) {
+        // ハンドラを外してからstop（stop後のonendでアンマウント後setStateが走らないように）
+        rec.onresult = null;
+        rec.onend = null;
+        rec.onerror = null;
+        rec.stop();
+      }
+      recognitionRef.current = null;
       stopSpeaking();
     };
   }, []);
@@ -538,6 +546,10 @@ export default function Home() {
             value={lang}
             onChange={(e) => {
               setLang(e.target.value as Lang);
+              // 録音中なら停止（認識言語のズレ防止）
+              recognitionRef.current?.stop();
+              recognitionRef.current = null;
+              setListening(false);
               // 既存タイムラインは別言語のため破棄し、進行中の生成・読み上げも無効化
               timelineReqId.current++;
               setTimeline(null);
