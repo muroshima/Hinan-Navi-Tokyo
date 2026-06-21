@@ -122,6 +122,14 @@ export interface LifelineProps {
 }
 export type LifelineFeature = GeoJSON.Feature<GeoJSON.Point, LifelineProps>;
 
+// バス停（都営バスGTFS）
+export interface BusStopProps {
+  id: string;
+  name: string;
+  wheelchair: boolean; // 車椅子対応(GTFS wheelchair_boarding=1)
+}
+export type BusStopFeature = GeoJSON.Feature<GeoJSON.Point, BusStopProps>;
+
 // マイ・タイムライン（局面別の避難行動。/api/timeline が生成）
 export interface TimelinePhase {
   phase: string; // 局面名（例: 避難開始）

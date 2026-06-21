@@ -5,7 +5,7 @@
 - バリアフリー列・災害種別列を bool に正規化
 出力: public/data/{evacuation.geojson, toilets.geojson}
 """
-import csv, json, os
+import csv, io, json, os, zipfile
 
 RAW = os.path.join(os.path.dirname(__file__), '..', 'data-raw')
 OUT = os.path.join(os.path.dirname(__file__), '..', 'public', 'data')
@@ -250,6 +250,38 @@ def build_lifeline():
     return feats
 
 
+def build_bus_stops():
+    """都営バスGTFS-JPのstops.txtからバス停（location_type=1=停留所の親）を抽出。
+    wheelchair_boarding=1（車椅子対応）も保持。data-raw/ToeiBus-GTFS.zip を読む。"""
+    feats = []
+    path = os.path.join(RAW, 'ToeiBus-GTFS.zip')
+    if not os.path.exists(path):
+        return feats
+    try:
+        with zipfile.ZipFile(path) as z, z.open('stops.txt') as f:
+            r = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
+            for row in r:
+                # location_type=1 は停留所(親)。0=のりば(密集するため代表点の1を採用)
+                if (row.get('location_type') or '').strip() != '1':
+                    continue
+                lat, lon = to_float(row.get('stop_lat')), to_float(row.get('stop_lon'))
+                name = (row.get('stop_name') or '').strip()
+                if not name or lat is None or lon is None:
+                    continue
+                feats.append({
+                    'type': 'Feature',
+                    'geometry': {'type': 'Point', 'coordinates': [lon, lat]},
+                    'properties': {
+                        'id': f"bs-{(row.get('stop_id') or '').strip()}",
+                        'name': name,
+                        'wheelchair': (row.get('wheelchair_boarding') or '').strip() == '1',
+                    },
+                })
+    except Exception as e:
+        print('bus_stops skip:', e)
+    return feats
+
+
 def dump(name, feats):
     fc = {'type': 'FeatureCollection', 'features': feats}
     with open(os.path.join(OUT, name), 'w', encoding='utf-8') as f:
@@ -297,6 +329,16 @@ SOURCES = [
         'attribution': '東京都オープンデータ（CC BY 4.0）',
     },
     {
+        'file': 'bus_stops.geojson',
+        'datasets': ['都営バス GTFS-JP（stops.txt 停留所）'],
+        'provider': '東京都交通局 / 公共交通オープンデータセンター(ODPT)',
+        'license': 'CC BY 4.0',
+        'source_url': 'https://ckan.odpt.org/dataset/b_bus_gtfs_jp-toei',
+        'retrieved': '2026-06',
+        'processing': 'GTFS-JP zipのstops.txtからlocation_type=1の停留所を抽出。車椅子対応(wheelchair_boarding=1)を保持',
+        'attribution': '都営バス GTFS-JP（東京都交通局）／公共交通オープンデータセンター（CC BY 4.0）',
+    },
+    {
         'file': '(高齢化率の付与に使用)',
         'datasets': ['住民基本台帳による東京都の世帯と人口(町丁別・年齢別) 第3-1表 区市町村,年齢3区分別人口'],
         'provider': '東京都',
@@ -328,5 +370,6 @@ if __name__ == '__main__':
     counts['evacuation.geojson'] = dump('evacuation.geojson', build_evacuation())
     counts['toilets.geojson'] = dump('toilets.geojson', build_toilets())
     counts['lifeline.geojson'] = dump('lifeline.geojson', build_lifeline())
+    counts['bus_stops.geojson'] = dump('bus_stops.geojson', build_bus_stops())
     write_metadata(counts)
     print('done ->', os.path.relpath(OUT))

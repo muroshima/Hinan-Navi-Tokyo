@@ -12,6 +12,7 @@ import type {
   Lang,
   LifelineFeature,
   LifelineKind,
+  BusStopFeature,
 } from "@/lib/types";
 import { DEFAULT_ATTRS, LANGS, LANG_CODES } from "@/lib/types";
 import { QRCodeSVG } from "qrcode.react";
@@ -174,6 +175,8 @@ export default function Home() {
   const toggleLifeline = (k: LifelineKind) =>
     setLifelineShow((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
   const [buildings3d, setBuildings3d] = useState(false); // PLATEAU建物3D（垂直避難）
+  const [busStops, setBusStops] = useState<BusStopFeature[]>([]); // 都営バス停
+  const [showBusStops, setShowBusStops] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [originLabel, setOriginLabel] = useState("自動取得 / 東京駅");
   const [placeInput, setPlaceInput] = useState("");
@@ -369,6 +372,14 @@ export default function Home() {
       .catch((e) => {
         console.warn("lifeline load failed", e);
         setLifeline([]);
+      });
+    // 都営バス停（GTFS）
+    fetch("/data/bus_stops.geojson")
+      .then((r) => r.json())
+      .then((fc: { features?: BusStopFeature[] }) => setBusStops(fc.features ?? []))
+      .catch((e) => {
+        console.warn("bus_stops load failed", e);
+        setBusStops([]);
       });
   }, []);
 
@@ -864,9 +875,21 @@ export default function Home() {
                 </button>
               );
             })}
+            <button
+              onClick={() => setShowBusStops((v) => !v)}
+              aria-pressed={showBusStops}
+              className={`rounded-full border px-2 py-1 text-xs ${
+                showBusStops
+                  ? "border-purple-500 bg-purple-100 text-purple-800"
+                  : "border-gray-300 text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              {showBusStops ? "● " : "○ "}
+              🚌 バス停
+            </button>
           </div>
           <p className="mt-1 text-[10px] text-gray-400">
-            出典: 東京都オープンデータ（災害時給水ステーション／FREE Wi-Fi & TOKYO・CC BY 4.0）
+            出典: 東京都オープンデータ（災害時給水ステーション／FREE Wi-Fi & TOKYO）・都営バスGTFS（東京都交通局／ODPT）— CC BY 4.0。バス停は拡大で表示
           </p>
         </div>
 
@@ -1088,6 +1111,8 @@ export default function Home() {
           lifeline={lifeline}
           lifelineShow={lifelineShow}
           buildings3d={buildings3d}
+          busStops={busStops}
+          showBusStops={showBusStops}
         />
       </main>
     </div>
