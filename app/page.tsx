@@ -85,17 +85,25 @@ function ScoreBreakdown({ r }: { r: RankedEvac }) {
   );
 }
 
-// スコア内訳の開閉カード。初期展開(defaultOpen)を持ちつつ、
-// onToggleでユーザー操作をstateに同期するため再レンダーで開閉が崩れない
+// スコア内訳の開閉カード。openはstateで完全制御し、
+// ユーザー未操作の間はdefaultOpenの変化(新1位など)に追従して自動展開する。
+// summaryのonClickでユーザー操作のみを捕捉する(onToggleだとプログラム変更も発火し誤検知するため)
 function CardBreakdown({ r, defaultOpen }: { r: RankedEvac; defaultOpen: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
+  const touched = useRef(false);
+  useEffect(() => {
+    if (!touched.current) setOpen(defaultOpen);
+  }, [defaultOpen]);
   return (
-    <details
-      open={open}
-      onToggle={(e) => setOpen(e.currentTarget.open)}
-      className="mt-1.5"
-    >
-      <summary className="cursor-pointer list-none text-[11px] font-bold text-gray-500 hover:text-gray-700">
+    <details open={open} className="mt-1.5">
+      <summary
+        onClick={(e) => {
+          e.preventDefault(); // ネイティブtoggleを止めてstateで制御
+          touched.current = true; // 以降はユーザー操作を優先（defaultOpen追従を停止）
+          setOpen((o) => !o);
+        }}
+        className="cursor-pointer list-none text-[11px] font-bold text-gray-500 hover:text-gray-700"
+      >
         {open ? "▾" : "▸"} なぜこの点数？（内訳を{open ? "表示中" : "見る"}）
       </summary>
       <ScoreBreakdown r={r} />
