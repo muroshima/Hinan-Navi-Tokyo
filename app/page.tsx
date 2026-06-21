@@ -192,10 +192,23 @@ export default function Home() {
     };
   }, []);
 
+  // 音声認識を確実に停止し、ref/stateを同期クリア（onend待ちに依存しない）
+  function stopRecognition() {
+    const rec = recognitionRef.current;
+    if (rec) {
+      rec.onresult = null;
+      rec.onend = null;
+      rec.onerror = null;
+      rec.stop();
+    }
+    recognitionRef.current = null;
+    setListening(false);
+  }
+
   // 音声入力の開始/停止（Web Speech API・対応ブラウザのみ）
   function toggleVoiceInput() {
     if (listening) {
-      recognitionRef.current?.stop();
+      stopRecognition();
       return;
     }
     const rec = createRecognition(lang);
@@ -204,19 +217,33 @@ export default function Home() {
       const t = e.results[0]?.[0]?.transcript ?? "";
       if (t) setText((prev) => (prev ? `${prev} ${t}` : t));
     };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
+    // 自然終了・エラー終了でも state と ref を一貫してクリア
+    rec.onend = () => {
+      setListening(false);
+      recognitionRef.current = null;
+    };
+    rec.onerror = () => {
+      setListening(false);
+      recognitionRef.current = null;
+    };
     recognitionRef.current = rec;
     setListening(true);
-    rec.start();
+    try {
+      rec.start();
+    } catch {
+      // start()が例外を投げ得る（権限・多重開始等）。失敗時はロールバック
+      recognitionRef.current = null;
+      setListening(false);
+    }
   }
 
-  // タイムラインを読み上げる（SpeechSynthesis）
+  // タイムラインを読み上げる（SpeechSynthesis）。区切りは言語に応じて切替
   function speakTimeline() {
     if (!timeline) return;
+    const sep = lang === "en" ? ". " : "。";
     const text = timeline
-      .map((p) => `${p.phase}。${p.level}。${p.actions.join("。")}`)
-      .join("。");
+      .map((p) => `${p.phase}${sep}${p.level}${sep}${p.actions.join(sep)}`)
+      .join(sep);
     speak(text, lang);
   }
 
@@ -547,9 +574,7 @@ export default function Home() {
             onChange={(e) => {
               setLang(e.target.value as Lang);
               // 録音中なら停止（認識言語のズレ防止）
-              recognitionRef.current?.stop();
-              recognitionRef.current = null;
-              setListening(false);
+              stopRecognition();
               // 既存タイムラインは別言語のため破棄し、進行中の生成・読み上げも無効化
               timelineReqId.current++;
               setTimeline(null);
