@@ -14,7 +14,27 @@
 
 - 出典カタログ: 東京都オープンデータカタログサイト https://catalog.data.metro.tokyo.lg.jp/
 - 東京都オープンデータの多くは **CC BY 4.0**（出典の表示が条件）。本アプリは「東京都オープンデータ（CC BY 4.0）」と表示します。
-- ※ 元CSVの再取得手順・配置（`data-raw/`）は別Issue（データ再現手順の文書化）で整備予定。
+- ※ 元CSVの再取得手順・配置（`data-raw/`）は後述「[データの再現手順](#データの再現手順data-raw-の配置)」を参照。
+
+## データの再現手順（`data-raw/` の配置）
+
+同梱の `public/data/*.geojson` は東京都オープンデータの元CSVから `scripts/preprocess.py` で生成しています。**元CSVは再配布条件の確認を避けるため未コミット**（`.gitignore`）です。再生成するには、以下を東京都オープンデータから取得し、`data-raw/` に**指定のファイル名**で配置してください（CSVは Shift-JIS(CP932) が多く、`preprocess.py` がエンコードを自動判定します）。
+
+| 配置パス（リネーム後） | データセット | 取得元 |
+|---|---|---|
+| `data-raw/evacuation_center.csv` | 避難所一覧 | `https://www.opendata.metro.tokyo.lg.jp/soumu/130001_evacuation_center.csv` |
+| `data-raw/wc_barrierfree.csv` | 車椅子使用者対応トイレ バリアフリー設備情報 | `https://www.opendata.metro.tokyo.lg.jp/fukushi/3_koukyoshisetsu_barieer_free_wc.csv`（ファイル名の `barieer` は東京都側の綴り原文ママ・実在確認済み）。カタログ: https://catalog.data.metro.tokyo.lg.jp/dataset/t000010d0000000095 |
+| `data-raw/evacuation_area.csv` | 避難場所一覧（災害種別の適否フラグ付き） | 東京都オープンデータカタログ「避難所・避難場所一覧データ」 https://catalog.data.metro.tokyo.lg.jp/dataset/t000003d0000000093 から避難場所一覧のCSVを取得しリネーム |
+| `data-raw/city_age.csv` | 住民基本台帳 年齢別人口（第3-1表 区市町村・年齢3区分別） | 東京都の統計 住民基本台帳 https://www.toukei.metro.tokyo.lg.jp/juukiy/ から該当表のCSVを取得しリネーム |
+
+```bash
+# data-raw/ に上記4ファイルを配置後
+python3 scripts/preprocess.py
+# → public/data/{evacuation.geojson, toilets.geojson, metadata.json} を生成
+```
+
+- 直URLは時点により変わる場合があります。リンク切れ時はカタログ（`catalog.data.metro.tokyo.lg.jp`）でデータセット名を検索してください。
+- いずれも東京都オープンデータ（**CC BY 4.0**）。利用時は出典表示が条件です。各データセットの最新の利用規約を必ず確認してください。
 
 ## 2. 地図タイル・地形・フォント（クライアントで読み込み）
 
