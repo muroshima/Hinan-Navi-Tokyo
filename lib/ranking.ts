@@ -77,7 +77,8 @@ function scoreOne(
   add("基準点", 100, "base");
 
   const d = distanceKm(origin, feature.geometry.coordinates);
-  add(`距離 ${d.toFixed(1)}km`, -d * 8, "distance"); // 距離ペナルティ
+  // ラベルの距離表示はdeltaとの整合のため小数2桁（delta=-d*8の生値を丸めず保持）
+  add(`距離 ${d.toFixed(2)}km`, -d * 8, "distance"); // 距離ペナルティ
 
   // 災害種別の適否(避難場所のみ)
   if (attrs.hazard && p.hazards) {

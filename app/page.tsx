@@ -50,15 +50,17 @@ function gmapsWalkingUrl(origin: [number, number], dest: [number, number]): stri
 // スコアの加減点内訳をバーで可視化（説明可能性）。正=緑/負=赤
 function ScoreBreakdown({ r }: { r: RankedEvac }) {
   const maxAbs = Math.max(1, ...r.factors.map((f) => Math.abs(f.delta)));
+  // 合計はscoreではなくfactorsの和から算出（score=Σdeltaの一貫性をUIでも担保）
+  const total = r.factors.reduce((s, f) => s + f.delta, 0);
   return (
     <div className="mt-1 rounded-md bg-gray-50 p-2">
       <div className="mb-1 flex items-center justify-between text-[11px] font-bold text-gray-600">
         <span>点数内訳</span>
-        <span className="tabular-nums">合計 {Math.round(r.score)}点</span>
+        <span className="tabular-nums">合計 {Math.round(total)}点</span>
       </div>
       <div className="flex flex-col gap-0.5">
-        {r.factors.map((f, i) => (
-          <div key={i} className="flex items-center gap-1 text-[11px]">
+        {r.factors.map((f) => (
+          <div key={`${f.category}-${f.label}`} className="flex items-center gap-1 text-[11px]">
             <span className="w-32 shrink-0 truncate text-gray-600" title={f.label}>
               {f.label}
             </span>
