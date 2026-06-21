@@ -599,6 +599,15 @@ export default function Home() {
     }
   }
 
+  // 現在地が変わったら共有URLは陳腐化するため自動でクリア（GPS/地名設定/自動ジオコード等）
+  useEffect(() => {
+    // setStateはマイクロタスクに逃がす（effect内の同期setStateを避ける）
+    Promise.resolve().then(() => {
+      setShareUrl(null);
+      setCopied(false);
+    });
+  }, [origin]);
+
   // 共有URLで開かれた場合は状態を復元して自動検索
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
