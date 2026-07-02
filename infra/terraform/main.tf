@@ -21,6 +21,8 @@ locals {
     "artifactregistry.googleapis.com",
     "cloudbuild.googleapis.com",
     "secretmanager.googleapis.com",
+    "iam.googleapis.com",                 # SA作成に必要
+    "cloudresourcemanager.googleapis.com", # project IAM操作に必要
   ]
   repo_id = "app"
 }
@@ -45,6 +47,7 @@ resource "google_artifact_registry_repository" "app" {
 resource "google_service_account" "run" {
   account_id   = "hinan-navi-run"
   display_name = "Hinan Navi Cloud Run SA"
+  depends_on   = [google_project_service.apis]
 }
 
 # Cloud Run の Service Agent が Artifact Registry からイメージをpullできるように付与

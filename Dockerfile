@@ -16,8 +16,7 @@ RUN npm run build
 FROM node:20-slim AS run
 WORKDIR /app
 ENV NODE_ENV=production
-# Cloud Run は $PORT(既定8080)で待受。standaloneのserver.jsはPORTを尊重する
-ENV PORT=8080
+# PORTは固定せず、Cloud Runが注入する$PORT(既定8080)をserver.jsが尊重する
 # 非rootで実行
 RUN groupadd -r nodejs && useradd -r -g nodejs nextjs
 COPY --from=build /app/public ./public
