@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""東京都オープンデータ等(避難所/避難場所/車椅子対応トイレ/給水・Wi-Fi/都営バス停)を
-統一スキーマGeoJSONに変換。
+"""東京都オープンデータ等(避難所/避難場所/車椅子対応トイレ/給水・Wi-Fi/都営バス停/
+「だれでも東京」バリアフリー施設)を統一スキーマGeoJSONに変換。
 - エンコードはファイルごとに自動判定(utf-8-sig / cp932 / utf-8)
 - 先頭ゴミ空行を除去し、本物のヘッダ行を検出
 - バリアフリー列・災害種別列を bool に正規化
-出力: public/data/{evacuation, toilets, lifeline, bus_stops, accessible_facilities}.geojson および metadata.json
+- 出力: public/data/{evacuation, toilets, lifeline, bus_stops, accessible_facilities}.geojson および metadata.json
 """
 import csv, io, json, os, zipfile
 
