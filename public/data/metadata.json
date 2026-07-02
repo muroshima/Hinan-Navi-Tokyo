@@ -78,7 +78,7 @@
       "source_url": "https://catalog.data.metro.tokyo.lg.jp/dataset/t000010d0000000151",
       "retrieved": "2026-07",
       "processing": "XLSX(番号/施設名称/所在地)を読み込み、座標が無いため所在地を国土地理院 住所検索APIでジオコーディングしてGeoJSON化。ジオコード結果は data/temp_stay_geocode.json にキャッシュ",
-      "attribution": "「都立の一時滞在施設」（東京都総務局）（CC BY 4.0）／ジオコーディング: 国土地理院 地名検索API",
+      "attribution": "「都立の一時滞在施設」（東京都総務局）（CC BY 4.0）／ジオコーディング: 国土地理院 住所検索API",
       "record_count": 227
     },
     {
