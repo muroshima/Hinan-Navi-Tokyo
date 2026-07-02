@@ -70,6 +70,7 @@ interface Props {
   showAccessible?: boolean; // バリアフリー施設レイヤ表示
   tempStay?: TempStayFeature[]; // 帰宅困難者向け 都立一時滞在施設
   showTempStay?: boolean; // 一時滞在施設レイヤ表示
+  routeLine?: { coordinates: [number, number][]; flooded: boolean } | null; // 推奨避難所への徒歩経路(#38)
 }
 
 function emptyFC(): GeoJSON.FeatureCollection {
@@ -99,6 +100,7 @@ export default function MapView({
   showAccessible = false,
   tempStay = [],
   showTempStay = false,
+  routeLine = null,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -406,6 +408,20 @@ export default function MapView({
         });
       }
 
+      // 推奨避難所への徒歩経路(#38)。点(ranked)より下に線を敷く。浸水域通過は色で区別(琥珀/緑)
+      map.addSource("route", { type: "geojson", data: emptyFC() });
+      map.addLayer({
+        id: "route-line",
+        type: "line",
+        source: "route",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-width": 5,
+          "line-opacity": 0.8,
+          "line-color": ["case", ["==", ["get", "flooded"], true], "#f59e0b", "#16a34a"],
+        },
+      });
+
       map.addSource("ranked", { type: "geojson", data: emptyFC() });
       map.addLayer({
         id: "ranked-pts",
@@ -585,6 +601,28 @@ export default function MapView({
       map.setLayoutProperty("tempstay-pts", "visibility", showTempStay ? "visible" : "none");
     }
   }, [showTempStay, loaded]);
+
+  // 推奨避難所への徒歩経路(#38)の反映
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded) return;
+    const src = map.getSource("route") as maplibregl.GeoJSONSource | undefined;
+    if (!src) return;
+    if (!routeLine || routeLine.coordinates.length < 2) {
+      src.setData(emptyFC());
+      return;
+    }
+    src.setData({
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: routeLine.coordinates },
+          properties: { flooded: routeLine.flooded },
+        },
+      ],
+    });
+  }, [routeLine, loaded]);
 
   // 3D地形(坂・起伏)の切替
   useEffect(() => {

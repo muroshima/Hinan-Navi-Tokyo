@@ -19,6 +19,7 @@ import type {
 import { DEFAULT_ATTRS, LANGS, LANG_CODES } from "@/lib/types";
 import { QRCodeSVG } from "qrcode.react";
 import { fallbackExtract, type FallbackAttrs } from "@/lib/triageFallback";
+import { pickSafestRoute, type FloodGrid, type AnalyzedRoute } from "@/lib/floodRoute";
 import {
   createRecognition,
   canRecognize,
@@ -164,6 +165,13 @@ export default function Home() {
   const [all, setAll] = useState<EvacFeature[]>([]);
   const [toiletIdx, setToiletIdx] = useState<ToiletIndex>(EMPTY_TOILET_IDX);
   const [routeInfo, setRouteInfo] = useState<Record<string, { m: number; min: number }>>({});
+  // 浸水回避ルーティング(#38): 浸水グリッドと、推奨避難所への経路解析
+  const [floodGrid, setFloodGrid] = useState<FloodGrid | null>(null);
+  const [routeAdvisory, setRouteAdvisory] = useState<{
+    recommended: AnalyzedRoute;
+    shortest: AnalyzedRoute;
+    avoidedFlood: boolean; // 推奨(安全)経路が最短経路より浸水を避けられたか
+  } | null>(null);
   const [origin, setOrigin] = useState<[number, number]>(TOKYO_STATION);
   const [text, setText] = useState("");
   const [submittedText, setSubmittedText] = useState(""); // 最後に検索に使った入力文（共有URL用）
@@ -407,6 +415,14 @@ export default function Home() {
         console.warn("temp_stay_facilities load failed", e);
         setTempStay([]);
       });
+    // 浸水回避ルーティング用の浸水グリッド(#38)
+    fetch("/data/flood_grid.json")
+      .then((r) => r.json())
+      .then((g: FloodGrid) => setFloodGrid(g && g.cells ? g : null))
+      .catch((e) => {
+        console.warn("flood_grid load failed", e);
+        setFloodGrid(null);
+      });
   }, []);
 
   // 現在地（取れなければ東京駅）。共有URLに有効な座標がある場合はGPSで上書きしない
@@ -514,6 +530,54 @@ export default function Home() {
       aborted = true;
     };
   }, [ranked, origin]);
+
+  // 浸水回避ルーティング(#38): 推奨避難所への徒歩経路(+代替)を取得し、浸水グリッドで曝露を解析。
+  // 代替の中から浸水を避けられる経路を推奨し、最短経路との差を提示する。
+  useEffect(() => {
+    let aborted = false;
+    const top = ranked[0];
+    (async () => {
+      if (!top) {
+        if (!aborted) setRouteAdvisory(null);
+        return;
+      }
+      try {
+        const res = await fetch("/api/walkroute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ origin, dest: top.feature.geometry.coordinates }),
+        });
+        if (!res.ok) {
+          if (!aborted) setRouteAdvisory(null);
+          return;
+        }
+        const { routes } = await res.json();
+        if (aborted || !Array.isArray(routes) || routes.length === 0) {
+          if (!aborted) setRouteAdvisory(null);
+          return;
+        }
+        const { recommended } = pickSafestRoute(routes, floodGrid);
+        // 最短経路(距離最小)を別途特定し、推奨(安全)経路と比較
+        const shortest = [...routes]
+          .map((r) => ({
+            ...r,
+            flood: floodGrid
+              ? pickSafestRoute([r], floodGrid).recommended!.flood
+              : { maxDepthM: 0, floodedPoints: 0, totalPoints: r.coordinates.length, floodedRatio: 0 },
+          }))
+          .sort((a, b) => (a.distM ?? Infinity) - (b.distM ?? Infinity))[0] as AnalyzedRoute;
+        if (aborted || !recommended) return;
+        const avoidedFlood =
+          shortest.flood.maxDepthM > 0 && recommended.flood.maxDepthM < shortest.flood.maxDepthM;
+        setRouteAdvisory({ recommended, shortest, avoidedFlood });
+      } catch {
+        if (!aborted) setRouteAdvisory(null);
+      }
+    })();
+    return () => {
+      aborted = true;
+    };
+  }, [ranked, origin, floodGrid]);
 
   // 複合ニーズ（同時最適している配慮要件）のラベル
   const activeNeeds = useMemo(() => (submitted ? activeAttrLabels(attrs) : []), [submitted, attrs]);
@@ -965,6 +1029,37 @@ export default function Home() {
           </div>
         )}
 
+        {/* 浸水回避ルーティング(#38): 推奨避難所への経路の浸水曝露アドバイザリ */}
+        {routeAdvisory && (
+          <div
+            className={`rounded-lg border p-3 text-sm ${
+              routeAdvisory.recommended.flood.maxDepthM > 0
+                ? "border-amber-300 bg-amber-50 text-amber-900"
+                : "border-green-300 bg-green-50 text-green-900"
+            }`}
+          >
+            <div className="text-xs font-bold">🧭 避難経路の浸水チェック（推奨避難所まで）</div>
+            {routeAdvisory.recommended.flood.maxDepthM > 0 ? (
+              <p className="mt-1">
+                この経路は<b>浸水想定域を通過</b>します（想定最大浸水深{" "}
+                <b>約{routeAdvisory.recommended.flood.maxDepthM}m</b>）。冠水時は迂回・垂直避難も検討してください。
+              </p>
+            ) : (
+              <p className="mt-1">この経路は<b>浸水想定域を通りません</b>（想定区域図ベース）。</p>
+            )}
+            {routeAdvisory.avoidedFlood && (
+              <p className="mt-1 text-[12px]">
+                ✅ 最短経路（最大浸水深 約{routeAdvisory.shortest.flood.maxDepthM}m）より
+                <b>浸水を避けられる経路</b>を地図に表示しています。
+              </p>
+            )}
+            <p className="mt-1 text-[10px] text-gray-500">
+              地図の{routeAdvisory.recommended.flood.maxDepthM > 0 ? "琥珀" : "緑"}の線が経路。出典: 東京都「浸水予想区域図」（CC
+              BY 4.0）を粗いグリッドに集約。OSRMの代替経路から浸水曝露が最小のものを選択（経路自体の再計算は行いません）
+            </p>
+          </div>
+        )}
+
         {/* マイ・タイムライン（属性×災害×推奨避難先 → 時系列の避難行動） */}
         {submitted && ranked.length > 0 && (
           <div className="rounded-lg border border-sky-300 bg-sky-50 p-3">
@@ -1168,6 +1263,14 @@ export default function Home() {
           showAccessible={showAccessible}
           tempStay={tempStay}
           showTempStay={showTempStay}
+          routeLine={
+            routeAdvisory
+              ? {
+                  coordinates: routeAdvisory.recommended.coordinates,
+                  flooded: routeAdvisory.recommended.flood.maxDepthM > 0,
+                }
+              : null
+          }
         />
       </main>
     </div>

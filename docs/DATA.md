@@ -14,6 +14,7 @@
 | `public/data/bus_stops.geojson` | 都営バス GTFS-JP（停留所） | 東京都交通局／公共交通オープンデータセンター(ODPT) | CC BY 4.0 | 2026-06 | GTFS-JP zipの`stops.txt`から`location_type=1`の停留所を抽出してGeoJSON化。車椅子対応(`wheelchair_boarding=1`)を保持 |
 | `public/data/accessible_facilities.geojson` | 宿泊施設等の施設情報ポータルサイト「だれでも東京」（宿泊/買い物/レジャー/飲食/交通/公園/公共施設） | 東京都(デジタルサービス局) | CC BY 4.0 | 2026-07 | カテゴリ別CSV(CP932/UTF-8)を統合GeoJSON化。避難経路上で立ち寄れるバリアフリー施設として、だれでもトイレ/オストメイト/EV/スロープ/点字ブロック/車いす専用駐車場/おむつ交換台/補助犬専用トイレの有無をbool化。緯度経度の取り違え行は入替で救済し東京域外は除外 |
 | `public/data/temp_stay_facilities.geojson` | 都立の一時滞在施設（帰宅困難者の一時待機施設・約227件） | 東京都(総務局) | CC BY 4.0 | 2026-07 | XLSX(番号/施設名称/所在地)を読み込み、**座標が無いため所在地を国土地理院 住所検索APIでジオコーディング**してGeoJSON化。結果は`data/temp_stay_geocode.json`にキャッシュ（住所→[lon,lat]、再実行はオフライン・決定論的） |
+| `public/data/flood_grid.json` | 浸水予想区域図（流域別 浸水深・地盤高データ・R3/R4） | 東京都(建設局) | CC BY 4.0 | 2026-07 | 17流域の密な点グリッドCSV(計100MB超)を**約278m(0.0025°)グリッドに集約**（セル→[最大浸水深, 代表地盤高]）。浸水回避ルーティング(#38)で経路の浸水曝露判定に使用。`scripts/flood_grid.py`で生成（約2.5万セル/約620KB） |
 | （高齢化率・町丁目粒度） | 令和2年国勢調査 小地域集計 第3表 年齢別人口(東京都)＋小地域境界(統計GIS) | 総務省統計局(e-Stat) | 政府統計(出典明示で自由利用) | 2026-07 | BigQuery GISで避難所点×小地域ポリゴンの`ST_CONTAINS`空間結合→`KEY_CODE`で年齢結合し65歳以上/総数を算出（`scripts/aging_bq.sh`→`data/chome_aging.json`→`evacuation.geojson`） |
 | （高齢化率・市区町村fallback） | 住民基本台帳による東京都の世帯と人口（町丁別・年齢別）第3-1表 区市町村・年齢3区分別人口 | 東京都 | CC BY 4.0（東京都オープンデータ利用規約準拠） | 2026-06 | 65歳以上比から市区町村別高齢化率を算出。町丁目粒度が取れない避難所(島嶼等)のfallback |
 
@@ -65,6 +66,18 @@ python3 scripts/preprocess.py
 - 秘匿地域（`X`）や境界外（島嶼等）で町丁目値が取れない避難所は、市区町村fallback（住民基本台帳）を使用（`agingLevel` で区別）。
 - 出典表示: 「令和2年国勢調査」（総務省統計局）を加工。
 
+### 浸水回避ルーティングの浸水グリッド（#38）
+
+推奨避難所への徒歩経路が**浸水想定域を通過するか**を判定するための前処理バッチ。
+
+```bash
+scripts/flood_grid.py   # 17流域の浸水深CSVを自動DL(data-raw/flood/にキャッシュ)→ public/data/flood_grid.json を生成
+```
+
+- 東京都「浸水予想区域図」の流域別 浸水深・地盤高CSV（計100MB超）を約278mグリッドに集約（セル→最大浸水深・代表地盤高）。
+- OSRMは重み付けルーティング不可のため、経路の**再計算はせず**、複数の代替経路（`/api/walkroute` の `alternatives`）から**浸水曝露が最小の経路を選択**して地図に表示し、最大浸水深を提示する。
+- 出典表示: 東京都「浸水予想区域図」（東京都建設局）を加工（CC BY 4.0）。
+
 ## 2. 地図タイル・地形・フォント（クライアントで読み込み）
 
 | 用途 | 提供 | 出典/ライセンス | 留意点 |
@@ -81,6 +94,7 @@ python3 scripts/preprocess.py
 |---|---|---|---|
 | 住所・地名→座標（`/api/geocode`） | OpenStreetMap Nominatim 公開サーバ | データ © OpenStreetMap contributors（ODbL）。Nominatim **Usage Policy**（1req/s上限・重利用禁止） | User-Agent/連絡先付与済み。**IP単位レート制限 30回/分＋入力長200文字超は400拒否（#30）**。ただしNominatimの1req/sはサーバ全体制約のため、公開常用時は自前運用が必要 |
 | 徒歩経路距離（`/api/route`） | OSRM デモサーバ（router.project-osrm.org） | OSRM(BSD)。**デモサーバは本番利用不可・heavy use禁止** | 道路距離のみ採用し所要は徒歩速度で概算。**IP単位レート制限 30回/分（#30）**。公開常用時は自前/商用ルーティングへ差替が必要 |
+| 徒歩経路ジオメトリ（`/api/walkroute`・#38） | OSRM デモサーバ（route service・alternatives） | OSRM(BSD)。同上 | 推奨避難所への経路形状と代替経路を取得。OSRMは重み付け不可のため、**代替経路の中から浸水曝露が最小の経路を選ぶ**形で冠水回避（経路自体の再計算はしない）。IP単位レート制限 30回/分 |
 | 徒歩ルート表示（リンク誘導） | Google Maps | リンク誘導のみ（API不使用） | 規約上ほぼ問題なし |
 
 ## 4. LLM（任意）
