@@ -13,7 +13,7 @@
   scripts/flood_grid.py            # data-raw/flood/*.csv を集約(無ければ自動DL)
 出力: public/data/flood_grid.json  { "cell": 0.0025, "cells": { "iLat,iLon":[maxDepth, groundElev] } }
 """
-import csv, json, os, sys, urllib.request
+import csv, json, math, os, sys, urllib.request
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 RAWDIR = os.path.join(ROOT, 'data-raw', 'flood')
@@ -96,8 +96,11 @@ def main():
                 ground = num(row.get('地盤高'))
                 if lat is None or lon is None or depth is None:
                     continue
-                il = round(lat / CELL)
-                io = round(lon / CELL)
+                # クライアント(JS)の Math.round(0.5→切り上げ)と丸め規則を揃える。
+                # Pythonの round() は銀行丸め(0.5→偶数)でセル境界がズレるため使わない。
+                # 東京の緯度経度は正値なので floor(x+0.5) で Math.round と一致する。
+                il = math.floor(lat / CELL + 0.5)
+                io = math.floor(lon / CELL + 0.5)
                 key = f'{il},{io}'
                 cur = cells.get(key)
                 if cur is None:

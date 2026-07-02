@@ -19,7 +19,7 @@ import type {
 import { DEFAULT_ATTRS, LANGS, LANG_CODES } from "@/lib/types";
 import { QRCodeSVG } from "qrcode.react";
 import { fallbackExtract, type FallbackAttrs } from "@/lib/triageFallback";
-import { pickSafestRoute, type FloodGrid, type AnalyzedRoute } from "@/lib/floodRoute";
+import { pickSafestRoute, type FloodGrid, type RouteInfo } from "@/lib/floodRoute";
 import {
   createRecognition,
   canRecognize,
@@ -165,14 +165,9 @@ export default function Home() {
   const [all, setAll] = useState<EvacFeature[]>([]);
   const [toiletIdx, setToiletIdx] = useState<ToiletIndex>(EMPTY_TOILET_IDX);
   const [routeInfo, setRouteInfo] = useState<Record<string, { m: number; min: number }>>({});
-  // 浸水回避ルーティング(#38): 浸水グリッドと、推奨避難所への経路解析
+  // 浸水回避ルーティング(#38): 浸水グリッドと、推奨避難所へのOSRM経路(生)
   const [floodGrid, setFloodGrid] = useState<FloodGrid | null>(null);
-  const [routeAdvisory, setRouteAdvisory] = useState<{
-    recommended: AnalyzedRoute;
-    shortest: AnalyzedRoute;
-    avoidedFlood: boolean; // 推奨(安全)経路が最短経路より浸水を避けられたか
-    floodKnown: boolean; // 浸水グリッドが読み込めており浸水判定が有効か(偽=判定不能)
-  } | null>(null);
+  const [rawRoutes, setRawRoutes] = useState<RouteInfo[] | null>(null); // 推奨避難所へのOSRM経路(+代替)。取得はorigin/destのみに依存
   const [origin, setOrigin] = useState<[number, number]>(TOKYO_STATION);
   const [text, setText] = useState("");
   const [submittedText, setSubmittedText] = useState(""); // 最後に検索に使った入力文（共有URL用）
@@ -532,14 +527,14 @@ export default function Home() {
     };
   }, [ranked, origin]);
 
-  // 浸水回避ルーティング(#38): 推奨避難所への徒歩経路(+代替)を取得し、浸水グリッドで曝露を解析。
-  // 代替の中から浸水を避けられる経路を推奨し、最短経路との差を提示する。
+  // 浸水回避ルーティング(#38): 推奨避難所への徒歩経路(+代替)をOSRMから取得。
+  // 取得は origin と推奨避難所の座標にのみ依存(floodGrid読込では再取得しない=OSRM無駄打ち防止)。
   useEffect(() => {
     let aborted = false;
     const top = ranked[0];
     (async () => {
       if (!top) {
-        if (!aborted) setRouteAdvisory(null);
+        if (!aborted) setRawRoutes(null);
         return;
       }
       try {
@@ -549,32 +544,34 @@ export default function Home() {
           body: JSON.stringify({ origin, dest: top.feature.geometry.coordinates }),
         });
         if (!res.ok) {
-          if (!aborted) setRouteAdvisory(null);
+          if (!aborted) setRawRoutes(null);
           return;
         }
         const { routes } = await res.json();
-        if (aborted || !Array.isArray(routes) || routes.length === 0) {
-          if (!aborted) setRouteAdvisory(null);
-          return;
-        }
-        // 解析は1回だけ。rankedは各経路の浸水解析済み。最短経路はそこから距離で選ぶ(重複解析しない)
-        const { ranked: analyzedRoutes, recommended } = pickSafestRoute(routes, floodGrid);
-        const shortest = [...analyzedRoutes].sort(
-          (a, b) => (a.distM ?? Infinity) - (b.distM ?? Infinity)
-        )[0];
-        if (aborted || !recommended || !shortest) return;
-        const avoidedFlood =
-          shortest.flood.maxDepthM > 0 && recommended.flood.maxDepthM < shortest.flood.maxDepthM;
-        // floodGridが無いと浸水判定は偽陰性になり得るため、判定有効フラグを持たせUIで区別する
-        setRouteAdvisory({ recommended, shortest, avoidedFlood, floodKnown: floodGrid != null });
+        if (!aborted) setRawRoutes(Array.isArray(routes) && routes.length ? routes : null);
       } catch {
-        if (!aborted) setRouteAdvisory(null);
+        if (!aborted) setRawRoutes(null);
       }
     })();
     return () => {
       aborted = true;
     };
-  }, [ranked, origin, floodGrid]);
+  }, [ranked, origin]);
+
+  // 浸水曝露の解析は純粋な導出。取得済み経路 × floodGrid から算出(grid変更時は再取得せず再解析のみ)。
+  // 代替の中から浸水曝露が最小の経路を推奨し、最短経路との差・判定可否を提示する。
+  const routeAdvisory = useMemo(() => {
+    if (!rawRoutes) return null;
+    const { ranked: analyzedRoutes, recommended } = pickSafestRoute(rawRoutes, floodGrid);
+    const shortest = [...analyzedRoutes].sort(
+      (a, b) => (a.distM ?? Infinity) - (b.distM ?? Infinity)
+    )[0];
+    if (!recommended || !shortest) return null;
+    const avoidedFlood =
+      shortest.flood.maxDepthM > 0 && recommended.flood.maxDepthM < shortest.flood.maxDepthM;
+    // floodGridが無いと浸水判定は偽陰性になり得るため、判定有効フラグを持たせUIで区別する
+    return { recommended, shortest, avoidedFlood, floodKnown: floodGrid != null };
+  }, [rawRoutes, floodGrid]);
 
   // 複合ニーズ（同時最適している配慮要件）のラベル
   const activeNeeds = useMemo(() => (submitted ? activeAttrLabels(attrs) : []), [submitted, attrs]);
