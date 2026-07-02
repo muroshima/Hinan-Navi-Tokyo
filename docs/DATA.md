@@ -12,7 +12,7 @@
 | `public/data/toilets.geojson` | 車椅子使用者対応トイレのバリアフリー設備情報 | 東京都(福祉局) | CC BY 4.0 | 2026-06 | CSV(CP932)→GeoJSON、設備項目（おむつ替え/オストメイト/大型ベッド/非常用ボタン等）のbool化 |
 | `public/data/lifeline.geojson` | 災害時給水ステーション（給水拠点）一覧／公衆無線LAN（FREE Wi-Fi & TOKYO） | 東京都(水道局／デジタルサービス局) | CC BY 4.0 | 2026-06 | CSV(CP932)→統合GeoJSON。`kind`で給水(water)/Wi-Fi(wifi)を区別。給水は確保水量・種別も保持 |
 | `public/data/bus_stops.geojson` | 都営バス GTFS-JP（停留所） | 東京都交通局／公共交通オープンデータセンター(ODPT) | CC BY 4.0 | 2026-06 | GTFS-JP zipの`stops.txt`から`location_type=1`の停留所を抽出してGeoJSON化。車椅子対応(`wheelchair_boarding=1`)を保持 |
-| （高齢化率・町丁目粒度） | 令和2年国勢調査 小地域集計 第3表 年齢別人口(東京都)＋小地域境界(統計GIS) | 総務省統計局(e-Stat) | 政府統計(出典明示で自由利用) | 2026-07 | BigQuery GISで避難所点×小地域ポリゴンの`ST_CONTAINS`空間結合→`KEY_CODE`で年齢結合し65歳以上/総数を算出（`scripts/aging_bq.sh`→`public/data/chome_aging.json`→`evacuation.geojson`） |
+| （高齢化率・町丁目粒度） | 令和2年国勢調査 小地域集計 第3表 年齢別人口(東京都)＋小地域境界(統計GIS) | 総務省統計局(e-Stat) | 政府統計(出典明示で自由利用) | 2026-07 | BigQuery GISで避難所点×小地域ポリゴンの`ST_CONTAINS`空間結合→`KEY_CODE`で年齢結合し65歳以上/総数を算出（`scripts/aging_bq.sh`→`data/chome_aging.json`→`evacuation.geojson`） |
 | （高齢化率・市区町村fallback） | 住民基本台帳による東京都の世帯と人口（町丁別・年齢別）第3-1表 区市町村・年齢3区分別人口 | 東京都 | CC BY 4.0（東京都オープンデータ利用規約準拠） | 2026-06 | 65歳以上比から市区町村別高齢化率を算出。町丁目粒度が取れない避難所(島嶼等)のfallback |
 
 - 出典カタログ: 東京都オープンデータカタログサイト https://catalog.data.metro.tokyo.lg.jp/

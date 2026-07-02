@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # #6 高齢化率の町丁目粒度化: 国勢調査 小地域(町丁・字等) × 避難所の BigQuery GIS 空間結合(ST_CONTAINS)。
-# 前処理バッチ(ランタイムでは使わない)。結果を public/data/chome_aging.json に出力し、
+# 前処理バッチ(ランタイムでは使わない)。結果を data/chome_aging.json に出力し、
 # scripts/preprocess.py が evacuation.geojson の agingRate を町丁目粒度で上書きする。
 #
 # 前提:
