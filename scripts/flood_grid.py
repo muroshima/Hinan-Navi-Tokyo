@@ -53,8 +53,16 @@ def ensure_downloaded():
             continue
         print('downloading', url)
         req = urllib.request.Request(url, headers={'User-Agent': 'dare-hinan-navi/0.1 (hackathon)'})
-        with urllib.request.urlopen(req, timeout=120) as r, open(p, 'wb') as o:
-            o.write(r.read())
+        # 一時ファイルに書いてから os.replace でアトミックに確定。途中失敗の壊れたCSVを残さない
+        tmp = p + '.part'
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r, open(tmp, 'wb') as o:
+                o.write(r.read())
+            os.replace(tmp, p)
+        except BaseException:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            raise
 
 
 def open_csv(path):
