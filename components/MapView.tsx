@@ -408,27 +408,30 @@ export default function MapView({
         });
       }
 
-      // 推奨避難所への徒歩経路(#38)。点(ranked)より下に線を敷く。浸水域通過は色で区別(琥珀/緑)
+      // 推奨避難所への徒歩経路(#38)。全ポイントレイヤーより下(all-ptsの直下)に敷き、点を隠さない。
+      // 浸水域通過は色で区別(判定不能=灰/通過=琥珀/回避=緑)
       map.addSource("route", { type: "geojson", data: emptyFC() });
-      map.addLayer({
-        id: "route-line",
-        type: "line",
-        source: "route",
-        layout: { "line-cap": "round", "line-join": "round" },
-        paint: {
-          "line-width": 5,
-          "line-opacity": 0.8,
-          // 判定不能=灰, 浸水域通過=琥珀, 回避=緑
-          "line-color": [
-            "case",
-            ["==", ["get", "floodKnown"], false],
-            "#6b7280",
-            ["==", ["get", "flooded"], true],
-            "#f59e0b",
-            "#16a34a",
-          ],
+      map.addLayer(
+        {
+          id: "route-line",
+          type: "line",
+          source: "route",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-width": 5,
+            "line-opacity": 0.8,
+            "line-color": [
+              "case",
+              ["==", ["get", "floodKnown"], false],
+              "#6b7280",
+              ["==", ["get", "flooded"], true],
+              "#f59e0b",
+              "#16a34a",
+            ],
+          },
         },
-      });
+        "all-pts" // beforeId: all-pts の直下に挿入し、全ての点レイヤーより下に描画
+      );
 
       map.addSource("ranked", { type: "geojson", data: emptyFC() });
       map.addLayer({
