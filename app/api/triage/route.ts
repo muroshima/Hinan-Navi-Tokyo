@@ -100,11 +100,12 @@ export async function POST(req: NextRequest) {
   let text = "";
   try {
     const body = await req.json();
-    text = (body?.text ?? "").toString().slice(0, 1000);
+    // 受信直後に一度だけ正規化（trim→1000文字）。以降 cacheKey/Gemini/fallback で同一値を使い冪等性を担保
+    text = (body?.text ?? "").toString().trim().slice(0, 1000);
   } catch {
     return NextResponse.json({ error: "invalid body" }, { status: 400 });
   }
-  if (!text.trim()) {
+  if (!text) {
     return NextResponse.json({ error: "text is required" }, { status: 400 });
   }
 
@@ -114,8 +115,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ attrs: fallbackExtract(text), source: "fallback" });
   }
 
-  // 同一入力はキャッシュから返しGemini呼び出しを節約
-  const cacheKey = text.trim();
+  // 同一入力はキャッシュから返しGemini呼び出しを節約（textは受信時に正規化済み）
+  const cacheKey = text;
   const cached = triageCache.get(cacheKey);
   if (cached) {
     return NextResponse.json({ attrs: cached, source: "gemini" });

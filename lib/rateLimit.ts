@@ -121,7 +121,10 @@ export function enforceRateLimit(
 export function stableKey(obj: unknown): string {
   return JSON.stringify(obj, (_k, v) =>
     v && typeof v === "object" && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)))
+      ? Object.fromEntries(
+          // ロケール非依存・決定的な順序にするため文字列の大小比較でソート（localeCompareは避ける）
+          Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        )
       : v
   );
 }
