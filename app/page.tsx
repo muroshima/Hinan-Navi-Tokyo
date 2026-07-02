@@ -541,6 +541,8 @@ export default function Home() {
         setRawRoutes(null);
         return;
       }
+      // 取得開始時に前回経路をクリアし、新しい推奨避難所×古い経路の不整合表示を防ぐ
+      setRawRoutes(null);
       try {
         const res = await fetch("/api/walkroute", {
           method: "POST",
