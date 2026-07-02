@@ -47,7 +47,7 @@ python3 scripts/preprocess.py
 避難所の高齢化率を市区町村粒度から**町丁目（小地域）粒度**へ格上げする前処理バッチ（ランタイムでは使わない）。
 
 1. e-Stat（総務省統計局）から令和2年国勢調査 小地域（東京都）を取得:
-   - **境界 Shapefile**: 統計GIS `https://www.e-stat.go.jp/gis/statmap-search?type=2&toukeiCode=00200521&toukeiYear=2020&serveyId=A002005212020`（`code=13`・`format=shape`）→ `r2ka13.shp/.dbf/.shx/.prj`
+   - **境界 Shapefile**: 統計GIS 直ダウンロード `https://www.e-stat.go.jp/gis/statmap-search/data?dlserveyId=A002005212020&code=13&coordSys=1&format=shape&downloadType=5`（zipに `r2ka13.shp/.dbf/.shx/.prj` を同梱。※e-Stat のパラメータは綴りが `dlserveyId`＝原文ママの誤綴り。`serveyId`/`surveyId` では 404）
    - **年齢別人口 CSV**: 小地域集計 第3表（男女，年齢5歳階級別人口－町丁・字等・東京都）→ `h03_13.csv`（Shift-JIS）
 2. Terraform で BigQuery dataset `aging` を作成（`infra/terraform`）、`gcloud auth application-default login`
 3. 空間結合バッチを実行（`pyshp` と `bq` CLI が必要）。**避難所の `id` は `preprocess.py` の生成順で決まる**ため、元CSVを更新した場合は次の順で実行する:
