@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { enforceRateLimit } from "@/lib/rateLimit";
 
 // 出発地 → 複数候補 の徒歩実経路の距離・所要を OSRM table service でまとめて取得
 // body: { origin: [lng,lat], dests: [[lng,lat], ...] }
 export async function POST(req: NextRequest) {
+  // IP単位レート制限（OSRM公開デモサーバの酷使対策・#30）
+  const limited = enforceRateLimit("route", req, 30, 60_000);
+  if (limited) return limited;
+
   let origin: [number, number] | undefined;
   let dests: [number, number][] = [];
   try {

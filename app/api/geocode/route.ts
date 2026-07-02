@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { enforceRateLimit } from "@/lib/rateLimit";
 
 // 住所・地名 → 座標（OpenStreetMap Nominatim をサーバー経由で利用）
 export async function GET(req: NextRequest) {
+  // IP単位レート制限（Nominatim公開サーバの酷使対策・#30）
+  const limited = enforceRateLimit("geocode", req, 30, 60_000);
+  if (limited) return limited;
+
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
   if (!q) return NextResponse.json({ error: "q is required" }, { status: 400 });
+  // 過大入力は黙って切り詰めず明示的に弾く（切り詰めると別の住所を検索する誤動作になるため）
+  if (q.length > 200) {
+    return NextResponse.json({ error: "q is too long (max 200 chars)" }, { status: 400 });
+  }
 
   const url =
     "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=jp&q=" +

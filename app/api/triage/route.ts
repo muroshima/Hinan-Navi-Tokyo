@@ -3,6 +3,7 @@ import { z } from "zod";
 import { NextRequest, NextResponse } from "next/server";
 import { getGeminiClient, GEMINI_MODEL } from "@/lib/gemini";
 import { fallbackExtract } from "@/lib/triageFallback";
+import { enforceRateLimit, TtlCache } from "@/lib/rateLimit";
 
 // 抽出結果の検証用スキーマ（Geminiの構造化出力を最終検証して型安全にする）
 const AttrsSchema = z.object({
@@ -30,6 +31,10 @@ const AttrsSchema = z.object({
     "none",
   ]),
 });
+type Attrs = z.infer<typeof AttrsSchema>;
+
+// 同一入力の再問い合わせ（デモの再現操作・リロード）でGeminiを再度叩かないための簡易キャッシュ
+const triageCache = new TtlCache<Attrs>(500, 10 * 60_000);
 
 // Gemini の responseSchema（OpenAPI風）。required で全項目を明示し欠損を防ぐ
 const GEMINI_SCHEMA = {
@@ -88,14 +93,19 @@ hazardは: 水害/氾濫/洪水/浸水→flood、内水氾濫→inland_flood、�
 明示されていない属性は false、災害種別の言及がなければ hazard は none にしてください。推測しすぎないこと。`;
 
 export async function POST(req: NextRequest) {
+  // IP単位レート制限（Geminiコスト悪用対策・#30）。制限内ならnull
+  const limited = enforceRateLimit("triage", req, 15, 60_000);
+  if (limited) return limited;
+
   let text = "";
   try {
     const body = await req.json();
-    text = (body?.text ?? "").toString().slice(0, 1000);
+    // 受信直後に一度だけ正規化（trim→1000文字）。以降 cacheKey/Gemini/fallback で同一値を使い冪等性を担保
+    text = (body?.text ?? "").toString().trim().slice(0, 1000);
   } catch {
     return NextResponse.json({ error: "invalid body" }, { status: 400 });
   }
-  if (!text.trim()) {
+  if (!text) {
     return NextResponse.json({ error: "text is required" }, { status: 400 });
   }
 
@@ -103,6 +113,13 @@ export async function POST(req: NextRequest) {
   const ai = getGeminiClient();
   if (!ai) {
     return NextResponse.json({ attrs: fallbackExtract(text), source: "fallback" });
+  }
+
+  // 同一入力はキャッシュから返しGemini呼び出しを節約（textは受信時に正規化済み）
+  const cacheKey = text;
+  const cached = triageCache.get(cacheKey);
+  if (cached) {
+    return NextResponse.json({ attrs: cached, source: "gemini" });
   }
 
   try {
@@ -119,6 +136,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ attrs: fallbackExtract(text), source: "fallback" });
     }
+    triageCache.set(cacheKey, parsed.data);
     return NextResponse.json({ attrs: parsed.data, source: "gemini" });
   } catch (err) {
     // 失敗時もアプリを止めない。詳細はサーバーログのみ（内部情報をクライアントに出さない）

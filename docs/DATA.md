@@ -75,12 +75,14 @@ python3 scripts/preprocess.py
 
 | 用途 | 提供 | 出典/ライセンス | 留意点 |
 |---|---|---|---|
-| 住所・地名→座標（`/api/geocode`） | OpenStreetMap Nominatim 公開サーバ | データ © OpenStreetMap contributors（ODbL）。Nominatim **Usage Policy**（1req/s上限・重利用禁止） | User-Agent/連絡先付与済み。公開配信時はレート制限/自前運用が必要 |
-| 徒歩経路距離（`/api/route`） | OSRM デモサーバ（router.project-osrm.org） | OSRM(BSD)。**デモサーバは本番利用不可・heavy use禁止** | 道路距離のみ採用し所要は徒歩速度で概算。公開配信時は自前/商用ルーティングへ差替が必要 |
+| 住所・地名→座標（`/api/geocode`） | OpenStreetMap Nominatim 公開サーバ | データ © OpenStreetMap contributors（ODbL）。Nominatim **Usage Policy**（1req/s上限・重利用禁止） | User-Agent/連絡先付与済み。**IP単位レート制限 30回/分＋入力長200文字超は400拒否（#30）**。ただしNominatimの1req/sはサーバ全体制約のため、公開常用時は自前運用が必要 |
+| 徒歩経路距離（`/api/route`） | OSRM デモサーバ（router.project-osrm.org） | OSRM(BSD)。**デモサーバは本番利用不可・heavy use禁止** | 道路距離のみ採用し所要は徒歩速度で概算。**IP単位レート制限 30回/分（#30）**。公開常用時は自前/商用ルーティングへ差替が必要 |
 | 徒歩ルート表示（リンク誘導） | Google Maps | リンク誘導のみ（API不使用） | 規約上ほぼ問題なし |
 
 ## 4. LLM（任意）
-- `/api/triage` は LLM で自然文から配慮属性を抽出（モデルは実装参照）。**APIキー未設定でも語句一致のフォールバックで動作**。キーは `.env.local`（`.env.local.example` 参照）。
+- `/api/triage`・`/api/timeline` は Vertex AI Gemini で自然文の属性抽出・タイムライン生成を行う（モデルは実装参照）。**認証未設定でも語句一致/ルールベースのフォールバックで動作**。
+- **悪用・コスト対策（#30）**: 両APIとも **IP単位レート制限 15回/分**、triageは入力を1000文字に制限。同一入力は10分間のプロセス内キャッシュから返しGemini再呼び出しを抑制。
+  - ⚠️ Cloud Run は複数インスタンスへスケールし得るため、レート制限・キャッシュは**インスタンス単位**（グローバル厳密ではない）。DoS完全防御ではなく単一クライアントの暴走・キー悪用抑止が目的。厳密なグローバル制限には外部ストア（Redis等）が必要（プロトタイプのため未導入）。
 
 ## 免責
 本リポジトリはハッカソン用プロトタイプです。掲載データは時点情報であり実態と異なる場合があります。**避難の最終判断は自治体の公式情報・指示に従ってください**。詳細は README の免責も参照。
