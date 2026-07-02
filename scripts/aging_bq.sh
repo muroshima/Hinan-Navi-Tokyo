@@ -41,13 +41,12 @@ PY
 # 2) 年齢別人口CSV → NDJSON(key_code, total, over65)。男女=総数のみ、秘匿X/非該当-はnull
 python3 - "$AGE" "$WORK/age.ndjson" <<'PY'
 import csv, json, sys
-rows = list(csv.reader(open(sys.argv[1], encoding="cp932")))
 def num(v):
     v = (v or "").strip().replace(",", "")
     return int(v) if v.isdigit() else None
-with open(sys.argv[2], "w", encoding="utf-8") as o:
-    for r in rows[5:]:
-        if len(r) < 38 or r[1].strip() != "総数":
+with open(sys.argv[1], encoding="cp932") as f, open(sys.argv[2], "w", encoding="utf-8") as o:
+    for i, r in enumerate(csv.reader(f)):
+        if i < 5 or len(r) < 38 or r[1].strip() != "総数":  # 先頭5行はメタ/ヘッダ
             continue
         cc, tc = r[2].strip(), r[3].strip()
         if not cc or tc in ("", "-"):
@@ -58,7 +57,8 @@ PY
 # 3) 避難所点 → NDJSON(id, lng, lat)
 python3 - "$GEOJSON" "$WORK/evac.ndjson" <<'PY'
 import json, sys
-fc = json.load(open(sys.argv[1]))
+with open(sys.argv[1]) as f:
+    fc = json.load(f)
 with open(sys.argv[2], "w", encoding="utf-8") as o:
     for ft in fc["features"]:
         c = ft["geometry"]["coordinates"]
@@ -86,16 +86,18 @@ FROM aging.evac e
 JOIN poly p ON p.g IS NOT NULL AND ST_CONTAINS(p.g, ST_GEOGPOINT(e.lng, e.lat))
 JOIN age2 a ON a.key_code = p.key_code'
 
-# 6) 結果を chome_aging.json(id→町丁目高齢化率) にエクスポート
+# 6) 結果を data/chome_aging.json(id→町丁目高齢化率) にエクスポート
+#    ※ランタイム配信不要の中間生成物のため public/ ではなく data/ に出力
 bq --project_id="$PROJ" --location="$LOC" query --use_legacy_sql=false --format=json --max_rows=100000 \
     'SELECT id, aging_rate FROM aging.evac_aging' > "$WORK/result.json"
-python3 - "$WORK/result.json" "$ROOT/public/data/chome_aging.json" <<'PY'
+python3 - "$WORK/result.json" "$ROOT/data/chome_aging.json" <<'PY'
 import json, sys
 with open(sys.argv[1]) as f:
     d = json.load(f)
 m = {x["id"]: float(x["aging_rate"]) for x in d if x["aging_rate"] is not None}
 with open(sys.argv[2], "w", encoding="utf-8") as o:
-    json.dump(m, o, ensure_ascii=False, separators=(",", ":"))
+    # sort_keysで決定論的な出力にし、実行ごとの差分ノイズを防ぐ
+    json.dump(m, o, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 PY
 
-echo "done: public/data/chome_aging.json を生成。'python3 scripts/preprocess.py' で evacuation.geojson に町丁目粒度を反映"
+echo "done: data/chome_aging.json を生成。'python3 scripts/preprocess.py' で evacuation.geojson に町丁目粒度を反映"

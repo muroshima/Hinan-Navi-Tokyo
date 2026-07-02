@@ -95,9 +95,10 @@ def build_city_aging():
 def build_evacuation():
     feats = []
     aging = build_city_aging()
-    # 町丁目粒度の高齢化率(BigQuery空間結合の結果 chome_aging.json)。あれば市区町村値より優先
+    # 町丁目粒度の高齢化率(BigQuery空間結合の結果)。あれば市区町村値より優先。
+    # ランタイム配信不要の中間生成物のため public/data ではなく data/ に置く
     chome = {}
-    cpath = os.path.join(OUT, 'chome_aging.json')
+    cpath = os.path.join(os.path.dirname(__file__), '..', 'data', 'chome_aging.json')
     if os.path.exists(cpath):
         try:
             with open(cpath, encoding='utf-8') as f:

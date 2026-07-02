@@ -50,12 +50,14 @@ python3 scripts/preprocess.py
    - **境界 Shapefile**: 統計GIS `https://www.e-stat.go.jp/gis/statmap-search?type=2&toukeiCode=00200521&toukeiYear=2020&serveyId=A002005212020`（`code=13`・`format=shape`）→ `r2ka13.shp/.dbf/.shx/.prj`
    - **年齢別人口 CSV**: 小地域集計 第3表（男女，年齢5歳階級別人口－町丁・字等・東京都）→ `h03_13.csv`（Shift-JIS）
 2. Terraform で BigQuery dataset `aging` を作成（`infra/terraform`）、`gcloud auth application-default login`
-3. 空間結合バッチを実行（`pyshp` と `bq` CLI が必要）:
+3. 空間結合バッチを実行（`pyshp` と `bq` CLI が必要）。**避難所の `id` は `preprocess.py` の生成順で決まる**ため、元CSVを更新した場合は次の順で実行する:
    ```bash
-   scripts/aging_bq.sh ~/est_bound_13/r2ka13 ~/h03_13.csv
-   # → public/data/chome_aging.json（id→町丁目高齢化率）を生成
-   python3 scripts/preprocess.py   # evacuation.geojson の agingRate を町丁目粒度で上書き
+   python3 scripts/preprocess.py                          # ① evacuation.geojson を生成(id確定)
+   scripts/aging_bq.sh ~/est_bound_13/r2ka13 ~/h03_13.csv # ② 空間結合 → data/chome_aging.json
+   python3 scripts/preprocess.py                          # ③ agingRate を町丁目粒度で反映
    ```
+   ②は①で確定した避難所 `id` を参照するため、必ず ①→②→③ の順に実行すること。
+- `data/chome_aging.json` は**ランタイム配信不要の中間生成物**のため `public/` ではなく `data/` に置く（`preprocess.py` が読み込み `evacuation.geojson` に焼き込む）。
 - 秘匿地域（`X`）や境界外（島嶼等）で町丁目値が取れない避難所は、市区町村fallback（住民基本台帳）を使用（`agingLevel` で区別）。
 - 出典表示: 「令和2年国勢調査」（総務省統計局）を加工。
 
