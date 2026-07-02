@@ -6,8 +6,8 @@
 // 単一クライアントの暴走・キー悪用によるコスト爆発を実用上抑えるのが目的。厳密なグローバル
 // 制限が要るなら外部ストア（Redis等）が必要（ハッカソン用プロトタイプのため未導入）。
 //
-// NextRequest.ip は廃止されたため、Cloud Run のフロントが付与する x-forwarded-for（最左＝
-// 直近クライアント）を用いる。ヘッダは詐称され得るのでベストエフォート。
+// NextRequest.ip は廃止されたため、Cloud Run のフロントが付与する x-forwarded-for の最左
+// （＝元のクライアントIP。後段にプロキシのIPが追記される）を用いる。ヘッダは詐称され得るのでベストエフォート。
 
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -74,7 +74,8 @@ export function rateLimit(
 // 妥当なIP文字列の最大長（IPv6全長=45文字。超過は不正とみなしキー肥大化を防ぐ）
 const MAX_IP_LEN = 45;
 
-// IP候補の正規化。空・過大長（詐称ヘッダによるキー肥大化）は "local" にフォールバック
+// IP候補の正規化。空なら null（呼び出し側で次の候補/"local"へフォールバック）、
+// 過大長（詐称ヘッダによるキー肥大化）は "local" に丸める。
 function normalizeIp(raw: string | null | undefined): string | null {
   const v = raw?.trim();
   if (!v) return null;
