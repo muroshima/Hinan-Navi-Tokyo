@@ -16,8 +16,8 @@ variable "run_image" {
   default     = ""
 }
 
-variable "enable_llm_secret" {
-  description = "trueでCloud RunにANTHROPIC_API_KEYをSecret Managerから注入。値はTFに書かずgcloud/CIで投入する(tfstateに生値を残さない)"
-  type        = bool
-  default     = false
+variable "gemini_location" {
+  description = "Vertex AI Gemini のロケーション(Cloud Runのregionとは別。globalが2.5系モデルに広く対応)"
+  type        = string
+  default     = "global"
 }

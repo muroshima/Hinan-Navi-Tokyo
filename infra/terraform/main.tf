@@ -27,9 +27,9 @@ locals {
     "run.googleapis.com",
     "artifactregistry.googleapis.com",
     "cloudbuild.googleapis.com",
-    "secretmanager.googleapis.com",
-    "iam.googleapis.com",                 # SA作成に必要
+    "iam.googleapis.com",                  # SA作成に必要
     "cloudresourcemanager.googleapis.com", # project IAM操作に必要
+    "aiplatform.googleapis.com",           # Vertex AI Gemini(LLM)
   ]
   repo_id = "app"
 }
@@ -65,6 +65,14 @@ resource "google_project_iam_member" "run_agent_ar_reader" {
   depends_on = [google_project_service.apis]
 }
 
+# Cloud Run 実行SAが Vertex AI Gemini を呼べるように付与(LLMはVertex=IAM認証・APIキー不要)
+resource "google_project_iam_member" "run_vertex_user" {
+  project    = var.project_id
+  role       = "roles/aiplatform.user"
+  member     = "serviceAccount:${google_service_account.run.email}"
+  depends_on = [google_project_service.apis]
+}
+
 # Cloud Build(既定=compute SA)が Artifact Registry へ push できるようにリポジトリ単位で付与
 resource "google_artifact_registry_repository_iam_member" "cloudbuild_writer" {
   project    = var.project_id
@@ -72,23 +80,6 @@ resource "google_artifact_registry_repository_iam_member" "cloudbuild_writer" {
   repository = google_artifact_registry_repository.app.repository_id
   role       = "roles/artifactregistry.writer"
   member     = "serviceAccount:${data.google_project.this.number}-compute@developer.gserviceaccount.com"
-}
-
-# LLMキーの「枠」のみTerraform管理。値(version)はgcloud/CIで投入し、tfstateに生値を残さない
-resource "google_secret_manager_secret" "anthropic" {
-  secret_id = "ANTHROPIC_API_KEY"
-  replication {
-    auto {}
-  }
-  depends_on = [google_project_service.apis]
-}
-
-# 実行SAにSecret読み取り権限。注入を有効化するとき(enable_llm_secret)だけ付与し最小権限に保つ
-resource "google_secret_manager_secret_iam_member" "run_access" {
-  count     = var.enable_llm_secret ? 1 : 0
-  secret_id = google_secret_manager_secret.anthropic.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.run.email}"
 }
 
 # Cloud Run サービス(run_imageが指定されたときのみ作成)
@@ -116,27 +107,22 @@ resource "google_cloud_run_v2_service" "app" {
           memory = "512Mi"
         }
       }
-      # enable_llm_secret=true のときのみSecret Managerから注入(値はTF外で投入)
-      dynamic "env" {
-        for_each = var.enable_llm_secret ? [1] : []
-        content {
-          name = "ANTHROPIC_API_KEY"
-          value_source {
-            secret_key_ref {
-              # 同一プロジェクトのためSecret短名でOK(google_cloud_run_v2の仕様)
-              secret  = google_secret_manager_secret.anthropic.secret_id
-              version = "latest"
-            }
-          }
-        }
+      # Vertex AI Gemini 呼び出し用(project/location)。認証はSA(ADC)でキー不要
+      env {
+        name  = "GOOGLE_CLOUD_PROJECT"
+        value = var.project_id
+      }
+      env {
+        name  = "GCP_LOCATION"
+        value = var.gemini_location
       }
     }
   }
 
   depends_on = [
     google_project_service.apis,
-    google_secret_manager_secret_iam_member.run_access,
     google_project_iam_member.run_agent_ar_reader,
+    google_project_iam_member.run_vertex_user,
   ]
 }
 

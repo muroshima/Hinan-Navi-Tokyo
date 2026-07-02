@@ -47,7 +47,7 @@ export interface EvacCollection {
   features: EvacFeature[];
 }
 
-// Claudeが自然文から抽出する利用者の状況属性
+// LLM(Vertex AI Gemini)が自然文から抽出する利用者の状況属性
 export interface UserAttrs {
   wheelchair: boolean; // 車椅子
   elderly: boolean; // 高齢・歩行に不安

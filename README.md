@@ -39,10 +39,11 @@ npm run dev   # http://localhost:3000
 ## 環境変数（任意）
 | 変数 | 用途 |
 |---|---|
-| `ANTHROPIC_API_KEY` | `/api/triage` のLLM属性抽出。未設定でも語句一致のフォールバックで動作 |
+| `GOOGLE_CLOUD_PROJECT` | `/api/triage`・`/api/timeline` の LLM は **Vertex AI Gemini**（IAM認証・APIキー不要）。プロジェクトIDを設定。未設定なら語句一致のフォールバックで動作 |
+| `GCP_LOCATION` | Vertex のロケーション（既定 `global`） |
 | `NOMINATIM_CONTACT_EMAIL` | `/api/geocode` が Nominatim に付与する連絡先（任意・利用ポリシー対応。未設定でも動作） |
 
-`.env.local.example` を参照。キー未設定でもアプリは起動・動作します。
+`.env.local.example` を参照。ローカルで Gemini を使う場合は `gcloud auth application-default login`（ADC）が必要です。未設定でもアプリは起動・動作します（LLM部分は語句一致fallback）。本番（Cloud Run）は SA の IAM で認証します。
 
 ## データ出典・ライセンス
 各データ・タイル・APIの**出典/ライセンス/取得日/加工/利用規約上の留意点**は **[docs/DATA.md](docs/DATA.md)** に一覧（機械可読版は [`public/data/metadata.json`](public/data/metadata.json)）。要点:

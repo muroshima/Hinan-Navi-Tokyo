@@ -962,7 +962,7 @@ export default function Home() {
                 ))}
                 {timelineSource && (
                   <span className="text-[10px] text-gray-400">
-                    （生成: {timelineSource === "claude" ? "AI" : "簡易ルール"}・参考情報です。最終判断は自治体の情報に従ってください）
+                    （生成: {timelineSource === "gemini" ? "AI" : "簡易ルール"}・参考情報です。最終判断は自治体の情報に従ってください）
                   </span>
                 )}
               </div>

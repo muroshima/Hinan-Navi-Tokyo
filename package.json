@@ -9,7 +9,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.105.0",
+    "@google/genai": "^2.10.0",
     "maplibre-gl": "^5.24.0",
     "next": "16.2.9",
     "qrcode.react": "^4.2.0",
