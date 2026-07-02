@@ -4,7 +4,7 @@
 - エンコードはファイルごとに自動判定(utf-8-sig / cp932 / utf-8)
 - 先頭ゴミ空行を除去し、本物のヘッダ行を検出
 - バリアフリー列・災害種別列を bool に正規化
-出力: public/data/{evacuation, toilets, lifeline, bus_stops}.geojson および metadata.json
+出力: public/data/{evacuation, toilets, lifeline, bus_stops, accessible_facilities}.geojson および metadata.json
 """
 import csv, io, json, os, zipfile
 
