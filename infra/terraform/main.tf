@@ -30,8 +30,20 @@ locals {
     "iam.googleapis.com",                  # SA作成に必要
     "cloudresourcemanager.googleapis.com", # project IAM操作に必要
     "aiplatform.googleapis.com",           # Vertex AI Gemini(LLM)
+    "bigquery.googleapis.com",             # 高齢化率の空間結合(前処理バッチ)
   ]
   repo_id = "app"
+}
+
+# 高齢化率の町丁目粒度化(#6)を行う前処理バッチ用データセット。ランタイム(Cloud Run)は使わない。
+# 中身(境界/年齢/結合結果テーブル)は scripts/aging_bq.sh でいつでも再生成可能な使い捨てで、
+# 成果物は data/chome_aging.json としてリポジトリに永続する。掃除を容易にするため中身ごと破棄可とする。
+resource "google_bigquery_dataset" "aging" {
+  dataset_id                 = "aging"
+  location                   = var.region
+  description                = "国勢調査小地域×避難所のST_CONTAINS空間結合(前処理・再生成可能)"
+  delete_contents_on_destroy = true
+  depends_on                 = [google_project_service.apis]
 }
 
 # 必要APIの有効化

@@ -18,7 +18,7 @@ https://hinan-navi-sceyw5h4sq-an.a.run.app
 - ハザードレイヤ重ね（国交省: 洪水/高潮/津波/土砂）、3D地形（坂・起伏）、PLATEAU建物3D（高さで垂直避難先を色分け・23区）
 - トイレ設備の近傍紐づけ（おむつ替え/オストメイト/大型ベッド/非常用ボタン）
 - 生活継続レイヤー（災害時給水ステーション／公衆Wi-Fi／都営バス停）の重ね表示
-- 市区町村の高齢化率を文脈表示、実経路距離（OSRM）、現在地手動入力（Nominatim）、Googleマップ徒歩ルート
+- 高齢化率を**町丁目粒度**で文脈表示（国勢調査小地域×避難所を BigQuery GIS で空間結合）、実経路距離（OSRM）、現在地手動入力（Nominatim）、Googleマップ徒歩ルート
 
 ## 技術スタック
 Next.js 16 / React 19 / TypeScript / Tailwind CSS / MapLibre GL JS

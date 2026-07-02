@@ -95,10 +95,26 @@ def build_city_aging():
 def build_evacuation():
     feats = []
     aging = build_city_aging()
+    # 町丁目粒度の高齢化率(BigQuery空間結合の結果)。あれば市区町村値より優先。
+    # ランタイム配信不要の中間生成物のため public/data ではなく data/ に置く
+    chome = {}
+    cpath = os.path.join(os.path.dirname(__file__), '..', 'data', 'chome_aging.json')
+    if os.path.exists(cpath):
+        try:
+            with open(cpath, encoding='utf-8') as f:
+                chome = json.load(f)
+        except Exception as e:
+            print('chome_aging load skip:', e)
 
     def attach_aging(props):
         a = aging.get(props.get('city', ''))
-        props['agingRate'] = a['rate'] if a else None  # 市区町村の高齢化率(%)
+        cid = props.get('id', '')
+        if cid in chome:
+            props['agingRate'] = chome[cid]   # 町丁目粒度(小地域)
+            props['agingLevel'] = 'chome'
+        else:
+            props['agingRate'] = a['rate'] if a else None  # 市区町村fallback
+            props['agingLevel'] = 'city' if a else None
         props['cityPop'] = a['pop'] if a else None
 
     # 避難所 (center): 施設に直接バリアフリー列
@@ -341,13 +357,26 @@ SOURCES = [
         'attribution': '都営バス GTFS-JP（東京都交通局）／公共交通オープンデータセンター（CC BY 4.0）',
     },
     {
-        'file': '(高齢化率の付与に使用)',
+        'file': '(高齢化率の付与に使用・町丁目粒度)',
+        'datasets': [
+            '令和2年国勢調査 小地域(町丁・字等)集計 第3表 年齢別人口(東京都)',
+            '同 小地域 境界データ(統計GIS・東京都)',
+        ],
+        'provider': '総務省統計局 (e-Stat)',
+        'license': '政府統計(出典明示で自由利用)',
+        'source_url': 'https://www.e-stat.go.jp/gis/statmap-search/data?dlserveyId=A002005212020&code=13&coordSys=1&format=shape&downloadType=5',
+        'retrieved': '2026-07',
+        'processing': 'BigQuery GISで避難所点×小地域ポリゴンのST_CONTAINS空間結合→KEY_CODEで年齢結合し65歳以上/総数を算出。町丁目粒度でevacuation.geojsonに付与(scripts/aging_bq.sh→data/chome_aging.json)。未マッチ(島嶼等)は下記の市区町村値へfallback',
+        'attribution': '「令和2年国勢調査」(総務省統計局)を加工',
+    },
+    {
+        'file': '(高齢化率の市区町村fallback)',
         'datasets': ['住民基本台帳による東京都の世帯と人口(町丁別・年齢別) 第3-1表 区市町村,年齢3区分別人口'],
         'provider': '東京都',
         'license': 'CC BY 4.0（東京都オープンデータ利用規約に準拠）',
         'source_url': 'https://www.toukei.metro.tokyo.lg.jp/juukiy/',
         'retrieved': '2026-06',
-        'processing': '65歳以上比から市区町村別高齢化率を算出し evacuation.geojson に付与',
+        'processing': '65歳以上比から市区町村別高齢化率を算出。町丁目粒度が取れない避難所のfallbackに使用',
         'attribution': '東京都オープンデータ（CC BY 4.0）',
     },
 ]
