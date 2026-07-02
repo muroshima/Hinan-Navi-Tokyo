@@ -8,11 +8,12 @@
 
 | 生成ファイル | 元データセット | 提供元 | ライセンス | 取得 | 加工 |
 |---|---|---|---|---|---|
-| `public/data/evacuation.geojson` | 東京都防災マップ 避難所一覧／避難場所一覧データ | 東京都 | CC BY 4.0 | 2026-06 | CSV(CP932/UTF-8)→正規化GeoJSON、バリアフリー列のbool化、市区町村高齢化率の付与 |
+| `public/data/evacuation.geojson` | 東京都防災マップ 避難所一覧／避難場所一覧データ | 東京都 | CC BY 4.0 | 2026-06 | CSV(CP932/UTF-8)→正規化GeoJSON、バリアフリー列のbool化、**高齢化率の付与（町丁目粒度＝下記BQ空間結合、未取得時は市区町村fallback）** |
 | `public/data/toilets.geojson` | 車椅子使用者対応トイレのバリアフリー設備情報 | 東京都(福祉局) | CC BY 4.0 | 2026-06 | CSV(CP932)→GeoJSON、設備項目（おむつ替え/オストメイト/大型ベッド/非常用ボタン等）のbool化 |
 | `public/data/lifeline.geojson` | 災害時給水ステーション（給水拠点）一覧／公衆無線LAN（FREE Wi-Fi & TOKYO） | 東京都(水道局／デジタルサービス局) | CC BY 4.0 | 2026-06 | CSV(CP932)→統合GeoJSON。`kind`で給水(water)/Wi-Fi(wifi)を区別。給水は確保水量・種別も保持 |
 | `public/data/bus_stops.geojson` | 都営バス GTFS-JP（停留所） | 東京都交通局／公共交通オープンデータセンター(ODPT) | CC BY 4.0 | 2026-06 | GTFS-JP zipの`stops.txt`から`location_type=1`の停留所を抽出してGeoJSON化。車椅子対応(`wheelchair_boarding=1`)を保持 |
-| （高齢化率の付与に使用） | 住民基本台帳による東京都の世帯と人口（町丁別・年齢別）第3-1表 区市町村・年齢3区分別人口 | 東京都 | CC BY 4.0（東京都オープンデータ利用規約準拠） | 2026-06 | 65歳以上比から市区町村別高齢化率を算出し evacuation.geojson に付与 |
+| （高齢化率・町丁目粒度） | 令和2年国勢調査 小地域集計 第3表 年齢別人口(東京都)＋小地域境界(統計GIS) | 総務省統計局(e-Stat) | 政府統計(出典明示で自由利用) | 2026-07 | BigQuery GISで避難所点×小地域ポリゴンの`ST_CONTAINS`空間結合→`KEY_CODE`で年齢結合し65歳以上/総数を算出（`scripts/aging_bq.sh`→`public/data/chome_aging.json`→`evacuation.geojson`） |
+| （高齢化率・市区町村fallback） | 住民基本台帳による東京都の世帯と人口（町丁別・年齢別）第3-1表 区市町村・年齢3区分別人口 | 東京都 | CC BY 4.0（東京都オープンデータ利用規約準拠） | 2026-06 | 65歳以上比から市区町村別高齢化率を算出。町丁目粒度が取れない避難所(島嶼等)のfallback |
 
 - 出典カタログ: 東京都オープンデータカタログサイト https://catalog.data.metro.tokyo.lg.jp/
 - 東京都オープンデータの多くは **CC BY 4.0**（出典の表示が条件）。本アプリは「東京都オープンデータ（CC BY 4.0）」と表示します。
@@ -40,6 +41,23 @@ python3 scripts/preprocess.py
 
 - 直URLは時点により変わる場合があります。リンク切れ時はカタログ（`catalog.data.metro.tokyo.lg.jp`）でデータセット名を検索してください。
 - いずれも東京都オープンデータ（**CC BY 4.0**）。利用時は出典表示が条件です。各データセットの最新の利用規約を必ず確認してください。
+
+### 高齢化率の町丁目粒度化（BigQuery GIS 空間結合・#6）
+
+避難所の高齢化率を市区町村粒度から**町丁目（小地域）粒度**へ格上げする前処理バッチ（ランタイムでは使わない）。
+
+1. e-Stat（総務省統計局）から令和2年国勢調査 小地域（東京都）を取得:
+   - **境界 Shapefile**: 統計GIS `https://www.e-stat.go.jp/gis/statmap-search?type=2&toukeiCode=00200521&toukeiYear=2020&serveyId=A002005212020`（`code=13`・`format=shape`）→ `r2ka13.shp/.dbf/.shx/.prj`
+   - **年齢別人口 CSV**: 小地域集計 第3表（男女，年齢5歳階級別人口－町丁・字等・東京都）→ `h03_13.csv`（Shift-JIS）
+2. Terraform で BigQuery dataset `aging` を作成（`infra/terraform`）、`gcloud auth application-default login`
+3. 空間結合バッチを実行（`pyshp` と `bq` CLI が必要）:
+   ```bash
+   scripts/aging_bq.sh ~/est_bound_13/r2ka13 ~/h03_13.csv
+   # → public/data/chome_aging.json（id→町丁目高齢化率）を生成
+   python3 scripts/preprocess.py   # evacuation.geojson の agingRate を町丁目粒度で上書き
+   ```
+- 秘匿地域（`X`）や境界外（島嶼等）で町丁目値が取れない避難所は、市区町村fallback（住民基本台帳）を使用（`agingLevel` で区別）。
+- 出典表示: 「令和2年国勢調査」（総務省統計局）を加工。
 
 ## 2. 地図タイル・地形・フォント（クライアントで読み込み）
 

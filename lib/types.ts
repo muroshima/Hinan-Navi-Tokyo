@@ -32,7 +32,8 @@ export interface EvacProps {
   a11y: A11y;
   hazards: Hazards | null;
   note: string;
-  agingRate?: number | null; // 市区町村の高齢化率(%) ※文脈情報
+  agingRate?: number | null; // 高齢化率(%) ※文脈情報。agingLevelで粒度を示す
+  agingLevel?: "chome" | "city" | null; // chome=町丁目粒度(BQ空間結合) / city=市区町村fallback
   cityPop?: number | null; // 市区町村の総人口
 }
 

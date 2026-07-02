@@ -1050,6 +1050,7 @@ export default function Home() {
                   {r.feature.properties.agingRate != null && (
                     <span className="ml-1 text-gray-400">
                       🧓 高齢化率{r.feature.properties.agingRate}%
+                      {r.feature.properties.agingLevel === "chome" ? "(町丁目)" : ""}
                     </span>
                   )}
                 </span>
