@@ -1,5 +1,5 @@
 variable "project_id" {
-  description = "GCPプロジェクトID"
+  description = "GCPプロジェクトID(このリポジトリ専用)"
   type        = string
   default     = "hinan-navi-tokyo"
 }
@@ -16,9 +16,8 @@ variable "run_image" {
   default     = ""
 }
 
-variable "anthropic_api_key" {
-  description = "LLM属性抽出/タイムライン用。空ならSecret版を作らずアプリは語句一致fallbackで動作"
-  type        = string
-  default     = ""
-  sensitive   = true
+variable "enable_llm_secret" {
+  description = "trueでCloud RunにANTHROPIC_API_KEYをSecret Managerから注入。値はTFに書かずgcloud/CIで投入する(tfstateに生値を残さない)"
+  type        = bool
+  default     = false
 }

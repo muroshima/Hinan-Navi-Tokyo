@@ -13,6 +13,8 @@ provider "google" {
   region  = var.region
 }
 
+data "google_project" "this" {}
+
 locals {
   services = [
     "run.googleapis.com",
@@ -45,7 +47,15 @@ resource "google_service_account" "run" {
   display_name = "Hinan Navi Cloud Run SA"
 }
 
-# LLMキー(任意)。値が無ければSecret枠だけ作り、バージョンは作らない
+# Cloud Run の Service Agent が Artifact Registry からイメージをpullできるように付与
+resource "google_project_iam_member" "run_agent_ar_reader" {
+  project    = var.project_id
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:service-${data.google_project.this.number}@serverless-robot-prod.iam.gserviceaccount.com"
+  depends_on = [google_project_service.apis]
+}
+
+# LLMキーの「枠」のみTerraform管理。値(version)はgcloud/CIで投入し、tfstateに生値を残さない
 resource "google_secret_manager_secret" "anthropic" {
   secret_id = "ANTHROPIC_API_KEY"
   replication {
@@ -54,14 +64,9 @@ resource "google_secret_manager_secret" "anthropic" {
   depends_on = [google_project_service.apis]
 }
 
-resource "google_secret_manager_secret_version" "anthropic" {
-  count       = var.anthropic_api_key != "" ? 1 : 0
-  secret      = google_secret_manager_secret.anthropic.id
-  secret_data = var.anthropic_api_key
-}
-
+# 実行SAにSecret読み取り権限(secret_idはフルリソース名 .id を使用)
 resource "google_secret_manager_secret_iam_member" "run_access" {
-  secret_id = google_secret_manager_secret.anthropic.secret_id
+  secret_id = google_secret_manager_secret.anthropic.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.run.email}"
 }
@@ -91,13 +96,14 @@ resource "google_cloud_run_v2_service" "app" {
           memory = "512Mi"
         }
       }
-      # LLMキーがある場合のみSecret Managerから注入(無ければアプリはfallback)
+      # enable_llm_secret=true のときのみSecret Managerから注入(値はTF外で投入)
       dynamic "env" {
-        for_each = var.anthropic_api_key != "" ? [1] : []
+        for_each = var.enable_llm_secret ? [1] : []
         content {
           name = "ANTHROPIC_API_KEY"
           value_source {
             secret_key_ref {
+              # 同一プロジェクトのためSecret短名でOK(google_cloud_run_v2の仕様)
               secret  = google_secret_manager_secret.anthropic.secret_id
               version = "latest"
             }
@@ -109,8 +115,8 @@ resource "google_cloud_run_v2_service" "app" {
 
   depends_on = [
     google_project_service.apis,
-    google_secret_manager_secret_version.anthropic,
     google_secret_manager_secret_iam_member.run_access,
+    google_project_iam_member.run_agent_ar_reader,
   ]
 }
 

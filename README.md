@@ -7,7 +7,7 @@
 ## 🌐 ライブデモ
 https://hinan-navi-sceyw5h4sq-an.a.run.app
 
-（Google Cloud Run 上で稼働。インフラは Terraform で管理 → [terraform/](terraform/)。デモ提供期間は限定される場合があります）
+（Google Cloud Run 上で稼働。インフラは Terraform で管理 → [infra/terraform/](infra/terraform/)。デモ提供期間は限定される場合があります）
 
 ## 対象課題
 **東京全域の、あらゆる要配慮者**（車椅子/高齢/乳幼児/視覚・聴覚障害/オストメイト/要介護/外国語…）が直面する「**最寄り ≠ 自分が本当に行ける避難先**」という普遍課題に、地域・災害種別を限定せず答えます。最も切実な代表ケースとして **江戸川区（江東5区）の大規模水害**（陸域の約7割がゼロメートル地帯・避難行動要支援者 約5,800人）も重視。詳細・出典は [docs/positioning.md](docs/positioning.md)。
