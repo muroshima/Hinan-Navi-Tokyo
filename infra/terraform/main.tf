@@ -74,8 +74,9 @@ resource "google_secret_manager_secret" "anthropic" {
   depends_on = [google_project_service.apis]
 }
 
-# 実行SAにSecret読み取り権限(secret_idはフルリソース名 .id を使用)
+# 実行SAにSecret読み取り権限。注入を有効化するとき(enable_llm_secret)だけ付与し最小権限に保つ
 resource "google_secret_manager_secret_iam_member" "run_access" {
+  count     = var.enable_llm_secret ? 1 : 0
   secret_id = google_secret_manager_secret.anthropic.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.run.email}"
