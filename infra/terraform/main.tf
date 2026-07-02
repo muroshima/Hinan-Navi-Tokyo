@@ -65,6 +65,15 @@ resource "google_project_iam_member" "run_agent_ar_reader" {
   depends_on = [google_project_service.apis]
 }
 
+# Cloud Build(既定=compute SA)が Artifact Registry へ push できるようにリポジトリ単位で付与
+resource "google_artifact_registry_repository_iam_member" "cloudbuild_writer" {
+  project    = var.project_id
+  location   = var.region
+  repository = google_artifact_registry_repository.app.repository_id
+  role       = "roles/artifactregistry.writer"
+  member     = "serviceAccount:${data.google_project.this.number}-compute@developer.gserviceaccount.com"
+}
+
 # LLMキーの「枠」のみTerraform管理。値(version)はgcloud/CIで投入し、tfstateに生値を残さない
 resource "google_secret_manager_secret" "anthropic" {
   secret_id = "ANTHROPIC_API_KEY"
