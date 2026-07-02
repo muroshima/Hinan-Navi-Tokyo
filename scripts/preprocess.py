@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """東京都オープンデータ等(避難所/避難場所/車椅子対応トイレ/給水・Wi-Fi/都営バス停/
-「だれでも東京」バリアフリー施設)を統一スキーマGeoJSONに変換。
+「だれでも東京」バリアフリー施設/都立の一時滞在施設)を統一スキーマGeoJSONに変換。
 - エンコードはファイルごとに自動判定(utf-8-sig / cp932 / utf-8)
 - 先頭ゴミ空行を除去し、本物のヘッダ行を検出
 - バリアフリー列・災害種別列を bool に正規化
-- 出力: public/data/{evacuation, toilets, lifeline, bus_stops, accessible_facilities}.geojson および metadata.json
+- 座標を持たない一時滞在施設は国土地理院APIで住所ジオコーディング(結果は data/ にキャッシュ)
+- 出力: public/data/{evacuation, toilets, lifeline, bus_stops, accessible_facilities, temp_stay_facilities}.geojson および metadata.json
 """
-import csv, io, json, os, zipfile
+import csv, io, json, os, time, urllib.parse, urllib.request, zipfile
 
 RAW = os.path.join(os.path.dirname(__file__), '..', 'data-raw')
 OUT = os.path.join(os.path.dirname(__file__), '..', 'public', 'data')
@@ -377,6 +378,89 @@ def build_accessible_facilities():
     return feats
 
 
+def _gsi_geocode(addr):
+    """国土地理院 住所検索APIで日本語住所→[lon,lat]。Nominatimより日本住所に強い(キー不要)。
+    UAは app/api/geocode/route.ts と同方針で連絡先(NOMINATIM_CONTACT_EMAIL)を環境変数から差し込む。"""
+    contact = os.environ.get('NOMINATIM_CONTACT_EMAIL')
+    ua = (f'dare-hinan-navi/0.1 ({contact})' if contact
+          else 'dare-hinan-navi/0.1 (Tokyo OpenData Hackathon prototype)')
+    url = 'https://msearch.gsi.go.jp/address-search/AddressSearch?q=' + urllib.parse.quote(addr)
+    req = urllib.request.Request(url, headers={'User-Agent': ua})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        data = json.load(r)
+    if data:
+        c = data[0]['geometry']['coordinates']
+        return [float(c[0]), float(c[1])]
+    return None
+
+
+def build_temp_stay():
+    """帰宅困難者向け「都立の一時滞在施設」(#41)。避難所ではなく、帰宅困難者が一時待機する施設。
+    元XLSXは座標を持たない(番号/施設名称/所在地のみ)ため、所在地を国土地理院APIでジオコーディング。
+    再現性・オフライン再実行のため結果を data/temp_stay_geocode.json にキャッシュ(住所→[lon,lat])。
+    API応答が空のときのみ null を記録(再試行しない)。例外(通信障害/タイムアウト)時はキャッシュを汚さず
+    次回再試行できるようスキップする。openpyxl/XLSX/ネットワークが無ければスキップ(graceful)。"""
+    feats = []
+    xlsx = os.path.join(RAW, 'temp_stay.xlsx')
+    if not os.path.exists(xlsx):
+        print('temp_stay skip: data-raw/temp_stay.xlsx が見つかりません（再現手順は docs/DATA.md）')
+        return feats
+    try:
+        import openpyxl
+    except ImportError:
+        print('temp_stay skip: openpyxl 未インストール（pip install openpyxl）')
+        return feats
+    cache_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'temp_stay_geocode.json')
+    cache = {}
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, encoding='utf-8') as f:
+                cache = json.load(f)
+        except Exception as e:
+            print('temp_stay geocode cache load skip:', e)
+    wb = openpyxl.load_workbook(xlsx, read_only=True, data_only=True)
+    ws = wb.active
+    updated = False
+    try:
+        # ヘッダは3行目(番号/施設名称/所在地)。データは4行目以降
+        for row in ws.iter_rows(min_row=4, values_only=True):
+            cells = list(row) + [None, None, None]
+            num = (str(cells[0]).strip() if cells[0] is not None else '')
+            name = (str(cells[1]).strip() if cells[1] is not None else '')
+            addr = (str(cells[2]).strip() if cells[2] is not None else '')
+            if not name or not addr:
+                continue
+            full = addr if addr.startswith('東京都') else '東京都' + addr
+            if full not in cache:
+                try:
+                    cache[full] = _gsi_geocode(full)  # 応答が空のときのみ None を記録
+                    updated = True
+                    time.sleep(0.3)  # GSIへの礼儀
+                except Exception as e:
+                    # 通信障害/タイムアウトはキャッシュに書かず(=次回再試行)、今回はスキップ
+                    print(f'temp_stay geocode失敗({full}) 次回再試行:', e)
+                    continue
+            coord = cache.get(full)
+            if not coord:
+                continue
+            feats.append({
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': coord},
+                'properties': {
+                    'id': f'ts-{num}' if num else f'ts-{len(feats)}',  # XLSXの番号で安定ID(更新に強い)
+                    'name': name,
+                    'address': addr,
+                },
+            })
+    finally:
+        wb.close()  # read_onlyでもファイルハンドルを明示解放
+    if updated:
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        with open(cache_path, 'w', encoding='utf-8') as f:
+            json.dump(cache, f, ensure_ascii=False, sort_keys=True)
+    return feats
+
+
 def dump(name, feats):
     fc = {'type': 'FeatureCollection', 'features': feats}
     with open(os.path.join(OUT, name), 'w', encoding='utf-8') as f:
@@ -444,6 +528,16 @@ SOURCES = [
         'attribution': '「だれでも東京」（東京都デジタルサービス局）（CC BY 4.0）',
     },
     {
+        'file': 'temp_stay_facilities.geojson',
+        'datasets': ['都立の一時滞在施設（帰宅困難者の一時待機施設）'],
+        'provider': '東京都（総務局）',
+        'license': 'CC BY 4.0',
+        'source_url': 'https://catalog.data.metro.tokyo.lg.jp/dataset/t000010d0000000151',
+        'retrieved': '2026-07',
+        'processing': 'XLSX(番号/施設名称/所在地)を読み込み、座標が無いため所在地を国土地理院 住所検索APIでジオコーディングしてGeoJSON化。ジオコード結果は data/temp_stay_geocode.json にキャッシュ',
+        'attribution': '「都立の一時滞在施設」（東京都総務局）（CC BY 4.0）／ジオコーディング: 国土地理院 住所検索API',
+    },
+    {
         'file': '(高齢化率の付与に使用・町丁目粒度)',
         'datasets': [
             '令和2年国勢調査 小地域(町丁・字等)集計 第3表 年齢別人口(東京都)',
@@ -490,5 +584,6 @@ if __name__ == '__main__':
     counts['lifeline.geojson'] = dump('lifeline.geojson', build_lifeline())
     counts['bus_stops.geojson'] = dump('bus_stops.geojson', build_bus_stops())
     counts['accessible_facilities.geojson'] = dump('accessible_facilities.geojson', build_accessible_facilities())
+    counts['temp_stay_facilities.geojson'] = dump('temp_stay_facilities.geojson', build_temp_stay())
     write_metadata(counts)
     print('done ->', os.path.relpath(OUT))

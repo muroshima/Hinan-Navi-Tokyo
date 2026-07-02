@@ -11,6 +11,7 @@ import type {
   LifelineFeature,
   BusStopFeature,
   AccessibleFacilityFeature,
+  TempStayFeature,
 } from "@/lib/types";
 
 const TOKYO: [number, number] = [139.7528, 35.6852];
@@ -67,6 +68,8 @@ interface Props {
   showBusStops?: boolean; // バス停レイヤ表示
   accessibleFacilities?: AccessibleFacilityFeature[]; // バリアフリー施設(だれでも東京)
   showAccessible?: boolean; // バリアフリー施設レイヤ表示
+  tempStay?: TempStayFeature[]; // 帰宅困難者向け 都立一時滞在施設
+  showTempStay?: boolean; // 一時滞在施設レイヤ表示
 }
 
 function emptyFC(): GeoJSON.FeatureCollection {
@@ -94,6 +97,8 @@ export default function MapView({
   showBusStops = false,
   accessibleFacilities = [],
   showAccessible = false,
+  tempStay = [],
+  showTempStay = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -326,6 +331,43 @@ export default function MapView({
         map.getCanvas().style.cursor = "";
       });
 
+      // 帰宅困難者向け 都立一時滞在施設レイヤー。初期は非表示
+      map.addSource("tempstay", {
+        type: "geojson",
+        data: emptyFC(),
+        attribution: "都立の一時滞在施設(東京都総務局) CC BY 4.0 / ジオコーディング: 国土地理院 住所検索API",
+      });
+      map.addLayer({
+        id: "tempstay-pts",
+        type: "circle",
+        source: "tempstay",
+        layout: { visibility: "none" },
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 3.5, 16, 7],
+          "circle-color": "#4f46e5",
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "#ffffff",
+        },
+      });
+      const tsPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true });
+      map.on("click", "tempstay-pts", (e) => {
+        const f = e.features?.[0];
+        if (!f) return;
+        const p = f.properties as { name?: string; address?: string };
+        const lines: string[] = [`<b>🏢 ${escapeHtml(p.name ?? "")}</b>`, "帰宅困難者の一時滞在施設（都立）"];
+        if (p.address) lines.push(escapeHtml(p.address));
+        tsPopup
+          .setLngLat((f.geometry as GeoJSON.Point).coordinates as [number, number])
+          .setHTML(`<div style="font-size:12px;line-height:1.4">${lines.join("<br>")}</div>`)
+          .addTo(map);
+      });
+      map.on("mouseenter", "tempstay-pts", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "tempstay-pts", () => {
+        map.getCanvas().style.cursor = "";
+      });
+
       // 生活継続レイヤーのクリックで詳細ポップアップ＋カーソル変化
       const lifelinePopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true });
       for (const lk of ["lifeline-water", "lifeline-wifi"] as const) {
@@ -524,6 +566,25 @@ export default function MapView({
       map.setLayoutProperty("accessible-pts", "visibility", showAccessible ? "visible" : "none");
     }
   }, [showAccessible, loaded]);
+
+  // 一時滞在施設レイヤーの反映
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded) return;
+    (map.getSource("tempstay") as maplibregl.GeoJSONSource | undefined)?.setData({
+      type: "FeatureCollection",
+      features: tempStay,
+    });
+  }, [tempStay, loaded]);
+
+  // 一時滞在施設レイヤーの表示切替
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded) return;
+    if (map.getLayer("tempstay-pts")) {
+      map.setLayoutProperty("tempstay-pts", "visibility", showTempStay ? "visible" : "none");
+    }
+  }, [showTempStay, loaded]);
 
   // 3D地形(坂・起伏)の切替
   useEffect(() => {
