@@ -535,10 +535,10 @@ export default function Home() {
   const destLng = ranked[0]?.feature.geometry.coordinates[0];
   const destLat = ranked[0]?.feature.geometry.coordinates[1];
   useEffect(() => {
-    let aborted = false;
+    const ctrl = new AbortController();
     (async () => {
       if (destLng == null || destLat == null) {
-        if (!aborted) setRawRoutes(null);
+        setRawRoutes(null);
         return;
       }
       try {
@@ -546,20 +546,22 @@ export default function Home() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ origin: [originLng, originLat], dest: [destLng, destLat] }),
+          signal: ctrl.signal, // cleanupで進行中リクエストを中断(OSRMへの無駄な到達を防ぐ)
         });
         if (!res.ok) {
-          if (!aborted) setRawRoutes(null);
+          if (!ctrl.signal.aborted) setRawRoutes(null);
           return;
         }
         const { routes } = await res.json();
-        if (!aborted) setRawRoutes(Array.isArray(routes) && routes.length ? routes : null);
+        if (!ctrl.signal.aborted) {
+          setRawRoutes(Array.isArray(routes) && routes.length ? routes : null);
+        }
       } catch {
-        if (!aborted) setRawRoutes(null);
+        // abort由来の例外はstateを触らない(後続リクエストの結果を尊重)
+        if (!ctrl.signal.aborted) setRawRoutes(null);
       }
     })();
-    return () => {
-      aborted = true;
-    };
+    return () => ctrl.abort();
   }, [originLng, originLat, destLng, destLat]);
 
   // 浸水曝露の解析は純粋な導出。取得済み経路 × floodGrid から算出(grid変更時は再取得せず再解析のみ)。
