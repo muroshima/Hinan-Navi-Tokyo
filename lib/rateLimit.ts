@@ -47,9 +47,15 @@ export function rateLimit(
   let hit = buckets.get(key);
 
   if (!hit || hit.resetAt <= now) {
-    // メモリ上限に達していたら期限切れを掃除。それでも溢れるなら新規keyは通す（可用性優先）
+    // 新規キー追加前にメモリ上限を厳守（IP詐称で新規キーを投げ続けられてもMapを上限内に保つ）。
+    // まず期限切れを掃除し、それでも埋まっていれば最古（Mapは挿入順＝リセットが近い順）を捨てる。
     if (buckets.size >= MAX_KEYS) {
       for (const [k, v] of buckets) if (v.resetAt <= now) buckets.delete(k);
+      while (buckets.size >= MAX_KEYS) {
+        const oldest = buckets.keys().next().value;
+        if (oldest === undefined) break;
+        buckets.delete(oldest);
+      }
     }
     hit = { count: 0, resetAt: now + windowMs };
     buckets.set(key, hit);
@@ -95,6 +101,16 @@ export function enforceRateLimit(
 // -------- 冪等な生成結果のTTLキャッシュ（triage/timeline のGeminiコスト削減） --------
 // 同一入力の再問い合わせ（デモの再現操作・リロード等）でLLMを再度叩かないための簡易キャッシュ。
 // FIFOで件数を制限し、TTLで陳腐化を防ぐ。
+
+// キー順に依存しない安定したキャッシュキーを作る（再帰的にキーをソートしてstringify）。
+// 同一内容が別キー扱いになってキャッシュミス（Gemini再呼び出し増）になるのを防ぐ。
+export function stableKey(obj: unknown): string {
+  return JSON.stringify(obj, (_k, v) =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)))
+      : v
+  );
+}
 
 type CacheEntry<T> = { value: T; expireAt: number };
 

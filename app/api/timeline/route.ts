@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { UserAttrs, TimelinePhase, Lang } from "@/lib/types";
 import { LANG_CODES } from "@/lib/types";
 import { getGeminiClient, GEMINI_MODEL } from "@/lib/gemini";
-import { enforceRateLimit, TtlCache } from "@/lib/rateLimit";
+import { enforceRateLimit, TtlCache, stableKey } from "@/lib/rateLimit";
 
 // 同一入力の再問い合わせでGeminiを再度叩かないための簡易キャッシュ（コスト削減）
 const timelineCache = new TtlCache<TimelinePhase[]>(300, 10 * 60_000);
@@ -196,8 +196,8 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // 同一入力はキャッシュから返しGemini呼び出しを節約（距離は0.1km粒度に丸めてキー化）
-  const cacheKey = JSON.stringify({
+  // 同一入力はキャッシュから返しGemini呼び出しを節約（距離は0.1km粒度に丸め、キー順非依存で安定化）
+  const cacheKey = stableKey({
     attrs,
     destName,
     hazardLabel,

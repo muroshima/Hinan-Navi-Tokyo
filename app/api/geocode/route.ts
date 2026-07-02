@@ -7,9 +7,12 @@ export async function GET(req: NextRequest) {
   const limited = enforceRateLimit("geocode", req, 30, 60_000);
   if (limited) return limited;
 
-  // 過大入力でNominatimに負荷をかけないよう長さを制限
-  const q = (req.nextUrl.searchParams.get("q") ?? "").trim().slice(0, 200);
+  const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
   if (!q) return NextResponse.json({ error: "q is required" }, { status: 400 });
+  // 過大入力は黙って切り詰めず明示的に弾く（切り詰めると別の住所を検索する誤動作になるため）
+  if (q.length > 200) {
+    return NextResponse.json({ error: "q is too long (max 200 chars)" }, { status: 400 });
+  }
 
   const url =
     "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=jp&q=" +

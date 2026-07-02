@@ -75,7 +75,7 @@ python3 scripts/preprocess.py
 
 | 用途 | 提供 | 出典/ライセンス | 留意点 |
 |---|---|---|---|
-| 住所・地名→座標（`/api/geocode`） | OpenStreetMap Nominatim 公開サーバ | データ © OpenStreetMap contributors（ODbL）。Nominatim **Usage Policy**（1req/s上限・重利用禁止） | User-Agent/連絡先付与済み。**IP単位レート制限 30回/分＋入力長制限（#30）**。ただしNominatimの1req/sはサーバ全体制約のため、公開常用時は自前運用が必要 |
+| 住所・地名→座標（`/api/geocode`） | OpenStreetMap Nominatim 公開サーバ | データ © OpenStreetMap contributors（ODbL）。Nominatim **Usage Policy**（1req/s上限・重利用禁止） | User-Agent/連絡先付与済み。**IP単位レート制限 30回/分＋入力長200文字超は400拒否（#30）**。ただしNominatimの1req/sはサーバ全体制約のため、公開常用時は自前運用が必要 |
 | 徒歩経路距離（`/api/route`） | OSRM デモサーバ（router.project-osrm.org） | OSRM(BSD)。**デモサーバは本番利用不可・heavy use禁止** | 道路距離のみ採用し所要は徒歩速度で概算。**IP単位レート制限 30回/分（#30）**。公開常用時は自前/商用ルーティングへ差替が必要 |
 | 徒歩ルート表示（リンク誘導） | Google Maps | リンク誘導のみ（API不使用） | 規約上ほぼ問題なし |
 
