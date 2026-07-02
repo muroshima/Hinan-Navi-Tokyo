@@ -10,6 +10,7 @@ import type {
   LifelineKind,
   LifelineFeature,
   BusStopFeature,
+  AccessibleFacilityFeature,
 } from "@/lib/types";
 
 const TOKYO: [number, number] = [139.7528, 35.6852];
@@ -64,6 +65,8 @@ interface Props {
   buildings3d?: boolean; // PLATEAU建物3D（垂直避難先を高さで色分け）
   busStops?: BusStopFeature[]; // 都営バス停
   showBusStops?: boolean; // バス停レイヤ表示
+  accessibleFacilities?: AccessibleFacilityFeature[]; // バリアフリー施設(だれでも東京)
+  showAccessible?: boolean; // バリアフリー施設レイヤ表示
 }
 
 function emptyFC(): GeoJSON.FeatureCollection {
@@ -89,6 +92,8 @@ export default function MapView({
   buildings3d = false,
   busStops = [],
   showBusStops = false,
+  accessibleFacilities = [],
+  showAccessible = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -263,6 +268,61 @@ export default function MapView({
         map.getCanvas().style.cursor = "pointer";
       });
       map.on("mouseleave", "busstop-pts", () => {
+        map.getCanvas().style.cursor = "";
+      });
+
+      // バリアフリー施設レイヤー（だれでも東京。避難経路上で立ち寄れる施設）。初期は非表示
+      map.addSource("accessible", {
+        type: "geojson",
+        data: emptyFC(),
+        attribution: "「だれでも東京」(東京都デジタルサービス局) CC BY 4.0",
+      });
+      map.addLayer({
+        id: "accessible-pts",
+        type: "circle",
+        source: "accessible",
+        layout: { visibility: "none" },
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 3, 16, 6],
+          "circle-color": "#f59e0b",
+          "circle-stroke-width": 1,
+          "circle-stroke-color": "#ffffff",
+        },
+      });
+      const accPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true });
+      map.on("click", "accessible-pts", (e) => {
+        const f = e.features?.[0];
+        if (!f) return;
+        const p = f.properties as Record<string, unknown>;
+        // バリアフリー属性(bool)を日本語ラベル化。MapLibreはpropertiesをstring化することがあるので両対応
+        const on = (v: unknown) => v === true || v === "true";
+        const flags: [string, string][] = [
+          ["accessible_toilet", "だれでもトイレ"],
+          ["ostomate", "オストメイト対応"],
+          ["elevator", "エレベーター"],
+          ["slope", "スロープ"],
+          ["braille_block", "点字ブロック"],
+          ["wheelchair_parking", "車いす駐車場"],
+          ["diaper_change", "おむつ交換台"],
+          ["assist_dog_toilet", "補助犬トイレ"],
+        ];
+        const have = flags.filter(([k]) => on(p[k])).map(([, label]) => label);
+        const lines: string[] = [
+          `<b>♿ ${escapeHtml(String(p.name ?? ""))}</b>`,
+          `${escapeHtml(String(p.category ?? ""))}${p.address ? " / " + escapeHtml(String(p.address)) : ""}`,
+        ];
+        lines.push(
+          have.length ? "設備: " + have.map(escapeHtml).join("・") : "バリアフリー設備情報なし"
+        );
+        accPopup
+          .setLngLat((f.geometry as GeoJSON.Point).coordinates as [number, number])
+          .setHTML(`<div style="font-size:12px;line-height:1.4">${lines.join("<br>")}</div>`)
+          .addTo(map);
+      });
+      map.on("mouseenter", "accessible-pts", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "accessible-pts", () => {
         map.getCanvas().style.cursor = "";
       });
 
@@ -445,6 +505,25 @@ export default function MapView({
       map.setLayoutProperty("busstop-pts", "visibility", showBusStops ? "visible" : "none");
     }
   }, [showBusStops, loaded]);
+
+  // バリアフリー施設レイヤーの反映
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded) return;
+    (map.getSource("accessible") as maplibregl.GeoJSONSource | undefined)?.setData({
+      type: "FeatureCollection",
+      features: accessibleFacilities,
+    });
+  }, [accessibleFacilities, loaded]);
+
+  // バリアフリー施設レイヤーの表示切替
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded) return;
+    if (map.getLayer("accessible-pts")) {
+      map.setLayoutProperty("accessible-pts", "visibility", showAccessible ? "visible" : "none");
+    }
+  }, [showAccessible, loaded]);
 
   // 3D地形(坂・起伏)の切替
   useEffect(() => {

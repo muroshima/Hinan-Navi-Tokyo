@@ -56,6 +56,19 @@
       "record_count": 1674
     },
     {
+      "file": "accessible_facilities.geojson",
+      "datasets": [
+        "宿泊施設等の施設情報ポータルサイト「だれでも東京」（宿泊/買い物/レジャー/飲食/交通/公園/公共施設）"
+      ],
+      "provider": "東京都（デジタルサービス局）",
+      "license": "CC BY 4.0",
+      "source_url": "https://catalog.data.metro.tokyo.lg.jp/dataset/t000029d0000000003",
+      "retrieved": "2026-07",
+      "processing": "カテゴリ別CSV(CP932/UTF-8)を統合GeoJSON化。避難経路上で立ち寄れるバリアフリー施設として、だれでもトイレ/オストメイト/エレベーター/スロープ/点字ブロック/車いす専用駐車場/おむつ交換台/補助犬専用トイレの有無をbool化。座標は緯度経度(宿泊は緯度_加工/経度_加工)",
+      "attribution": "「だれでも東京」（東京都デジタルサービス局）（CC BY 4.0）",
+      "record_count": 840
+    },
+    {
       "file": "(高齢化率の付与に使用・町丁目粒度)",
       "datasets": [
         "令和2年国勢調査 小地域(町丁・字等)集計 第3表 年齢別人口(東京都)",

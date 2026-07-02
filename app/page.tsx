@@ -13,6 +13,7 @@ import type {
   LifelineFeature,
   LifelineKind,
   BusStopFeature,
+  AccessibleFacilityFeature,
 } from "@/lib/types";
 import { DEFAULT_ATTRS, LANGS, LANG_CODES } from "@/lib/types";
 import { QRCodeSVG } from "qrcode.react";
@@ -179,6 +180,8 @@ export default function Home() {
   const [buildings3d, setBuildings3d] = useState(false); // PLATEAU建物3D（垂直避難）
   const [busStops, setBusStops] = useState<BusStopFeature[]>([]); // 都営バス停
   const [showBusStops, setShowBusStops] = useState(false);
+  const [accessibleFacilities, setAccessibleFacilities] = useState<AccessibleFacilityFeature[]>([]); // バリアフリー施設(だれでも東京)
+  const [showAccessible, setShowAccessible] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [originLabel, setOriginLabel] = useState("自動取得 / 東京駅");
   const [placeInput, setPlaceInput] = useState("");
@@ -382,6 +385,16 @@ export default function Home() {
       .catch((e) => {
         console.warn("bus_stops load failed", e);
         setBusStops([]);
+      });
+    // バリアフリー施設（だれでも東京）
+    fetch("/data/accessible_facilities.geojson")
+      .then((r) => r.json())
+      .then((fc: { features?: AccessibleFacilityFeature[] }) =>
+        setAccessibleFacilities(fc.features ?? [])
+      )
+      .catch((e) => {
+        console.warn("accessible_facilities load failed", e);
+        setAccessibleFacilities([]);
       });
   }, []);
 
@@ -889,9 +902,21 @@ export default function Home() {
               {showBusStops ? "● " : "○ "}
               🚌 バス停
             </button>
+            <button
+              onClick={() => setShowAccessible((v) => !v)}
+              aria-pressed={showAccessible}
+              className={`rounded-full border px-2 py-1 text-xs ${
+                showAccessible
+                  ? "border-amber-500 bg-amber-100 text-amber-800"
+                  : "border-gray-300 text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              {showAccessible ? "● " : "○ "}
+              ♿ バリアフリー施設
+            </button>
           </div>
           <p className="mt-1 text-[10px] text-gray-400">
-            出典: 東京都オープンデータ（災害時給水ステーション／FREE Wi-Fi & TOKYO）・都営バスGTFS（東京都交通局／ODPT）— CC BY 4.0。バス停は拡大で表示
+            出典: 東京都オープンデータ（災害時給水ステーション／FREE Wi-Fi & TOKYO／「だれでも東京」施設情報）・都営バスGTFS（東京都交通局／ODPT）— CC BY 4.0。バス停は拡大で表示。バリアフリー施設は避難経路上で立ち寄れる休憩先
           </p>
         </div>
 
@@ -1116,6 +1141,8 @@ export default function Home() {
           buildings3d={buildings3d}
           busStops={busStops}
           showBusStops={showBusStops}
+          accessibleFacilities={accessibleFacilities}
+          showAccessible={showAccessible}
         />
       </main>
     </div>

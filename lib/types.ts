@@ -131,6 +131,24 @@ export interface BusStopProps {
 }
 export type BusStopFeature = GeoJSON.Feature<GeoJSON.Point, BusStopProps>;
 
+// バリアフリー施設（「だれでも東京」。避難経路上で立ち寄れる施設）
+export interface AccessibleFacilityProps {
+  id: string;
+  category: string; // 宿泊/買い物/レジャー/飲食/交通/公園/公共施設
+  name: string;
+  address?: string;
+  url?: string;
+  accessible_toilet: boolean; // だれでもトイレ
+  ostomate: boolean; // オストメイト対応トイレ
+  elevator: boolean; // エレベーター
+  slope: boolean; // 出入口スロープ
+  braille_block: boolean; // 点字ブロック
+  wheelchair_parking: boolean; // 車いす専用駐車場
+  diaper_change: boolean; // おむつ交換台
+  assist_dog_toilet: boolean; // 補助犬専用トイレ
+}
+export type AccessibleFacilityFeature = GeoJSON.Feature<GeoJSON.Point, AccessibleFacilityProps>;
+
 // マイ・タイムライン（局面別の避難行動。/api/timeline が生成）
 export interface TimelinePhase {
   phase: string; // 局面名（例: 避難開始）
