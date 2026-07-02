@@ -70,7 +70,7 @@ interface Props {
   showAccessible?: boolean; // バリアフリー施設レイヤ表示
   tempStay?: TempStayFeature[]; // 帰宅困難者向け 都立一時滞在施設
   showTempStay?: boolean; // 一時滞在施設レイヤ表示
-  routeLine?: { coordinates: [number, number][]; flooded: boolean } | null; // 推奨避難所への徒歩経路(#38)
+  routeLine?: { coordinates: [number, number][]; flooded: boolean; floodKnown: boolean } | null; // 推奨避難所への徒歩経路(#38)
 }
 
 function emptyFC(): GeoJSON.FeatureCollection {
@@ -418,7 +418,15 @@ export default function MapView({
         paint: {
           "line-width": 5,
           "line-opacity": 0.8,
-          "line-color": ["case", ["==", ["get", "flooded"], true], "#f59e0b", "#16a34a"],
+          // 判定不能=灰, 浸水域通過=琥珀, 回避=緑
+          "line-color": [
+            "case",
+            ["==", ["get", "floodKnown"], false],
+            "#6b7280",
+            ["==", ["get", "flooded"], true],
+            "#f59e0b",
+            "#16a34a",
+          ],
         },
       });
 
@@ -618,7 +626,7 @@ export default function MapView({
         {
           type: "Feature",
           geometry: { type: "LineString", coordinates: routeLine.coordinates },
-          properties: { flooded: routeLine.flooded },
+          properties: { flooded: routeLine.flooded, floodKnown: routeLine.floodKnown },
         },
       ],
     });

@@ -15,20 +15,28 @@ export interface RouteFloodStats {
   floodedRatio: number; // 浸水域通過の割合(0..1)
 }
 
-// [lng,lat] のセルの最大浸水深(浸水域でなければ0)
-function depthAt(grid: FloodGrid, lng: number, lat: number): number {
-  const il = Math.round(lat / grid.cell);
-  const io = Math.round(lng / grid.cell);
-  const c = grid.cells[`${il},${io}`];
-  return c ? c[0] : 0;
-}
-
-// 経路(座標列 [lng,lat][])の浸水曝露を集計
+// 経路(座標列 [lng,lat][])の浸水曝露を集計。
+// 連続する点が同一セルに入ることが多いため、直前セルの結果をキャッシュして
+// セルが変わったときだけ grid を参照する(Map参照・文字列キー生成の無駄を削減)。
 export function analyzeRoute(coords: [number, number][], grid: FloodGrid): RouteFloodStats {
   let maxDepthM = 0;
   let floodedPoints = 0;
+  let prevIl: number | null = null;
+  let prevIo: number | null = null;
+  let prevDepth = 0;
   for (const [lng, lat] of coords) {
-    const d = depthAt(grid, lng, lat);
+    const il = Math.round(lat / grid.cell);
+    const io = Math.round(lng / grid.cell);
+    let d: number;
+    if (il === prevIl && io === prevIo) {
+      d = prevDepth; // 同一セル: 参照を省略
+    } else {
+      const c = grid.cells[`${il},${io}`];
+      d = c ? c[0] : 0;
+      prevIl = il;
+      prevIo = io;
+      prevDepth = d;
+    }
     if (d > 0) {
       floodedPoints += 1;
       if (d > maxDepthM) maxDepthM = d;

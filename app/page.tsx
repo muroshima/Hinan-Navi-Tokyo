@@ -171,6 +171,7 @@ export default function Home() {
     recommended: AnalyzedRoute;
     shortest: AnalyzedRoute;
     avoidedFlood: boolean; // 推奨(安全)経路が最短経路より浸水を避けられたか
+    floodKnown: boolean; // 浸水グリッドが読み込めており浸水判定が有効か(偽=判定不能)
   } | null>(null);
   const [origin, setOrigin] = useState<[number, number]>(TOKYO_STATION);
   const [text, setText] = useState("");
@@ -564,7 +565,8 @@ export default function Home() {
         if (aborted || !recommended || !shortest) return;
         const avoidedFlood =
           shortest.flood.maxDepthM > 0 && recommended.flood.maxDepthM < shortest.flood.maxDepthM;
-        setRouteAdvisory({ recommended, shortest, avoidedFlood });
+        // floodGridが無いと浸水判定は偽陰性になり得るため、判定有効フラグを持たせUIで区別する
+        setRouteAdvisory({ recommended, shortest, avoidedFlood, floodKnown: floodGrid != null });
       } catch {
         if (!aborted) setRouteAdvisory(null);
       }
@@ -1028,13 +1030,19 @@ export default function Home() {
         {routeAdvisory && (
           <div
             className={`rounded-lg border p-3 text-sm ${
-              routeAdvisory.recommended.flood.maxDepthM > 0
-                ? "border-amber-300 bg-amber-50 text-amber-900"
-                : "border-green-300 bg-green-50 text-green-900"
+              !routeAdvisory.floodKnown
+                ? "border-gray-300 bg-gray-50 text-gray-700"
+                : routeAdvisory.recommended.flood.maxDepthM > 0
+                  ? "border-amber-300 bg-amber-50 text-amber-900"
+                  : "border-green-300 bg-green-50 text-green-900"
             }`}
           >
             <div className="text-xs font-bold">🧭 避難経路の浸水チェック（推奨避難所まで）</div>
-            {routeAdvisory.recommended.flood.maxDepthM > 0 ? (
+            {!routeAdvisory.floodKnown ? (
+              <p className="mt-1">
+                浸水想定データを読み込めなかったため、<b>浸水判定はできません</b>（経路のみ地図に表示）。
+              </p>
+            ) : routeAdvisory.recommended.flood.maxDepthM > 0 ? (
               <p className="mt-1">
                 この経路は<b>浸水想定域を通過</b>します（想定最大浸水深{" "}
                 <b>約{routeAdvisory.recommended.flood.maxDepthM}m</b>）。冠水時は迂回・垂直避難も検討してください。
@@ -1042,15 +1050,20 @@ export default function Home() {
             ) : (
               <p className="mt-1">この経路は<b>浸水想定域を通りません</b>（想定区域図ベース）。</p>
             )}
-            {routeAdvisory.avoidedFlood && (
+            {routeAdvisory.floodKnown && routeAdvisory.avoidedFlood && (
               <p className="mt-1 text-[12px]">
                 ✅ 最短経路（最大浸水深 約{routeAdvisory.shortest.flood.maxDepthM}m）より
                 <b>浸水を避けられる経路</b>を地図に表示しています。
               </p>
             )}
             <p className="mt-1 text-[10px] text-gray-500">
-              地図の{routeAdvisory.recommended.flood.maxDepthM > 0 ? "琥珀" : "緑"}の線が経路。出典: 東京都「浸水予想区域図」（CC
-              BY 4.0）を粗いグリッドに集約。OSRMの代替経路から浸水曝露が最小のものを選択（経路自体の再計算は行いません）
+              地図の
+              {!routeAdvisory.floodKnown
+                ? "灰"
+                : routeAdvisory.recommended.flood.maxDepthM > 0
+                  ? "琥珀"
+                  : "緑"}
+              の線が経路。出典: 東京都「浸水予想区域図」（CC BY 4.0）を粗いグリッドに集約。OSRMの代替経路から浸水曝露が最小のものを選択（経路自体の再計算は行いません）
             </p>
           </div>
         )}
@@ -1262,7 +1275,8 @@ export default function Home() {
             routeAdvisory
               ? {
                   coordinates: routeAdvisory.recommended.coordinates,
-                  flooded: routeAdvisory.recommended.flood.maxDepthM > 0,
+                  flooded: routeAdvisory.floodKnown && routeAdvisory.recommended.flood.maxDepthM > 0,
+                  floodKnown: routeAdvisory.floodKnown,
                 }
               : null
           }
