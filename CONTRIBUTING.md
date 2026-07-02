@@ -16,7 +16,7 @@ python3 scripts/preprocess.py
 npm run dev   # http://localhost:3000
 ```
 
-`ANTHROPIC_API_KEY` 等は `.env.local`（`.env.local.example` 参照）。**キー未設定でも語句一致のfallbackで動作**します。
+LLM は **Vertex AI Gemini**（IAM認証・APIキー不要）。ローカルで使うには `gcloud auth application-default login`（ADC）＋ `GOOGLE_CLOUD_PROJECT` を設定（`.env.local.example` 参照）。**未設定でも語句一致のfallbackで動作**します。
 
 ## ブランチ・PR フロー
 

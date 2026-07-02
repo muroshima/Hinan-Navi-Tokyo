@@ -1,9 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { Type } from "@google/genai";
 import { z } from "zod";
 import { NextRequest, NextResponse } from "next/server";
 import type { UserAttrs, TimelinePhase, Lang } from "@/lib/types";
 import { LANG_CODES } from "@/lib/types";
+import { getGeminiClient, GEMINI_MODEL } from "@/lib/gemini";
 
 // 生成する避難タイムラインのスキーマ（内閣府の警戒レベルに沿った局面別の行動）
 // 長さ制約で空配列・過剰件数の不正形を弾き、UIが空になるのを防ぐ（不正ならparse失敗→fallback）
@@ -23,6 +23,31 @@ const TimelineSchema = z.object({
     .max(8)
     .describe("時系列の避難行動タイムライン。目安4〜6局面（最大8）"),
 });
+
+// Gemini の responseSchema（TimelineSchema と構造一致）
+const GEMINI_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    phases: {
+      type: Type.ARRAY,
+      description: "時系列の避難行動タイムライン。目安4〜6局面",
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          phase: { type: Type.STRING, description: "局面の名前（例: 避難開始）" },
+          level: { type: Type.STRING, description: "対応する警戒レベルや時点" },
+          actions: {
+            type: Type.ARRAY,
+            description: "その局面で取る具体的な行動。目安2〜5個",
+            items: { type: Type.STRING },
+          },
+        },
+        required: ["phase", "level", "actions"],
+      },
+    },
+  },
+  required: ["phases"],
+};
 
 // 入力の正規化（boolean以外やInfinity等の不正値で500にしない）
 const InputAttrsSchema = z.object({
@@ -154,8 +179,9 @@ export async function POST(req: NextRequest) {
   const { destName, hazardLabel, distanceKm } = parsed.data;
   const language = parsed.data.language ?? "ja";
 
-  // APIキーが無ければルールベースにフォールバック
-  if (!process.env.ANTHROPIC_API_KEY) {
+  // Vertex(project/認証)が無ければルールベースにフォールバック
+  const ai = getGeminiClient();
+  if (!ai) {
     return NextResponse.json({
       timeline: fallbackTimeline(attrs, destName, hazardLabel),
       source: "fallback",
@@ -173,22 +199,23 @@ export async function POST(req: NextRequest) {
 この利用者の状況に合わせた避難のマイ・タイムラインを作成してください。`;
 
   try {
-    const client = new Anthropic();
-    const res = await client.messages.parse({
-      model: "claude-opus-4-8",
-      max_tokens: 2048,
-      system: `${SYSTEM}\n\n出力言語: ${LANG_INSTRUCTION[language]}`,
-      messages: [{ role: "user", content: prompt }],
-      output_config: { format: zodOutputFormat(TimelineSchema) },
+    const res = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: prompt,
+      config: {
+        systemInstruction: `${SYSTEM}\n\n出力言語: ${LANG_INSTRUCTION[language]}`,
+        responseMimeType: "application/json",
+        responseSchema: GEMINI_SCHEMA,
+      },
     });
-    const out = res.parsed_output;
-    if (!out?.phases?.length) {
+    const out = TimelineSchema.safeParse(JSON.parse(res.text ?? "{}"));
+    if (!out.success || out.data.phases.length === 0) {
       return NextResponse.json({
         timeline: fallbackTimeline(attrs, destName, hazardLabel),
         source: "fallback",
       });
     }
-    return NextResponse.json({ timeline: out.phases, source: "claude" });
+    return NextResponse.json({ timeline: out.data.phases, source: "gemini" });
   } catch (err) {
     // 失敗してもアプリを止めない。詳細はサーバーログのみ（内部情報をクライアントに出さない）
     console.error("timeline error:", err instanceof Error ? err.message : String(err));
