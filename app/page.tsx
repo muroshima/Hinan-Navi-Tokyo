@@ -528,12 +528,16 @@ export default function Home() {
   }, [ranked, origin]);
 
   // 浸水回避ルーティング(#38): 推奨避難所への徒歩経路(+代替)をOSRMから取得。
-  // 取得は origin と推奨避難所の座標にのみ依存(floodGrid読込では再取得しない=OSRM無駄打ち防止)。
+  // 依存はプリミティブ(origin/dest座標)に絞り、属性トグルでrankedが再計算されても
+  // 推奨避難所(dest)が変わらなければ再取得しない(OSRMデモのレート枠を無駄にしない)。
+  const originLng = origin[0];
+  const originLat = origin[1];
+  const destLng = ranked[0]?.feature.geometry.coordinates[0];
+  const destLat = ranked[0]?.feature.geometry.coordinates[1];
   useEffect(() => {
     let aborted = false;
-    const top = ranked[0];
     (async () => {
-      if (!top) {
+      if (destLng == null || destLat == null) {
         if (!aborted) setRawRoutes(null);
         return;
       }
@@ -541,7 +545,7 @@ export default function Home() {
         const res = await fetch("/api/walkroute", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ origin, dest: top.feature.geometry.coordinates }),
+          body: JSON.stringify({ origin: [originLng, originLat], dest: [destLng, destLat] }),
         });
         if (!res.ok) {
           if (!aborted) setRawRoutes(null);
@@ -556,7 +560,7 @@ export default function Home() {
     return () => {
       aborted = true;
     };
-  }, [ranked, origin]);
+  }, [originLng, originLat, destLng, destLat]);
 
   // 浸水曝露の解析は純粋な導出。取得済み経路 × floodGrid から算出(grid変更時は再取得せず再解析のみ)。
   // 代替の中から浸水曝露が最小の経路を推奨し、最短経路との差・判定可否を提示する。
@@ -572,6 +576,19 @@ export default function Home() {
     // floodGridが無いと浸水判定は偽陰性になり得るため、判定有効フラグを持たせUIで区別する
     return { recommended, shortest, avoidedFlood, floodKnown: floodGrid != null };
   }, [rawRoutes, floodGrid]);
+
+  // 地図へ渡す経路線。identityを安定させ、実データが変わった時だけMapViewが再描画するようにする
+  const routeLine = useMemo(
+    () =>
+      routeAdvisory
+        ? {
+            coordinates: routeAdvisory.recommended.coordinates,
+            flooded: routeAdvisory.floodKnown && routeAdvisory.recommended.flood.maxDepthM > 0,
+            floodKnown: routeAdvisory.floodKnown,
+          }
+        : null,
+    [routeAdvisory]
+  );
 
   // 複合ニーズ（同時最適している配慮要件）のラベル
   const activeNeeds = useMemo(() => (submitted ? activeAttrLabels(attrs) : []), [submitted, attrs]);
@@ -1268,15 +1285,7 @@ export default function Home() {
           showAccessible={showAccessible}
           tempStay={tempStay}
           showTempStay={showTempStay}
-          routeLine={
-            routeAdvisory
-              ? {
-                  coordinates: routeAdvisory.recommended.coordinates,
-                  flooded: routeAdvisory.floodKnown && routeAdvisory.recommended.flood.maxDepthM > 0,
-                  floodKnown: routeAdvisory.floodKnown,
-                }
-              : null
-          }
+          routeLine={routeLine}
         />
       </main>
     </div>
