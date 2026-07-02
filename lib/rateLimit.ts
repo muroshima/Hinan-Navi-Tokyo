@@ -47,8 +47,12 @@ export function rateLimit(
   let hit = buckets.get(key);
 
   if (!hit || hit.resetAt <= now) {
+    // 既存(期限切れ)キーは一旦削除してから再挿入し、Mapの挿入順を「最終リセットが新しい順」に保つ。
+    // これをしないと Map.set は既存キーの挿入位置を変えず、昔から使われ続けるキーが先頭に残り、
+    // 下の追い出しで現役キーを誤って消してしまう。
+    buckets.delete(key);
     // 新規キー追加前にメモリ上限を厳守（IP詐称で新規キーを投げ続けられてもMapを上限内に保つ）。
-    // まず期限切れを掃除し、それでも埋まっていれば最古（Mapは挿入順＝リセットが近い順）を捨てる。
+    // まず期限切れを掃除し、それでも埋まっていれば最古＝最終リセットが最も古いキーを捨てる。
     if (buckets.size >= MAX_KEYS) {
       for (const [k, v] of buckets) if (v.resetAt <= now) buckets.delete(k);
       while (buckets.size >= MAX_KEYS) {
@@ -67,14 +71,24 @@ export function rateLimit(
   return { ok: hit.count <= limit, remaining, retryAfterSec };
 }
 
-// x-forwarded-for の最左IP。無ければ "local"（開発・直アクセス）
+// 妥当なIP文字列の最大長（IPv6全長=45文字。超過は不正とみなしキー肥大化を防ぐ）
+const MAX_IP_LEN = 45;
+
+// IP候補の正規化。空・過大長（詐称ヘッダによるキー肥大化）は "local" にフォールバック
+function normalizeIp(raw: string | null | undefined): string | null {
+  const v = raw?.trim();
+  if (!v) return null;
+  return v.length <= MAX_IP_LEN ? v : "local";
+}
+
+// x-forwarded-for の最左IP。無ければ x-real-ip、いずれも無ければ "local"（開発・直アクセス）
 export function clientIp(req: NextRequest): string {
   const xff = req.headers.get("x-forwarded-for");
   if (xff) {
-    const first = xff.split(",")[0]?.trim();
+    const first = normalizeIp(xff.split(",")[0]);
     if (first) return first;
   }
-  return req.headers.get("x-real-ip")?.trim() || "local";
+  return normalizeIp(req.headers.get("x-real-ip")) || "local";
 }
 
 // レート制限のキー（ルート名でバケットを分離し、ルートごとに独立して数える）
