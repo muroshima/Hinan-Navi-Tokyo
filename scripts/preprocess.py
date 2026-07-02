@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""東京都オープンデータ等(避難所/避難場所/車椅子対応トイレ/給水・Wi-Fi/都営バス停)を
-統一スキーマGeoJSONに変換。
+"""東京都オープンデータ等(避難所/避難場所/車椅子対応トイレ/給水・Wi-Fi/都営バス停/
+「だれでも東京」バリアフリー施設)を統一スキーマGeoJSONに変換。
 - エンコードはファイルごとに自動判定(utf-8-sig / cp932 / utf-8)
 - 先頭ゴミ空行を除去し、本物のヘッダ行を検出
 - バリアフリー列・災害種別列を bool に正規化
-出力: public/data/{evacuation, toilets, lifeline, bus_stops}.geojson および metadata.json
+- 出力: public/data/{evacuation, toilets, lifeline, bus_stops, accessible_facilities}.geojson および metadata.json
 """
 import csv, io, json, os, zipfile
 
@@ -300,6 +300,83 @@ def build_bus_stops():
     return feats
 
 
+# だれでも東京（宿泊施設等の施設情報ポータル）のカテゴリ→日本語ラベル
+DAREDEMO_CATS = {
+    'accommodation': '宿泊',
+    'shopping': '買い物',
+    'leisure': 'レジャー',
+    'dining': '飲食',
+    'transport': '交通',
+    'parks': '公園',
+    'public_facilities': '公共施設',
+}
+# 抽出するバリアフリー属性（列名→出力キー）。値は 有/可/あり/○ を True とみなす
+DAREDEMO_FLAGS = {
+    'だれでもトイレの設置有無': 'accessible_toilet',
+    'オストメイト対応トイレの有無': 'ostomate',
+    'エレベーターの有無': 'elevator',
+    '施設出入口付近スロープの有無': 'slope',
+    '点字ブロックの有無': 'braille_block',
+    '車いす専用駐車場の有無': 'wheelchair_parking',
+    '施設内おむつ交換台の有無': 'diaper_change',
+    '補助犬専用トイレの有無': 'assist_dog_toilet',
+}
+
+
+def _yes(v):
+    """だれでも東京の 有/可/あり/○ を True に。無/否/空は False。"""
+    return (v or '').strip() in ('有', '可', 'あり', '○')
+
+
+def _tokyo_lonlat(lat_val, lon_val):
+    """東京域(離島含む)の [lon,lat] を返す。値が範囲外でも緯度経度の取り違え行は
+    入れ替えて救済し、それでも不正なら None(=除外)。範囲は本土〜八丈島(33N)・小笠原(27N,142E)を包含。"""
+    def ok(lo, la):
+        return lo is not None and la is not None and 138.9 <= lo <= 154.5 and 20.0 <= la <= 36.0
+    if ok(lon_val, lat_val):
+        return [lon_val, lat_val]     # 正常
+    if ok(lat_val, lon_val):
+        return [lat_val, lon_val]     # 緯度/経度が入れ替わった行を救済
+    return None
+
+
+def build_accessible_facilities():
+    """「だれでも東京」施設ポータル(#42)を統合。避難所ではなく、避難経路上で立ち寄れる
+    バリアフリー施設(公共施設/公園/交通/飲食/買い物/レジャー/宿泊)を1レイヤーに集約。
+    properties.category で種別、各バリアフリー属性を bool で保持。座標列は 緯度/経度
+    もしくは 緯度_加工/経度_加工(宿泊)に対応。"""
+    feats = []
+    for cat, label in DAREDEMO_CATS.items():
+        name_file = f'daredemo_{cat}.csv'
+        try:
+            rows = read_csv(name_file)
+            hi, h = find_header(rows, ['施設名'])
+            for i, d in enumerate(records(rows, hi, h)):
+                lat = to_float(d.get('緯度') or d.get('緯度_加工'))
+                lon = to_float(d.get('経度') or d.get('経度_加工'))
+                name = d.get('施設名', '')
+                coord = _tokyo_lonlat(lat, lon)
+                if not name or coord is None:
+                    continue
+                attrs = {out: _yes(d.get(col)) for col, out in DAREDEMO_FLAGS.items()}
+                addr = (d.get('市区町村名', '') + d.get('町丁目名', '')).strip()
+                feats.append({
+                    'type': 'Feature',
+                    'geometry': {'type': 'Point', 'coordinates': coord},
+                    'properties': {
+                        'id': f'af-{cat}-{i}',  # カテゴリ内連番で一意
+                        'category': label,
+                        'name': name,
+                        'address': addr,
+                        'url': d.get('施設URL', ''),
+                        **attrs,
+                    },
+                })
+        except Exception as e:
+            print(f'{name_file} skip:', e)
+    return feats
+
+
 def dump(name, feats):
     fc = {'type': 'FeatureCollection', 'features': feats}
     with open(os.path.join(OUT, name), 'w', encoding='utf-8') as f:
@@ -357,6 +434,16 @@ SOURCES = [
         'attribution': '都営バス GTFS-JP（東京都交通局）／公共交通オープンデータセンター（CC BY 4.0）',
     },
     {
+        'file': 'accessible_facilities.geojson',
+        'datasets': ['宿泊施設等の施設情報ポータルサイト「だれでも東京」（宿泊/買い物/レジャー/飲食/交通/公園/公共施設）'],
+        'provider': '東京都（デジタルサービス局）',
+        'license': 'CC BY 4.0',
+        'source_url': 'https://catalog.data.metro.tokyo.lg.jp/dataset/t000029d0000000003',
+        'retrieved': '2026-07',
+        'processing': 'カテゴリ別CSV(CP932/UTF-8)を統合GeoJSON化。避難経路上で立ち寄れるバリアフリー施設として、だれでもトイレ/オストメイト/エレベーター/スロープ/点字ブロック/車いす専用駐車場/おむつ交換台/補助犬専用トイレの有無をbool化。座標は緯度経度(宿泊は緯度_加工/経度_加工)。緯度経度の取り違え行は入替で救済し、東京域(離島含む)外の不正座標は除外',
+        'attribution': '「だれでも東京」（東京都デジタルサービス局）（CC BY 4.0）',
+    },
+    {
         'file': '(高齢化率の付与に使用・町丁目粒度)',
         'datasets': [
             '令和2年国勢調査 小地域(町丁・字等)集計 第3表 年齢別人口(東京都)',
@@ -402,5 +489,6 @@ if __name__ == '__main__':
     counts['toilets.geojson'] = dump('toilets.geojson', build_toilets())
     counts['lifeline.geojson'] = dump('lifeline.geojson', build_lifeline())
     counts['bus_stops.geojson'] = dump('bus_stops.geojson', build_bus_stops())
+    counts['accessible_facilities.geojson'] = dump('accessible_facilities.geojson', build_accessible_facilities())
     write_metadata(counts)
     print('done ->', os.path.relpath(OUT))
