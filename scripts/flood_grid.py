@@ -11,7 +11,7 @@
 
 使い方:
   scripts/flood_grid.py            # data-raw/flood/*.csv を集約(無ければ自動DL)
-出力: public/data/flood_grid.json  { "cell": 0.0025, "origin":[lat0,lon0], "cells": { "iLat,iLon":[maxDepth, groundElev] } }
+出力: public/data/flood_grid.json  { "cell": 0.0025, "cells": { "iLat,iLon":[maxDepth, groundElev] } }
 """
 import csv, json, os, sys, urllib.request
 
@@ -20,7 +20,9 @@ RAWDIR = os.path.join(ROOT, 'data-raw', 'flood')
 OUT = os.path.join(ROOT, 'public', 'data', 'flood_grid.json')
 CELL = 0.0025  # グリッド1辺(度)。緯度で約278m
 
-# 東京都オープンデータ「浸水予想区域図」の流域別 浸水深・地盤高CSV(R3/R4)
+# 東京都オープンデータ「浸水予想区域図」の流域別 浸水深・地盤高CSV。
+# 対象は各流域1ファイル(秋川はR3版を採用。データセットにはR4の秋川分割版(1)(2)(3)もあるが
+# 同一流域の図郭分割のため重複回避で不採用=流域カバレッジは網羅)。
 CSV_URLS = [
     'https://www.opendata.metro.tokyo.lg.jp/kensetsu/R3/shinsui_kandagawa.csv',
     'https://www.opendata.metro.tokyo.lg.jp/kensetsu/R3/shinsui_sumidagawa.csv',
@@ -56,14 +58,16 @@ def ensure_downloaded():
 
 
 def open_csv(path):
-    """ファイルごとにエンコーディング自動判定(utf-8-sig / cp932 / utf-8)して開く。"""
+    """ファイルごとにエンコーディング自動判定(utf-8-sig / cp932 / utf-8)して開く。
+    判定失敗時はファイルを確実にcloseしてから次候補へ(FDリーク防止)。"""
     for enc in ('utf-8-sig', 'cp932', 'utf-8'):
+        f = open(path, encoding=enc, newline='')
         try:
-            f = open(path, encoding=enc, newline='')
             f.readline()
             f.seek(0)
             return f
         except UnicodeDecodeError:
+            f.close()
             continue
     raise RuntimeError(f'encoding不明: {path}')
 
@@ -79,7 +83,6 @@ def main():
     ensure_downloaded()
     # cell -> [max_depth, min_ground]
     cells = {}
-    lat0 = lon0 = None
     for url in CSV_URLS:
         p = local_path(url)
         if not os.path.exists(p):

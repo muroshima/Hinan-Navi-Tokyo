@@ -556,17 +556,12 @@ export default function Home() {
           if (!aborted) setRouteAdvisory(null);
           return;
         }
-        const { recommended } = pickSafestRoute(routes, floodGrid);
-        // 最短経路(距離最小)を別途特定し、推奨(安全)経路と比較
-        const shortest = [...routes]
-          .map((r) => ({
-            ...r,
-            flood: floodGrid
-              ? pickSafestRoute([r], floodGrid).recommended!.flood
-              : { maxDepthM: 0, floodedPoints: 0, totalPoints: r.coordinates.length, floodedRatio: 0 },
-          }))
-          .sort((a, b) => (a.distM ?? Infinity) - (b.distM ?? Infinity))[0] as AnalyzedRoute;
-        if (aborted || !recommended) return;
+        // 解析は1回だけ。rankedは各経路の浸水解析済み。最短経路はそこから距離で選ぶ(重複解析しない)
+        const { ranked: analyzedRoutes, recommended } = pickSafestRoute(routes, floodGrid);
+        const shortest = [...analyzedRoutes].sort(
+          (a, b) => (a.distM ?? Infinity) - (b.distM ?? Infinity)
+        )[0];
+        if (aborted || !recommended || !shortest) return;
         const avoidedFlood =
           shortest.flood.maxDepthM > 0 && recommended.flood.maxDepthM < shortest.flood.maxDepthM;
         setRouteAdvisory({ recommended, shortest, avoidedFlood });
