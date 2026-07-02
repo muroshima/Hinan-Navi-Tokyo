@@ -13,8 +13,9 @@
 #   例: scripts/aging_bq.sh ~/est_bound_13/r2ka13 ~/h03_13.csv
 set -euo pipefail
 
-PROJ=hinan-navi-tokyo
-LOC=asia-northeast1
+# PROJECT_ID / BQ_LOCATION 環境変数で上書き可(既定はTerraformの project_id / region)
+PROJ="${PROJECT_ID:-hinan-navi-tokyo}"
+LOC="${BQ_LOCATION:-asia-northeast1}"
 SHP="${1:?境界shpのベースパス(拡張子なし)}"
 AGE="${2:?年齢別人口CSV(h03_13.csv)のパス}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -87,7 +88,14 @@ JOIN age2 a ON a.key_code = p.key_code'
 
 # 6) 結果を chome_aging.json(id→町丁目高齢化率) にエクスポート
 bq --project_id="$PROJ" --location="$LOC" query --use_legacy_sql=false --format=json --max_rows=100000 \
-    'SELECT id, aging_rate FROM aging.evac_aging' \
-  | python3 -c 'import json,sys; d=json.load(sys.stdin); json.dump({x["id"]:float(x["aging_rate"]) for x in d if x["aging_rate"] is not None}, open("'"$ROOT"'/public/data/chome_aging.json","w",encoding="utf-8"), ensure_ascii=False, separators=(",",":"))'
+    'SELECT id, aging_rate FROM aging.evac_aging' > "$WORK/result.json"
+python3 - "$WORK/result.json" "$ROOT/public/data/chome_aging.json" <<'PY'
+import json, sys
+with open(sys.argv[1]) as f:
+    d = json.load(f)
+m = {x["id"]: float(x["aging_rate"]) for x in d if x["aging_rate"] is not None}
+with open(sys.argv[2], "w", encoding="utf-8") as o:
+    json.dump(m, o, ensure_ascii=False, separators=(",", ":"))
+PY
 
 echo "done: public/data/chome_aging.json を生成。'python3 scripts/preprocess.py' で evacuation.geojson に町丁目粒度を反映"

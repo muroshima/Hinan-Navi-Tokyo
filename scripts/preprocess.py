@@ -100,7 +100,8 @@ def build_evacuation():
     cpath = os.path.join(OUT, 'chome_aging.json')
     if os.path.exists(cpath):
         try:
-            chome = json.load(open(cpath, encoding='utf-8'))
+            with open(cpath, encoding='utf-8') as f:
+                chome = json.load(f)
         except Exception as e:
             print('chome_aging load skip:', e)
 
