@@ -58,7 +58,7 @@ PY
 # 3) 避難所点 → NDJSON(id, lng, lat)
 python3 - "$GEOJSON" "$WORK/evac.ndjson" <<'PY'
 import json, sys
-with open(sys.argv[1]) as f:
+with open(sys.argv[1], encoding="utf-8") as f:
     fc = json.load(f)
 with open(sys.argv[2], "w", encoding="utf-8") as o:
     for ft in fc["features"]:
@@ -93,7 +93,7 @@ bq --project_id="$PROJ" --location="$LOC" query --use_legacy_sql=false --format=
     'SELECT id, aging_rate FROM aging.evac_aging' > "$WORK/result.json"
 python3 - "$WORK/result.json" "$ROOT/data/chome_aging.json" <<'PY'
 import json, sys
-with open(sys.argv[1]) as f:
+with open(sys.argv[1], encoding="utf-8") as f:
     d = json.load(f)
 m = {x["id"]: float(x["aging_rate"]) for x in d if x["aging_rate"] is not None}
 with open(sys.argv[2], "w", encoding="utf-8") as o:
