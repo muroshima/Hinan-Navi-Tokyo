@@ -13,7 +13,7 @@
 #   例: scripts/aging_bq.sh ~/est_bound_13/r2ka13 ~/h03_13.csv
 set -euo pipefail
 
-# PROJECT_ID / BQ_LOCATION 環境変数で上書き可(既定はTerraformの project_id / region)
+# PROJECT_ID / BQ_LOCATION 環境変数で上書き可。既定値は固定(Terraformの project_id/region と同値に手動で合わせる。TF側を変えたらここも更新すること)
 PROJ="${PROJECT_ID:-hinan-navi-tokyo}"
 LOC="${BQ_LOCATION:-asia-northeast1}"
 SHP="${1:?境界shpのベースパス(拡張子なし)}"
