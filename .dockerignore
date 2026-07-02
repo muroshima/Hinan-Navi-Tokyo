@@ -5,7 +5,7 @@ node_modules
 npm-debug.log
 Dockerfile
 .dockerignore
-terraform
+infra
 data-raw
 *.md
 docs
