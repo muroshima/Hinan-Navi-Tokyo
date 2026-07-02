@@ -13,6 +13,7 @@
 | `public/data/lifeline.geojson` | 災害時給水ステーション（給水拠点）一覧／公衆無線LAN（FREE Wi-Fi & TOKYO） | 東京都(水道局／デジタルサービス局) | CC BY 4.0 | 2026-06 | CSV(CP932)→統合GeoJSON。`kind`で給水(water)/Wi-Fi(wifi)を区別。給水は確保水量・種別も保持 |
 | `public/data/bus_stops.geojson` | 都営バス GTFS-JP（停留所） | 東京都交通局／公共交通オープンデータセンター(ODPT) | CC BY 4.0 | 2026-06 | GTFS-JP zipの`stops.txt`から`location_type=1`の停留所を抽出してGeoJSON化。車椅子対応(`wheelchair_boarding=1`)を保持 |
 | `public/data/accessible_facilities.geojson` | 宿泊施設等の施設情報ポータルサイト「だれでも東京」（宿泊/買い物/レジャー/飲食/交通/公園/公共施設） | 東京都(デジタルサービス局) | CC BY 4.0 | 2026-07 | カテゴリ別CSV(CP932/UTF-8)を統合GeoJSON化。避難経路上で立ち寄れるバリアフリー施設として、だれでもトイレ/オストメイト/EV/スロープ/点字ブロック/車いす専用駐車場/おむつ交換台/補助犬専用トイレの有無をbool化。緯度経度の取り違え行は入替で救済し東京域外は除外 |
+| `public/data/temp_stay_facilities.geojson` | 都立の一時滞在施設（帰宅困難者の一時待機施設・約227件） | 東京都(総務局) | CC BY 4.0 | 2026-07 | XLSX(番号/施設名称/所在地)を読み込み、**座標が無いため所在地を国土地理院 住所検索APIでジオコーディング**してGeoJSON化。結果は`data/temp_stay_geocode.json`にキャッシュ（住所→[lon,lat]、再実行はオフライン・決定論的） |
 | （高齢化率・町丁目粒度） | 令和2年国勢調査 小地域集計 第3表 年齢別人口(東京都)＋小地域境界(統計GIS) | 総務省統計局(e-Stat) | 政府統計(出典明示で自由利用) | 2026-07 | BigQuery GISで避難所点×小地域ポリゴンの`ST_CONTAINS`空間結合→`KEY_CODE`で年齢結合し65歳以上/総数を算出（`scripts/aging_bq.sh`→`data/chome_aging.json`→`evacuation.geojson`） |
 | （高齢化率・市区町村fallback） | 住民基本台帳による東京都の世帯と人口（町丁別・年齢別）第3-1表 区市町村・年齢3区分別人口 | 東京都 | CC BY 4.0（東京都オープンデータ利用規約準拠） | 2026-06 | 65歳以上比から市区町村別高齢化率を算出。町丁目粒度が取れない避難所(島嶼等)のfallback |
 
@@ -34,11 +35,12 @@
 | `data-raw/wifi.csv` | 公衆無線LAN（FREE Wi-Fi & TOKYO） | `https://www.opendata.metro.tokyo.lg.jp/suisyoudataset/130001_public_wireless_lan_20240901.csv`（東京都デジタルサービス局・座標付き） |
 | `data-raw/ToeiBus-GTFS.zip` | 都営バス GTFS-JP（静的） | `https://api-public.odpt.org/api/v4/files/Toei/data/ToeiBus-GTFS.zip`（APIキー不要・要リダイレクト追従 `curl -L`） |
 | `data-raw/daredemo_{accommodation,shopping,leisure,dining,transport,parks,public_facilities}.csv` | 施設情報ポータル「だれでも東京」（7カテゴリ） | `https://www.opendata.metro.tokyo.lg.jp/digitalservice/130001_Daredemo_Tokyo_<category>.csv`（`<category>` は左記7種）。カタログ: https://catalog.data.metro.tokyo.lg.jp/dataset/t000029d0000000003 |
+| `data-raw/temp_stay.xlsx` | 都立の一時滞在施設（帰宅困難者） | `https://www.opendata.metro.tokyo.lg.jp/soumu/130001_temporary_public_evacuation.xlsx`（XLSX・要 `openpyxl`。座標なしのため所在地を国土地理院APIでジオコーディング。結果は`data/temp_stay_geocode.json`にキャッシュ済で再実行はオフライン可） |
 
 ```bash
-# data-raw/ に上記ファイルを配置後
+# data-raw/ に上記ファイルを配置後（temp_stay.xlsx は openpyxl が必要: pip install openpyxl）
 python3 scripts/preprocess.py
-# → public/data/{evacuation, toilets, lifeline, bus_stops, accessible_facilities}.geojson と metadata.json を生成
+# → public/data/{evacuation, toilets, lifeline, bus_stops, accessible_facilities, temp_stay_facilities}.geojson と metadata.json を生成
 ```
 
 - 直URLは時点により変わる場合があります。リンク切れ時はカタログ（`catalog.data.metro.tokyo.lg.jp`）でデータセット名を検索してください。

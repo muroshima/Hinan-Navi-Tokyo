@@ -14,6 +14,7 @@ import type {
   LifelineKind,
   BusStopFeature,
   AccessibleFacilityFeature,
+  TempStayFeature,
 } from "@/lib/types";
 import { DEFAULT_ATTRS, LANGS, LANG_CODES } from "@/lib/types";
 import { QRCodeSVG } from "qrcode.react";
@@ -182,6 +183,8 @@ export default function Home() {
   const [showBusStops, setShowBusStops] = useState(false);
   const [accessibleFacilities, setAccessibleFacilities] = useState<AccessibleFacilityFeature[]>([]); // バリアフリー施設(だれでも東京)
   const [showAccessible, setShowAccessible] = useState(false);
+  const [tempStay, setTempStay] = useState<TempStayFeature[]>([]); // 帰宅困難者向け 都立一時滞在施設
+  const [showTempStay, setShowTempStay] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [originLabel, setOriginLabel] = useState("自動取得 / 東京駅");
   const [placeInput, setPlaceInput] = useState("");
@@ -395,6 +398,14 @@ export default function Home() {
       .catch((e) => {
         console.warn("accessible_facilities load failed", e);
         setAccessibleFacilities([]);
+      });
+    // 帰宅困難者向け 都立一時滞在施設
+    fetch("/data/temp_stay_facilities.geojson")
+      .then((r) => r.json())
+      .then((fc: { features?: TempStayFeature[] }) => setTempStay(fc.features ?? []))
+      .catch((e) => {
+        console.warn("temp_stay_facilities load failed", e);
+        setTempStay([]);
       });
   }, []);
 
@@ -914,9 +925,21 @@ export default function Home() {
               {showAccessible ? "● " : "○ "}
               ♿ バリアフリー施設
             </button>
+            <button
+              onClick={() => setShowTempStay((v) => !v)}
+              aria-pressed={showTempStay}
+              className={`rounded-full border px-2 py-1 text-xs ${
+                showTempStay
+                  ? "border-indigo-500 bg-indigo-100 text-indigo-800"
+                  : "border-gray-300 text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              {showTempStay ? "● " : "○ "}
+              🏢 一時滞在施設
+            </button>
           </div>
           <p className="mt-1 text-[10px] text-gray-400">
-            出典: 東京都オープンデータ（災害時給水ステーション／FREE Wi-Fi & TOKYO／「だれでも東京」施設情報）・都営バスGTFS（東京都交通局／ODPT）— CC BY 4.0。バス停は拡大で表示。バリアフリー施設は避難経路上で立ち寄れる休憩先
+            出典: 東京都オープンデータ（災害時給水ステーション／FREE Wi-Fi & TOKYO／「だれでも東京」施設情報／都立の一時滞在施設）・都営バスGTFS（東京都交通局／ODPT）— CC BY 4.0。バス停は拡大で表示。バリアフリー施設は避難経路上で立ち寄れる休憩先。一時滞在施設は帰宅困難者の待機先（都立・住所を国土地理院APIでジオコーディング）
           </p>
         </div>
 
@@ -1143,6 +1166,8 @@ export default function Home() {
           showBusStops={showBusStops}
           accessibleFacilities={accessibleFacilities}
           showAccessible={showAccessible}
+          tempStay={tempStay}
+          showTempStay={showTempStay}
         />
       </main>
     </div>

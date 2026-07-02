@@ -69,6 +69,19 @@
       "record_count": 840
     },
     {
+      "file": "temp_stay_facilities.geojson",
+      "datasets": [
+        "都立の一時滞在施設（帰宅困難者の一時待機施設）"
+      ],
+      "provider": "東京都（総務局）",
+      "license": "CC BY 4.0",
+      "source_url": "https://catalog.data.metro.tokyo.lg.jp/dataset/t000010d0000000151",
+      "retrieved": "2026-07",
+      "processing": "XLSX(番号/施設名称/所在地)を読み込み、座標が無いため所在地を国土地理院 住所検索APIでジオコーディングしてGeoJSON化。ジオコード結果は data/temp_stay_geocode.json にキャッシュ",
+      "attribution": "「都立の一時滞在施設」（東京都総務局）（CC BY 4.0）／ジオコーディング: 国土地理院 地名検索API",
+      "record_count": 227
+    },
+    {
       "file": "(高齢化率の付与に使用・町丁目粒度)",
       "datasets": [
         "令和2年国勢調査 小地域(町丁・字等)集計 第3表 年齢別人口(東京都)",

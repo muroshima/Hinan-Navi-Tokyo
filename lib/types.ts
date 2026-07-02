@@ -149,6 +149,14 @@ export interface AccessibleFacilityProps {
 }
 export type AccessibleFacilityFeature = GeoJSON.Feature<GeoJSON.Point, AccessibleFacilityProps>;
 
+// 帰宅困難者向け 都立の一時滞在施設（避難所ではなく一時待機先）
+export interface TempStayProps {
+  id: string;
+  name: string;
+  address?: string;
+}
+export type TempStayFeature = GeoJSON.Feature<GeoJSON.Point, TempStayProps>;
+
 // マイ・タイムライン（局面別の避難行動。/api/timeline が生成）
 export interface TimelinePhase {
   phase: string; // 局面名（例: 避難開始）
