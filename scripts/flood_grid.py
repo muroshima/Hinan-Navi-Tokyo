@@ -79,6 +79,12 @@ def num(v):
         return None
 
 
+def r1(x):
+    """小数第1位へJSの Math.round(x*10)/10 と同じ規則(0.5切り上げ)で丸める。
+    負値(地盤高)でもMath.roundと一致(例: -0.45→-0.4)。"""
+    return math.floor(x * 10 + 0.5) / 10
+
+
 def main():
     ensure_downloaded()
     # cell -> [max_depth, min_ground]
@@ -111,7 +117,7 @@ def main():
                     if ground is not None and ground < cur[1]:
                         cur[1] = ground
     # 浸水深0のセルは落とす(浸水しないので判定に不要=サイズ削減)
-    cells = {k: [round(v[0], 1), (round(v[1], 1) if v[1] < 9999 else None)]
+    cells = {k: [r1(v[0]), (r1(v[1]) if v[1] < 9999 else None)]
              for k, v in cells.items() if v[0] > 0}
     out = {'cell': CELL, 'cells': cells}
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
