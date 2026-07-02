@@ -1,5 +1,12 @@
 terraform {
   required_version = ">= 1.5"
+  # state はGCSに保管(#17方針)。バケットはbackendの循環を避けるためTF管理外で事前作成:
+  #   gcloud storage buckets create gs://hinan-navi-tokyo-tfstate --location=asia-northeast1 --uniform-bucket-level-access
+  #   gcloud storage buckets update gs://hinan-navi-tokyo-tfstate --versioning
+  backend "gcs" {
+    bucket = "hinan-navi-tokyo-tfstate"
+    prefix = "hinan-navi"
+  }
   required_providers {
     google = {
       source  = "hashicorp/google"
