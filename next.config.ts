@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Cloud Run向けに自己完結の standalone 出力（.next/standalone に server.js）
+  output: "standalone",
   async headers() {
     return [
       {

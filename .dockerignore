@@ -1,0 +1,14 @@
+.git
+.github
+node_modules
+.next
+npm-debug.log
+Dockerfile
+.dockerignore
+terraform
+data-raw
+*.md
+docs
+.env*
+.vscode
+.DS_Store
