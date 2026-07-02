@@ -22,6 +22,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GEOJSON="$ROOT/public/data/evacuation.geojson"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+mkdir -p "$ROOT/data" # 出力先(data/)を保証
 
 # 1) 境界 Shapefile → NDJSON(key_code, geojson文字列)
 python3 - "$SHP" "$WORK/boundary.ndjson" <<'PY'
