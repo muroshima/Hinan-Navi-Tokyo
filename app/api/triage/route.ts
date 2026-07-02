@@ -17,7 +17,7 @@ const AttrsSchema = z.object({
   severe_care: z.boolean(),
   night: z.boolean(),
   bad_weather: z.boolean(),
-  location: z.string().optional(),
+  location: z.string().default(""), // 常にstringに正規化（fallbackとレスポンス形を揃える）
   hazard: z.enum([
     "flood",
     "landslide",
