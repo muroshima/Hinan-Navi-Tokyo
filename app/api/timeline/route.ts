@@ -4,6 +4,10 @@ import { NextRequest, NextResponse } from "next/server";
 import type { UserAttrs, TimelinePhase, Lang } from "@/lib/types";
 import { LANG_CODES } from "@/lib/types";
 import { getGeminiClient, GEMINI_MODEL } from "@/lib/gemini";
+import { enforceRateLimit, TtlCache } from "@/lib/rateLimit";
+
+// 同一入力の再問い合わせでGeminiを再度叩かないための簡易キャッシュ（コスト削減）
+const timelineCache = new TtlCache<TimelinePhase[]>(300, 10 * 60_000);
 
 // 生成する避難タイムラインのスキーマ（内閣府の警戒レベルに沿った局面別の行動）
 // 長さ制約で空配列・過剰件数の不正形を弾き、UIが空になるのを防ぐ（不正ならparse失敗→fallback）
@@ -164,6 +168,10 @@ function fallbackTimeline(
 }
 
 export async function POST(req: NextRequest) {
+  // IP単位レート制限（Geminiコスト悪用対策・#30）
+  const limited = enforceRateLimit("timeline", req, 15, 60_000);
+  if (limited) return limited;
+
   let body: unknown;
   try {
     body = await req.json();
@@ -186,6 +194,19 @@ export async function POST(req: NextRequest) {
       timeline: fallbackTimeline(attrs, destName, hazardLabel),
       source: "fallback",
     });
+  }
+
+  // 同一入力はキャッシュから返しGemini呼び出しを節約（距離は0.1km粒度に丸めてキー化）
+  const cacheKey = JSON.stringify({
+    attrs,
+    destName,
+    hazardLabel,
+    distanceKm: distanceKm != null ? Math.round(distanceKm * 10) / 10 : undefined,
+    language,
+  });
+  const cachedTimeline = timelineCache.get(cacheKey);
+  if (cachedTimeline) {
+    return NextResponse.json({ timeline: cachedTimeline, source: "gemini" });
   }
 
   const activeAttrs = Object.entries(attrs)
@@ -215,6 +236,7 @@ export async function POST(req: NextRequest) {
         source: "fallback",
       });
     }
+    timelineCache.set(cacheKey, out.data.phases);
     return NextResponse.json({ timeline: out.data.phases, source: "gemini" });
   } catch (err) {
     // 失敗してもアプリを止めない。詳細はサーバーログのみ（内部情報をクライアントに出さない）

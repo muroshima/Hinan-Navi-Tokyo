@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { enforceRateLimit } from "@/lib/rateLimit";
 
 // 住所・地名 → 座標（OpenStreetMap Nominatim をサーバー経由で利用）
 export async function GET(req: NextRequest) {
-  const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
+  // IP単位レート制限（Nominatim公開サーバの酷使対策・#30）
+  const limited = enforceRateLimit("geocode", req, 30, 60_000);
+  if (limited) return limited;
+
+  // 過大入力でNominatimに負荷をかけないよう長さを制限
+  const q = (req.nextUrl.searchParams.get("q") ?? "").trim().slice(0, 200);
   if (!q) return NextResponse.json({ error: "q is required" }, { status: 400 });
 
   const url =
