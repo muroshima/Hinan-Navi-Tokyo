@@ -379,9 +379,13 @@ def build_accessible_facilities():
 
 
 def _gsi_geocode(addr):
-    """国土地理院 住所検索APIで日本語住所→[lon,lat]。Nominatimより日本住所に強い(キー不要)。"""
+    """国土地理院 住所検索APIで日本語住所→[lon,lat]。Nominatimより日本住所に強い(キー不要)。
+    UAは app/api/geocode/route.ts と同方針で連絡先(NOMINATIM_CONTACT_EMAIL)を環境変数から差し込む。"""
+    contact = os.environ.get('NOMINATIM_CONTACT_EMAIL')
+    ua = (f'dare-hinan-navi/0.1 ({contact})' if contact
+          else 'dare-hinan-navi/0.1 (Tokyo OpenData Hackathon prototype)')
     url = 'https://msearch.gsi.go.jp/address-search/AddressSearch?q=' + urllib.parse.quote(addr)
-    req = urllib.request.Request(url, headers={'User-Agent': 'dare-hinan-navi/0.1 (hackathon)'})
+    req = urllib.request.Request(url, headers={'User-Agent': ua})
     with urllib.request.urlopen(req, timeout=15) as r:
         data = json.load(r)
     if data:

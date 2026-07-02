@@ -335,7 +335,7 @@ export default function MapView({
       map.addSource("tempstay", {
         type: "geojson",
         data: emptyFC(),
-        attribution: "都立の一時滞在施設(東京都総務局) CC BY 4.0 / ジオコーディング: 国土地理院",
+        attribution: "都立の一時滞在施設(東京都総務局) CC BY 4.0 / ジオコーディング: 国土地理院 住所検索API",
       });
       map.addLayer({
         id: "tempstay-pts",
