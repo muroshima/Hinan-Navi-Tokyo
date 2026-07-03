@@ -1,30 +1,25 @@
 import type { NextConfig } from "next";
+import { MAP_CONNECT_HOSTS } from "./lib/mapHosts";
 
 // セキュリティヘッダ(#66)。全パスに付与。
 // CSPの方針:
 //  - script-src は 'self' + 'unsafe-inline'（Next.jsのhydrationブートストラップにインラインscriptが要る。
-//    nonce運用はNext16のproxy/middlewareが必要なためプロトタイプでは'unsafe-inline'。XSS自体は
-//    全出力をescapeHtml済み・dangerouslySetInnerHTML不使用で塞いでいる）。'unsafe-eval'は付けない。
-//  - MapLibreの地図タイル(OSM/国交省ハザード/AWS DEM/PLATEAU/glyphs)は多数のhttpsホストから取得するため、
-//    img-src/connect-src は MapLibre が使う実タイルホストを列挙して最小化（XSS時のデータ送信先を限定）。
-//    worker-src は Service Worker('self')と MapLibre の blob worker を許可。
+//    nonce運用はNext16のproxy/middlewareが必要なためプロトタイプでは'unsafe-inline'。'unsafe-eval'は付けない）。
+//    XSS対策自体は、データ由来文字列を差し込む MapLibre ポップアップで escapeHtml を適用し、
+//    dangerouslySetInnerHTML を使わない方針で担保（アプリ全体を網羅する保証ではなく、既知の差込点を塞ぐ）。
 //  - script-src-attr 'none' でインラインイベントハンドラ(onclick=等)を禁止（インラインscript実行は維持）。
+//  - MapLibre GL v5 はラスタ/ベクタ/glyphs を全て Fetch API で取得する(実測確認)ため、外部タイルホストは
+//    connect-src に限定列挙する。img-src は data:/blob: のみ(タイルは fetch→canvas 描画で<img>化しない)。
+//    ホスト定義は lib/mapHosts.ts に集約し MapView と共有(片側更新でのCSP違反を防止)。
+//  - worker-src は Service Worker('self')と MapLibre の blob worker を許可。
 //  - frame-ancestors 'none' でクリックジャッキング遮断（X-Frame-Options も併記）。
-// MapLibre が参照する外部タイル/glyphs/ベクタのホスト（components/MapView.tsx と一致）
-const TILE_HOSTS = [
-  "https://tile.openstreetmap.org", // OSM ベース地図(raster)
-  "https://disaportaldata.gsi.go.jp", // 国交省ハザード(raster)
-  "https://s3.amazonaws.com", // AWS Terrarium DEM(raster)
-  "https://demotiles.maplibre.org", // MapLibre glyphs(pbf)
-  "https://indigo-lab.github.io", // PLATEAU 建物 MVT(pbf)
-].join(" ");
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
   "script-src-attr 'none'",
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: blob: ${TILE_HOSTS}`,
-  `connect-src 'self' ${TILE_HOSTS}`,
+  "img-src 'self' data: blob:",
+  `connect-src 'self' ${MAP_CONNECT_HOSTS.join(" ")}`,
   "worker-src 'self' blob:",
   "font-src 'self' data:",
   "object-src 'none'",

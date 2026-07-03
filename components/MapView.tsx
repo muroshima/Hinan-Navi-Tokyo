@@ -13,25 +13,32 @@ import type {
   AccessibleFacilityFeature,
   TempStayFeature,
 } from "@/lib/types";
+import {
+  OSM_TILE_HOST,
+  GSI_HAZARD_HOST,
+  AWS_DEM_HOST,
+  MAPLIBRE_GLYPHS_HOST,
+  PLATEAU_MVT_HOST,
+} from "@/lib/mapHosts";
 
 const TOKYO: [number, number] = [139.7528, 35.6852];
 
 // 国交省ハザードマップポータルのラスタータイル（疎通確認済みの層のみ）
 const HAZARD_TILES: Partial<Record<HazardKey, { url: string; label: string }>> = {
   flood: {
-    url: "https://disaportaldata.gsi.go.jp/raster/01_flood_l2_shinsuishin_data/{z}/{x}/{y}.png",
+    url: `${GSI_HAZARD_HOST}/raster/01_flood_l2_shinsuishin_data/{z}/{x}/{y}.png`,
     label: "洪水浸水想定",
   },
   storm_surge: {
-    url: "https://disaportaldata.gsi.go.jp/raster/03_hightide_l2_shinsuishin_data/{z}/{x}/{y}.png",
+    url: `${GSI_HAZARD_HOST}/raster/03_hightide_l2_shinsuishin_data/{z}/{x}/{y}.png`,
     label: "高潮浸水想定",
   },
   tsunami: {
-    url: "https://disaportaldata.gsi.go.jp/raster/04_tsunami_newlegend_data/{z}/{x}/{y}.png",
+    url: `${GSI_HAZARD_HOST}/raster/04_tsunami_newlegend_data/{z}/{x}/{y}.png`,
     label: "津波浸水想定",
   },
   landslide: {
-    url: "https://disaportaldata.gsi.go.jp/raster/05_kyukeishakeikaikuiki/{z}/{x}/{y}.png",
+    url: `${GSI_HAZARD_HOST}/raster/05_kyukeishakeikaikuiki/{z}/{x}/{y}.png`,
     label: "土砂災害(急傾斜地)警戒区域",
   },
 };
@@ -43,11 +50,11 @@ const OSM_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   // ラベル(symbol)描画にはglyphsが必須。APIキー不要のMapLibreデモフォントを使用
   // (日本語=CJKはMap側のlocalIdeographFontFamilyでローカル描画)
-  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+  glyphs: `${MAPLIBRE_GLYPHS_HOST}/font/{fontstack}/{range}.pbf`,
   sources: {
     osm: {
       type: "raster",
-      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tiles: [`${OSM_TILE_HOST}/{z}/{x}/{y}.png`],
       tileSize: 256,
       attribution: "© OpenStreetMap contributors",
     },
@@ -140,7 +147,7 @@ export default function MapView({
       // 3D地形用DEM（AWS Terrarium）＋陰影起伏
       map.addSource("dem", {
         type: "raster-dem",
-        tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+        tiles: [`${AWS_DEM_HOST}/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png`],
         tileSize: 256,
         encoding: "terrarium",
         maxzoom: 15,
@@ -157,7 +164,7 @@ export default function MapView({
       // PLATEAU建物3D（東京23区・LOD0、高さmで垂直避難先候補を色分け）。初期は非表示
       map.addSource("plateau", {
         type: "vector",
-        tiles: ["https://indigo-lab.github.io/plateau-tokyo23ku-building-mvt-2020/{z}/{x}/{y}.pbf"],
+        tiles: [`${PLATEAU_MVT_HOST}/plateau-tokyo23ku-building-mvt-2020/{z}/{x}/{y}.pbf`],
         minzoom: 10,
         maxzoom: 16,
         attribution:
