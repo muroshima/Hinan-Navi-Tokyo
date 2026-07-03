@@ -110,6 +110,25 @@ section.title .muted { color: #cbd5e1; }
 .flow-box.accent span { color: #fde68a; }
 .flow .arrow { align-self: center; color: var(--amber); font-size: 34px; font-weight: 700; }
 
+/* AI入力レーン（自然文→AI抽出→配慮属性→スコアリングへ合流）。
+   データパイプライン(実線)と区別するため amber の点線枠。右寄せで ↘ が
+   下段の「決定論スコアリング」ボックス付近に落ちるようにする */
+.flow.sub { width: 68%; margin: 26px 14% 0 auto; gap: 6px; }
+.flow.sub .flow-box {
+  border: 2px dashed var(--amber);
+  background: #fffbeb;
+  font-size: 18px;
+  padding: 12px 10px;
+}
+.flow.sub .flow-box span { font-size: 13px; }
+.flow.sub + .flow { margin-top: 6px; }
+
+/* 表紙/最終スライドの QR（ライブデモ・GitHub） */
+.qrs { display: flex; justify-content: center; gap: 56px; margin-top: 30px; }
+.qrs > div { text-align: center; font-size: 15px; color: #cbd5e1; }
+.qrs img { width: 132px; height: 132px; background: #fff; padding: 8px; border-radius: 10px; display: block; margin: 0 auto 8px; }
+.qrs .qr-url { font-size: 12px; color: #94a3b8; }
+
 /* ページ番号・ヘッダ/フッタ */
 section::after { color: var(--muted); font-size: 15px; }
 header { color: var(--muted); font-size: 15px; }

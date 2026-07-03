@@ -26,7 +26,7 @@ Marp スライド（HTML/PDF出力）。テーマ・ローカル画像許可・�
 
 東京都オープンデータ活用 ／ 都知事杯オープンデータ・ハッカソン
 
-<span class="muted">🌐 ライブデモ・GitHub・60秒デモ動画あり</span>
+<span class="muted">🌐 ライブデモ・GitHub・1分デモ動画あり</span>
 
 ---
 
@@ -60,7 +60,7 @@ Marp スライド（HTML/PDF出力）。テーマ・ローカル画像許可・�
 ### 最も切実な代表ケース
 **江戸川区（江東5区）の大規模水害**
 - 陸域の約7割が**ゼロメートル地帯**
-- 江東5区で**約100万人**が2週間以上浸水域
+- 浸水が2週間以上続く想定の区域に**約100万人**が居住
 - 区内に**避難行動要支援者 約5,800人**
 
 </div>
@@ -75,7 +75,7 @@ Marp スライド（HTML/PDF出力）。テーマ・ローカル画像許可・�
 <div class="steps">
 <div class="step"><b>① ことばで相談</b><br>「雨の日、車椅子の母と避難したい。介助は私がします」</div>
 <div class="step"><b>② 配慮属性を抽出</b><br>車椅子・介助者あり・雨/荒天・想定災害を構造化</div>
-<div class="step"><b>③「行ける順」に再ランキング</b><br>バリアフリー × ハザード × 距離 × 当事者要件</div>
+<div class="step"><b>③「行ける順」に再ランキング</b><br>バリアフリー × 災害種別適否 × 距離 × 当事者要件</div>
 </div>
 
 さらに **なぜ1位か／より近いのに見送った理由** を根拠付きで提示し、
@@ -88,15 +88,15 @@ Marp スライド（HTML/PDF出力）。テーマ・ローカル画像許可・�
 <div class="cols">
 <div>
 
-![「なぜ1位か」を点数の内訳（基準点＋バリアフリー加点など）で示すアプリ画面 w:560](demo-thumb.jpg)
+![1位の避難所カード：バリアフリー適合の理由と、点数内訳（基準点+100・1階/EV有+15・スロープ有+10・車椅子対応トイレ有+10 など、合計142点） w:400](shot-breakdown.jpg)
 
 </div>
 <div>
 
 - **説明可能**：スコアを加減点の内訳で提示
-  （基準点 +100／扉・EV有 +15／スロープ +15／車椅子トイレ +15…）
+  （基準点 +100／1階・EV有 +15／スロープ +10／車椅子トイレ +10…）
 - **降格理由も明示**：「より近いA小は洪水非対応・段差のため見送り」
-- 🎬 **60秒デモ動画**：入力→抽出→ランキング→根拠→ハザード/建物3D
+- 🎬 **1分デモ動画**：入力→抽出→ランキング→根拠→ハザード/建物3D
 
 </div>
 </div>
@@ -130,7 +130,7 @@ Marp スライド（HTML/PDF出力）。テーマ・ローカル画像許可・�
   → 災害種別フラグで**洪水非対応（−60）**
   → 1階/EV情報なし（−25）
 - 600m先の **B施設**
-  → **洪水対応（+25）** ・スロープ/車椅子トイレ有（+15/+10）
+  → **洪水対応（+25）** ・スロープ/車椅子トイレ有（+10/+10）
 
 → **「最寄り」ではなく B を根拠付きで上位に。**
 
@@ -142,7 +142,7 @@ Marp スライド（HTML/PDF出力）。テーマ・ローカル画像許可・�
 </div>
 </div>
 
-<span class="muted">score = Σ（基準点 ± 距離 ± 災害種別適否 ± バリアフリー適合 ± 状況補正）／`lib/ranking.ts`・決定論</span>
+<span class="muted">※ A/B は説明用の簡略例（実データでの逆転はデモ動画 0:35〜）。score = Σ（基準点 ± 距離 ± 災害種別適否 ± バリアフリー適合 ± 状況補正）／`lib/ranking.ts`・決定論</span>
 
 ---
 
@@ -178,8 +178,17 @@ Marp スライド（HTML/PDF出力）。テーマ・ローカル画像許可・�
 
 ## 技術アーキテクチャ
 
+<div class="flow sub">
+<div class="flow-box">ことば（自然文）<span>「雨の日、車椅子の母と…」</span></div>
+<div class="arrow">→</div>
+<div class="flow-box">AI抽出<span>Vertex Gemini（fallbackあり）</span></div>
+<div class="arrow">→</div>
+<div class="flow-box">配慮属性<span>車椅子・介助者・雨 …</span></div>
+<div class="arrow">↘</div>
+</div>
+
 <div class="flow">
-<div class="flow-box">CSV / XLSX<span>東京都オープンデータ</span></div>
+<div class="flow-box">CSV / XLSX<span>東京都・国のデータ</span></div>
 <div class="arrow">→</div>
 <div class="flow-box">preprocess<span>正規化・空間結合</span></div>
 <div class="arrow">→</div>
@@ -247,7 +256,12 @@ Marp スライド（HTML/PDF出力）。テーマ・ローカル画像許可・�
 
 # だれも取り残さない避難へ
 
-東京都のオープンデータの**掛け合わせ**だけで、
+東京都と国のオープンデータ、その**掛け合わせ**だけで、
 要配慮者に「**本当に行ける順**」と**その根拠**を届ける。
 
-<span class="muted">だれでも避難ナビ TOKYO ／ ライブデモ・GitHub・60秒デモ動画</span>
+<div class="qrs">
+<div><img src="qr-demo.png" alt="ライブデモを開くQRコード">ライブデモ<br><span class="qr-url">hinan-navi-sceyw5h4sq-an.a.run.app</span></div>
+<div><img src="qr-github.png" alt="GitHubリポジトリを開くQRコード">GitHub<br><span class="qr-url">github.com/muroshima/Hinan-Navi-Tokyo</span></div>
+</div>
+
+<span class="muted">だれでも避難ナビ TOKYO ／ 1分デモ動画は README に同梱</span>

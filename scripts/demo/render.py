@@ -19,7 +19,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 RAW = HERE / "output" / "raw"
 OUT = HERE / "output"
+CARDS = HERE / "cards"  # タイトル/エンドカード(1280x720 PNG)。両方あれば前後に合成
 DOCS = HERE.parent.parent / "docs"
+TITLE_SEC = 2.0  # タイトルカード表示秒
+END_SEC = 2.5  # エンドカード(QR)表示秒。QR読み取りの余裕を持たせ少し長め
 NAME = sys.argv[1] if len(sys.argv) > 1 else "demo"
 # NAME はファイル名成分のみ許可（../ や / で output/・docs/ の外へ書き出す事故を防ぐ）
 if NAME in ("", ".", "..") or NAME != Path(NAME).name:
@@ -140,11 +143,39 @@ def main() -> None:
         check=True,
     )
 
+    # タイトル/エンドカードを前後に合成（cards/title.png・end.png が両方ある場合のみ）。
+    # 本編とはコーデック条件が揃わないため concat filter で全体を再エンコードする。
+    title_png, end_png = CARDS / "title.png", CARDS / "end.png"
+    if title_png.exists() and end_png.exists():
+        final = OUT / f"{NAME}_final.mp4"
+        fc2 = (
+            f"[0:v]fps=25,scale=1280:720,setsar=1,format=yuv420p[v0];"
+            f"[2:v]fps=25,scale=1280:720,setsar=1,format=yuv420p[v2];"
+            f"[v0][3:a][1:v][1:a][v2][4:a]concat=n=3:v=1:a=1[v][a]"
+        )
+        run_checked(
+            ["ffmpeg", "-y",
+             "-loop", "1", "-t", str(TITLE_SEC), "-i", str(title_png),  # [0] タイトル
+             "-i", str(out_mp4),                                        # [1] 本編
+             "-loop", "1", "-t", str(END_SEC), "-i", str(end_png),      # [2] エンド
+             "-f", "lavfi", "-t", str(TITLE_SEC), "-i", "anullsrc=r=24000:cl=mono",  # [3] 無音
+             "-f", "lavfi", "-t", str(END_SEC), "-i", "anullsrc=r=24000:cl=mono",    # [4] 無音
+             "-filter_complex", fc2,
+             "-map", "[v]", "-map", "[a]",
+             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "medium", "-crf", "23",
+             "-c:a", "aac", "-b:a", "160k",
+             "-movflags", "+faststart", str(final)]
+        )
+        out_mp4 = final
+        print(f"cards: title {TITLE_SEC}s + 本編 + end {END_SEC}s を合成")
+    else:
+        print("cards/title.png・end.png が無いためカード合成はスキップ")
+
     # docs/ にも正本を配置（README / 提出物用）
     DOCS.mkdir(parents=True, exist_ok=True)
     dest = DOCS / f"{NAME}.mp4"
     shutil.copyfile(out_mp4, dest)  # ストリーミングコピー（全体をメモリに載せない）
-    print(f"\n✅ {out_mp4}  ({out_mp4.stat().st_size / 1e6:.1f} MB)")
+    print(f"\n✅ {out_mp4}  ({out_mp4.stat().st_size / 1e6:.1f} MB, {dur(out_mp4):.1f}s)")
     print(f"✅ {dest}")
 
 

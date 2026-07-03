@@ -9,7 +9,7 @@ https://hinan-navi-sceyw5h4sq-an.a.run.app
 
 （Google Cloud Run 上で稼働。インフラは Terraform で管理 → [infra/terraform/](infra/terraform/)。デモ提供期間は限定される場合があります）
 
-## 🎬 デモ動画（約60秒）
+## 🎬 デモ動画（約1分）
 自然文入力 → 配慮属性の抽出 → 「行ける順」再ランキング → **なぜ1位かを点数の内訳で説明** → 洪水ハザード＋建物3D（垂直避難先）の重ね表示までを一気に紹介します。
 
 [![だれでも避難ナビ TOKYO デモ動画（クリックで再生）](docs/demo-thumb.jpg)](docs/demo.mp4)

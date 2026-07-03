@@ -1,6 +1,6 @@
 # デモ動画パイプライン
 
-だれでも避難ナビ TOKYO の紹介動画（約60秒）を、画面録画ソフトなしで
+だれでも避難ナビ TOKYO の紹介動画（約1分）を、画面録画ソフトなしで
 スクリプト生成する。Playwright が UI を録画し、edge-tts がナレーションを
 生成、ffmpeg が合成する。
 
@@ -11,8 +11,24 @@ scripts/demo/
 ├── playwright.config.ts   # 録画専用config（1280x720, video:on, next start）
 ├── tests/demo.spec.ts     # 収録シナリオ（narrationのcueに視覚を合わせる）
 ├── narration/demo.ja.json # ナレーション cue（voice/rate/at/text）
-├── render.py              # TTS生成 + adelay/amix + h264/AAC mux
+├── render.py              # TTS生成 + adelay/amix + h264/AAC mux + 前後カード合成
+├── cards/                 # タイトル/エンドカード（docs/slides.md のスライド1・12のPNG。
+│                          # スライド更新時は marp --images png で再生成して差し替える）
 └── output/                # 生録画・中間生成物（gitignore。正本は docs/demo.mp4）
+```
+
+## 収録時の注意（AI抽出を本物にする）
+
+配慮属性チップ横の「（抽出: …）」表示を **gemini** にするため、収録は
+Vertex AI が有効なサーバに対して行う（fallback のまま収録すると
+「AIが読み取りました」のナレーションと画面表示が食い違う）:
+
+```bash
+gcloud auth application-default login   # 未認証なら
+GOOGLE_CLOUD_PROJECT=hinan-navi-tokyo PORT=3000 npm run start &
+curl -s -X POST localhost:3000/api/triage -H "Content-Type: application/json" \
+  -d '{"text":"車椅子で避難したい"}' | grep -o '"source":"[a-z]*"'   # gemini を確認
+# → その後に収録（config の reuseExistingServer が既存サーバを拾う）
 ```
 
 ## 前提
