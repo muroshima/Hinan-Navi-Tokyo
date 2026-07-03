@@ -113,7 +113,8 @@ def main() -> None:
     parts, labels = [], []
     for k, (_, at) in enumerate(cue_files):
         ms = int(at * 1000)
-        parts.append(f"[{k + 1}:a]adelay={ms}|{ms}[a{k}]")
+        # all=1 で全チャンネルに同一遅延を適用（mono/stereo どちらでもチャンネル数非依存）
+        parts.append(f"[{k + 1}:a]adelay={ms}:all=1[a{k}]")
         labels.append(f"[a{k}]")
     fc = ";".join(parts)
     fc += f";{''.join(labels)}amix=inputs={len(cue_files)}:normalize=0:dropout_transition=0[mix];[mix]apad[aout]"
