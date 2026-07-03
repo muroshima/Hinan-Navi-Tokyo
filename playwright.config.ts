@@ -24,5 +24,7 @@ export default defineConfig({
     url: baseURL,
     timeout: 120_000,
     reuseExistingServer: !process.env.CI,
+    // 外部の PORT env が設定されていても baseURL(3000) と待受ポートを一致させる
+    env: { PORT: String(PORT) },
   },
 });
