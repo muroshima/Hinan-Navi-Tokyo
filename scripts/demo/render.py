@@ -30,9 +30,25 @@ def dur(path: Path) -> float:
     return float(out.decode().strip())
 
 
+def run_checked(cmd: list) -> None:
+    """capture しつつ、失敗時は stderr を表示してから raise する
+    （check=True + capture_output=True だとエラーログが握り潰されるため）。"""
+    r = subprocess.run(cmd, capture_output=True)
+    if r.returncode != 0:
+        sys.stderr.write(r.stderr.decode(errors="replace"))
+        raise subprocess.CalledProcessError(r.returncode, cmd)
+
+
+def ff_concat_quote(p: Path) -> str:
+    """ffmpeg concat demuxer の `file '...'` 用にシングルクォートをエスケープ。"""
+    return str(p).replace("'", "'\\''")
+
+
 def main() -> None:
     cfg = json.loads((HERE / "narration" / f"{NAME}.ja.json").read_text(encoding="utf-8"))
     voice, rate, cues = cfg["voice"], cfg["rate"], cfg["cues"]
+    if not cues:
+        sys.exit(f"narration に cue がありません: {NAME}.ja.json（amix の入力が0になります）")
 
     # 録画 webm を収集（ファイル名ソートで順序安定）
     webms = sorted(RAW.rglob("*.webm"))
@@ -46,12 +62,15 @@ def main() -> None:
         video = webms[0]
     else:
         listfile = OUT / "concat.txt"
-        # webm のディレクトリ名に日本語が入り得るため UTF-8 を明示
-        listfile.write_text("".join(f"file '{w}'\n" for w in webms), encoding="utf-8")
+        # webm のディレクトリ名に日本語やシングルクォートが入り得るため
+        # UTF-8 明示＋concat用のクォートエスケープを行う
+        listfile.write_text(
+            "".join(f"file '{ff_concat_quote(w)}'\n" for w in webms), encoding="utf-8"
+        )
         video = OUT / "video.webm"
-        subprocess.run(
+        run_checked(
             ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(listfile),
-             "-c", "copy", str(video)], check=True, capture_output=True,
+             "-c", "copy", str(video)]
         )
 
     vlen = dur(video)
@@ -61,10 +80,9 @@ def main() -> None:
     cue_files = []
     for i, c in enumerate(cues):
         mp3 = OUT / f"cue_{i}.mp3"
-        subprocess.run(
+        run_checked(
             ["uvx", "edge-tts", "--voice", voice, "--rate", rate,
-             "--text", c["text"], "--write-media", str(mp3)],
-            check=True, capture_output=True,
+             "--text", c["text"], "--write-media", str(mp3)]
         )
         cue_files.append((mp3, float(c["at"])))
         print(f"  cue{i}: at={c['at']:>5}  {dur(mp3):.2f}s")
