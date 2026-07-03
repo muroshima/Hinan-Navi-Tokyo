@@ -52,15 +52,25 @@ def ff_concat_escape(p: Path) -> str:
 
 
 def main() -> None:
-    cfg = json.loads((HERE / "narration" / f"{NAME}.ja.json").read_text(encoding="utf-8"))
-    voice, rate, cues = cfg["voice"], cfg["rate"], cfg["cues"]
+    cfg_path = HERE / "narration" / f"{NAME}.ja.json"
+    if not cfg_path.exists():
+        sys.exit(f"narration が見つかりません: {cfg_path}")
+    try:
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        sys.exit(f"narration の JSON が不正です: {cfg_path}（{e}）")
+    try:
+        voice, rate, cues = cfg["voice"], cfg["rate"], cfg["cues"]
+    except KeyError as e:
+        sys.exit(f"narration に必須キーがありません: {e}（voice/rate/cues が必要）")
     if not cues:
-        sys.exit(f"narration に cue がありません: {NAME}.ja.json（amix の入力が0になります）")
+        sys.exit(f"narration に cue がありません: {cfg_path.name}（amix の入力が0になります）")
 
-    # 録画 webm を収集（ファイル名ソートで順序安定）
-    webms = sorted(RAW.rglob("*.webm"))
+    # 録画 webm を収集（Playwright出力の video.webm のみに限定・ファイル名ソートで順序安定）。
+    # *.webm だと output/raw に別用途の webm が残った場合に誤って連結対象になるため。
+    webms = sorted(RAW.rglob("video.webm"))
     if not webms:
-        sys.exit(f"録画 webm が見つかりません: {RAW}（先に収録を実行してください）")
+        sys.exit(f"録画 video.webm が見つかりません: {RAW}（先に収録を実行してください）")
 
     OUT.mkdir(parents=True, exist_ok=True)
 
