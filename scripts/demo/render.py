@@ -148,10 +148,15 @@ def main() -> None:
     title_png, end_png = CARDS / "title.png", CARDS / "end.png"
     if title_png.exists() and end_png.exists():
         final = OUT / f"{NAME}_final.mp4"
+        # concat filter は全入力の v(fps/解像度/SAR/pix_fmt)・a(sample_rate/channels)が
+        # 揃っていないと失敗する。カード画像だけでなく**本編[1]も同条件に正規化**してから連結する
+        # （本編の fps/SAR/音声レートは録画環境や将来の変更で変わり得るため、揃える前提に頼らない）。
+        vnorm = "fps=25,scale=1280:720,setsar=1,format=yuv420p"
+        anorm = "aformat=sample_rates=24000:channel_layouts=mono"
         fc2 = (
-            f"[0:v]fps=25,scale=1280:720,setsar=1,format=yuv420p[v0];"
-            f"[2:v]fps=25,scale=1280:720,setsar=1,format=yuv420p[v2];"
-            f"[v0][3:a][1:v][1:a][v2][4:a]concat=n=3:v=1:a=1[v][a]"
+            f"[0:v]{vnorm}[v0];[1:v]{vnorm}[v1];[2:v]{vnorm}[v2];"
+            f"[1:a]{anorm}[a1];"
+            f"[v0][3:a][v1][a1][v2][4:a]concat=n=3:v=1:a=1[v][a]"
         )
         run_checked(
             ["ffmpeg", "-y",
