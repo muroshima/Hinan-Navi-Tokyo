@@ -39,9 +39,15 @@ def run_checked(cmd: list) -> None:
         raise subprocess.CalledProcessError(r.returncode, cmd)
 
 
-def ff_concat_quote(p: Path) -> str:
-    """ffmpeg concat demuxer の `file '...'` 用にシングルクォートをエスケープ。"""
-    return str(p).replace("'", "'\\''")
+def ff_concat_escape(p: Path) -> str:
+    """ffmpeg concat demuxer 用のパスエスケープ。
+    concat demuxer はシェルのクォート規則ではなく **ffmpeg独自のバックスラッシュ
+    エスケープ**（`\\'`・`\\\\`・空白）を解釈する。よってシングルクォート囲みは使わず、
+    バックスラッシュ→シングルクォート→空白の順にエスケープする（順序重要）。"""
+    s = str(p)
+    for ch in ("\\", "'", " "):
+        s = s.replace(ch, "\\" + ch)
+    return s
 
 
 def main() -> None:
@@ -62,10 +68,10 @@ def main() -> None:
         video = webms[0]
     else:
         listfile = OUT / "concat.txt"
-        # webm のディレクトリ名に日本語やシングルクォートが入り得るため
-        # UTF-8 明示＋concat用のクォートエスケープを行う
+        # webm のディレクトリ名に日本語やシングルクォート・空白が入り得るため
+        # UTF-8 明示＋ffmpeg concat 独自のバックスラッシュエスケープを行う
         listfile.write_text(
-            "".join(f"file '{ff_concat_quote(w)}'\n" for w in webms), encoding="utf-8"
+            "".join(f"file {ff_concat_escape(w)}\n" for w in webms), encoding="utf-8"
         )
         video = OUT / "video.webm"
         run_checked(
