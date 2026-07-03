@@ -35,6 +35,22 @@
 ### インフラ
 **Terraform（GCS backend）** で Cloud Run / Vertex AI / Artifact Registry / Cloud Build / BigQuery を管理。Cloud Build でコンテナをビルド→Artifact Registry→**Cloud Run（min-instances=0）** にデプロイ。BigQuery は前処理(空間結合)のみに使用。詳細は [`infra/terraform/`](infra/terraform/)。
 
+### 運用: コスト停止・再開（提出後のコスト戦略）
+Cloud Run は **min-instances=0** でアイドル時は無課金だが、提出後にライブデモを止める/再開する手順を明記する（ハッカソン提出物・イメージ・データは残す）。
+
+- **停止**（サービスと公開IAMだけ削除・課金停止）:
+  ```bash
+  cd infra/terraform && terraform apply -var run_image=""
+  ```
+  `run_image=""` で Cloud Run の `count` が 0 になり、サービス＋公開IAMが destroy される（イメージ(Artifact Registry)・BigQuery・その他リソースは残る）。
+- **再開**（同じURLで復活。`TAG` は Artifact Registry の実タグに置換）:
+  ```bash
+  cd infra/terraform && terraform apply -var 'run_image=asia-northeast1-docker.pkg.dev/hinan-navi-tokyo/app/hinan-navi:TAG'
+  ```
+- **新ビルドのデプロイ**: `gcloud builds submit --tag 'asia-northeast1-docker.pkg.dev/hinan-navi-tokyo/app/hinan-navi:NEW_TAG' .` → 上記 apply の `TAG` に `NEW_TAG` を渡す。
+- **予算の防波堤**: Vertex AI / GCP 側で**予算アラート・クォータ**を設定し、LLM/APIのコスト暴発を防ぐ（[#69](https://github.com/muroshima/Hinan-Navi-Tokyo/issues/69)）。LLMは IP単位レート制限＋10分キャッシュでも抑制済み（[#30](https://github.com/muroshima/Hinan-Navi-Tokyo/issues/30)）。
+- ⚠️ `terraform apply` を `-var run_image` 無しで実行すると既定イメージで**再デプロイ**される（削除ではない。[#72](https://github.com/muroshima/Hinan-Navi-Tokyo/issues/72) の地雷対策）。**停止したい時は必ず `-var run_image=""` を明示**する。
+
 ### 設計上のポイント
 - **LLMは抽出だけ**に使い、避難先の順位付けは決定論的で**説明可能・再現可能**（点数内訳を提示）。
 - 重い地理処理は**前処理に寄せて**ランタイムを軽量に保つ（Cloud Run min=0 でコスト最小）。
