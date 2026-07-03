@@ -43,11 +43,11 @@ Cloud Run は **min-instances=0** でアイドル時は無課金だが、提出�
   cd infra/terraform && terraform apply -var run_image=""
   ```
   `run_image=""` で Cloud Run の `count` が 0 になり、サービス＋公開IAMが destroy される（イメージ(Artifact Registry)・BigQuery・その他リソースは残る）。
-- **再開**（同じURLで復活）:
+- **再開**（同じURLで復活。`TAG` は Artifact Registry の実タグに置換）:
   ```bash
-  cd infra/terraform && terraform apply -var run_image=asia-northeast1-docker.pkg.dev/hinan-navi-tokyo/app/hinan-navi:<tag>
+  cd infra/terraform && terraform apply -var 'run_image=asia-northeast1-docker.pkg.dev/hinan-navi-tokyo/app/hinan-navi:TAG'
   ```
-- **新ビルドのデプロイ**: `gcloud builds submit --tag ...:<新tag> .` → 上記 apply に新tagを渡す。
+- **新ビルドのデプロイ**: `gcloud builds submit --tag 'asia-northeast1-docker.pkg.dev/hinan-navi-tokyo/app/hinan-navi:NEW_TAG' .` → 上記 apply の `TAG` に `NEW_TAG` を渡す。
 - **予算の防波堤**: Vertex AI / GCP 側で**予算アラート・クォータ**を設定し、LLM/APIのコスト暴発を防ぐ（[#69](https://github.com/muroshima/Hinan-Navi-Tokyo/issues/69)）。LLMは IP単位レート制限＋10分キャッシュでも抑制済み（[#30](https://github.com/muroshima/Hinan-Navi-Tokyo/issues/30)）。
 - ⚠️ `terraform apply` を `-var run_image` 無しで実行すると既定イメージで**再デプロイ**される（削除ではない。[#72](https://github.com/muroshima/Hinan-Navi-Tokyo/issues/72) の地雷対策）。**停止したい時は必ず `-var run_image=""` を明示**する。
 
