@@ -9,7 +9,8 @@ import { MAP_CONNECT_HOSTS } from "./lib/mapHosts";
 //    dangerouslySetInnerHTML を使わない方針で担保（アプリ全体を網羅する保証ではなく、既知の差込点を塞ぐ）。
 //  - script-src-attr 'none' でインラインイベントハンドラ(onclick=等)を禁止（インラインscript実行は維持）。
 //  - MapLibre GL v5 はラスタ/ベクタ/glyphs を全て Fetch API で取得する(実測確認)ため、外部タイルホストは
-//    connect-src に限定列挙する。img-src は data:/blob: のみ(タイルは fetch→canvas 描画で<img>化しない)。
+//    connect-src に限定列挙する。img-src は 'self' data: blob:(同一オリジン画像＋data/blob。
+//    外部タイルホストは不要＝タイルは fetch→canvas 描画で<img>化しないため)。
 //    ホスト定義は lib/mapHosts.ts に集約し MapView と共有(片側更新でのCSP違反を防止)。
 //  - worker-src は Service Worker('self')と MapLibre の blob worker を許可。
 //  - frame-ancestors 'none' でクリックジャッキング遮断（X-Frame-Options も併記）。

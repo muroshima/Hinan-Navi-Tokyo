@@ -10,8 +10,8 @@ export const PLATEAU_MVT_HOST = "https://indigo-lab.github.io"; // PLATEAU建物
 
 // ⚠️ CSP用: MapLibre GL v5 は**ラスタタイルも Fetch API で取得**する(実測でOSMタイルが
 //   connect-src 違反になることを確認)。よって glyphs/ベクタだけでなく全タイルホストを
-//   connect-src に載せる。img-src は data:/blob: のみで足りる(タイルは fetch→canvas 描画で
-//   <img>にはならない)。
+//   connect-src に載せる。img-src は外部タイルホスト不要で 'self' data: blob: で足りる
+//   (タイルは fetch→canvas 描画で<img>にはならない。'self'は favicon 等の同一オリジン画像用)。
 export const MAP_CONNECT_HOSTS = [
   OSM_TILE_HOST,
   GSI_HAZARD_HOST,
