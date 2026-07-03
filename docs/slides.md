@@ -87,7 +87,7 @@ Marp スライド（HTML/PDF出力）。テーマ・ローカル画像許可・�
 <div class="cols">
 <div>
 
-![w:560](demo-thumb.jpg)
+![「なぜ1位か」を点数の内訳（基準点＋バリアフリー加点など）で示すアプリ画面 w:560](demo-thumb.jpg)
 
 </div>
 <div>
@@ -136,7 +136,7 @@ Marp スライド（HTML/PDF出力）。テーマ・ローカル画像許可・�
 </div>
 <div>
 
-![w:520](shot-triage.jpg)
+![配慮属性の抽出結果と「行ける順」避難所ランキング、地図上の避難所・推奨経路の表示画面 w:520](shot-triage.jpg)
 
 </div>
 </div>
