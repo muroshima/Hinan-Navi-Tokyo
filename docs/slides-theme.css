@@ -1,0 +1,116 @@
+/* @theme hinan
+ * だれでも避難ナビ TOKYO 用 Marp テーマ。
+ * 防災らしい落ち着いた配色（濃紺ベース＋琥珀/緑のアクセント）・日本語可読性重視。
+ */
+@import 'default';
+
+:root {
+  --navy: #0f2740;
+  --navy-soft: #1e3a5f;
+  --amber: #d97706;
+  --green: #15803d;
+  --red: #b91c1c;
+  --ink: #1f2937;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+  --bg: #ffffff;
+}
+
+section {
+  font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+  font-size: 24px;
+  color: var(--ink);
+  background: var(--bg);
+  padding: 56px 64px;
+  line-height: 1.5;
+}
+
+h1 { color: var(--navy); font-size: 46px; line-height: 1.25; }
+h2 {
+  color: var(--navy);
+  font-size: 34px;
+  border-bottom: 4px solid var(--amber);
+  padding-bottom: 8px;
+  margin-bottom: 20px;
+}
+h3 { color: var(--navy-soft); font-size: 26px; }
+strong { color: var(--red); }
+a { color: var(--navy-soft); }
+
+.muted { color: var(--muted); font-size: 17px; display: block; margin-top: 14px; }
+
+/* 表 */
+table { font-size: 19px; border-collapse: collapse; width: 100%; }
+th { background: var(--navy); color: #fff; padding: 8px 12px; text-align: left; }
+td { border-bottom: 1px solid var(--line); padding: 7px 12px; vertical-align: top; }
+tr:nth-child(even) td { background: #f8fafc; }
+
+/* 引用（ポイント強調） */
+blockquote {
+  border-left: 6px solid var(--green);
+  background: #f0fdf4;
+  color: var(--ink);
+  padding: 12px 18px;
+  font-size: 22px;
+  margin-top: 18px;
+}
+
+/* 2カラム */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+.cols img { border: 1px solid var(--line); border-radius: 8px; }
+
+/* 3ステップ */
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin: 24px 0; }
+.step {
+  background: var(--navy);
+  color: #fff;
+  border-radius: 12px;
+  padding: 20px 18px;
+  font-size: 19px;
+  line-height: 1.5;
+}
+.step b { color: #fde68a; font-size: 21px; }
+
+/* 表紙 */
+section.title {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy-soft) 100%);
+  color: #fff;
+  justify-content: center;
+  text-align: center;
+}
+section.title h1 { color: #fff; font-size: 56px; }
+section.title h3 { color: #fde68a; font-weight: 600; }
+section.title strong { color: #fca5a5; }
+section.title .muted { color: #cbd5e1; }
+
+/* 一方向フロー（抽象アーキ図） */
+.flow {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 8px;
+  margin: 48px 0;
+}
+.flow-box {
+  flex: 1;
+  background: #f8fafc;
+  border: 2px solid var(--navy-soft);
+  border-radius: 12px;
+  padding: 22px 12px;
+  text-align: center;
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--navy);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.flow-box span { display: block; font-size: 15px; font-weight: 400; color: var(--muted); margin-top: 8px; }
+.flow-box.accent { background: var(--navy); color: #fff; border-color: var(--navy); }
+.flow-box.accent span { color: #fde68a; }
+.flow .arrow { align-self: center; color: var(--amber); font-size: 34px; font-weight: 700; }
+
+/* ページ番号・ヘッダ/フッタ */
+section::after { color: var(--muted); font-size: 15px; }
+header { color: var(--muted); font-size: 15px; }
+footer { color: var(--muted); font-size: 15px; }

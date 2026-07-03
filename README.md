@@ -16,6 +16,15 @@ https://hinan-navi-sceyw5h4sq-an.a.run.app
 
 ▶ サムネイルをクリックすると動画（[`docs/demo.mp4`](docs/demo.mp4)）が再生されます。収録パイプライン（Playwright 収録＋ナレーション合成）は [`scripts/demo/`](scripts/demo/) を参照。
 
+## 📊 発表スライド
+発表スライド（全12枚）: **[docs/slides.pdf](docs/slides.pdf)**（HTML版 [docs/slides.html](docs/slides.html)）。ソースは [docs/slides.md](docs/slides.md)（[Marp](https://marp.app/)）。
+
+```bash
+# ビルド（Marp CLI。ローカル画像の埋め込みに --allow-local-files が必須）
+marp docs/slides.md -o docs/slides.html --theme docs/slides-theme.css --html --allow-local-files
+marp docs/slides.md -o docs/slides.pdf  --theme docs/slides-theme.css --html --allow-local-files --pdf
+```
+
 ## 対象課題
 **東京全域の、あらゆる要配慮者**（車椅子/高齢/乳幼児/視覚・聴覚障害/オストメイト/要介護/外国語…）が直面する「**最寄り ≠ 自分が本当に行ける避難先**」という普遍課題に、地域・災害種別を限定せず答えます。最も切実な代表ケースとして **江戸川区（江東5区）の大規模水害**（陸域の約7割がゼロメートル地帯・避難行動要支援者 約5,800人）も重視。詳細・出典は [docs/positioning.md](docs/positioning.md)。
 
