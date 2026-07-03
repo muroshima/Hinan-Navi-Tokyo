@@ -24,7 +24,14 @@ https://hinan-navi-sceyw5h4sq-an.a.run.app
 - 高齢化率を**町丁目粒度**で文脈表示（国勢調査小地域×避難所を BigQuery GIS で空間結合）、実経路距離（OSRM）、現在地手動入力（Nominatim）、Googleマップ徒歩ルート
 
 ## 技術スタック
-Next.js 16 / React 19 / TypeScript / Tailwind CSS / MapLibre GL JS
+Next.js 16 / React 19 / TypeScript / Tailwind CSS / MapLibre GL JS / **Google Cloud（Cloud Run・Vertex AI・BigQuery、Terraform管理）**
+
+## AI活用（Vertex AI Gemini）
+- **使用箇所**: `/api/triage`（自然文 → 11配慮属性＋想定災害の抽出）と `/api/timeline`（属性×災害×推奨避難先 → マイ・タイムライン生成）。
+- **モデル/認証**: **Vertex AI Gemini（`gemini-2.5-flash`）** を `@google/genai` から呼び出し。**IAM認証（APIキー不要）**。構造化出力（responseSchema）＋ zod で型検証。
+- **設計の筋**: AIは**「自然文→構造化」の抽出に限定**し、避難先の順位付けは決定論的スコアリング（`lib/ranking.ts`）で行う＝**説明可能・再現可能**。
+- **止まらない設計**: 認証未設定/API障害/検証失敗/オフライン時は語句一致フォールバックへ自動切替（`source` で手段を明示）。前処理の高齢化率算出には **BigQuery GIS（`ST_CONTAINS`空間結合）** も使用。
+- 詳細 → [docs/llm-rationale.md](docs/llm-rationale.md)。
 
 ## セットアップ
 ```bash
