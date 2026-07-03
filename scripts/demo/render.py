@@ -21,6 +21,9 @@ RAW = HERE / "output" / "raw"
 OUT = HERE / "output"
 DOCS = HERE.parent.parent / "docs"
 NAME = sys.argv[1] if len(sys.argv) > 1 else "demo"
+# NAME はファイル名成分のみ許可（../ や / で output/・docs/ の外へ書き出す事故を防ぐ）
+if NAME in ("", ".", "..") or NAME != Path(NAME).name:
+    sys.exit(f"不正な NAME です（ディレクトリ成分は使えません）: {NAME!r}")
 
 
 def dur(path: Path) -> float:
@@ -96,13 +99,20 @@ def main() -> None:
     # 各 cue を TTS 生成
     cue_files = []
     for i, c in enumerate(cues):
+        # cue 単位の入力検証（どの cue が壊れているか分かるメッセージで早期終了）
+        if not isinstance(c, dict) or "text" not in c or "at" not in c:
+            sys.exit(f"cue[{i}] が不正です（text/at が必要）: {c!r}")
+        try:
+            at = float(c["at"])
+        except (TypeError, ValueError):
+            sys.exit(f"cue[{i}] の at が数値ではありません: {c.get('at')!r}")
         mp3 = OUT / f"cue_{i}.mp3"
         run_checked(
             ["uvx", "edge-tts", "--voice", voice, "--rate", rate,
-             "--text", c["text"], "--write-media", str(mp3)]
+             "--text", str(c["text"]), "--write-media", str(mp3)]
         )
-        cue_files.append((mp3, float(c["at"])))
-        print(f"  cue{i}: at={c['at']:>5}  {dur(mp3):.2f}s")
+        cue_files.append((mp3, at))
+        print(f"  cue{i}: at={at:>5}  {dur(mp3):.2f}s")
 
     # ffmpeg 入力: [0]=video, [1..]=cue mp3
     inputs = ["-i", str(video)]
