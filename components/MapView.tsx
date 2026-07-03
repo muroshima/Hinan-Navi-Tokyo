@@ -409,28 +409,41 @@ export default function MapView({
       }
 
       // 推奨避難所への徒歩経路(#38)。全ポイントレイヤーより下(all-ptsの直下)に敷き、点を隠さない。
-      // 浸水域通過は色で区別(判定不能=灰/通過=琥珀/回避=緑)
+      // a11y: 色だけに頼らず「浸水域通過=破線・琥珀 / 回避=実線・緑 / 判定不能=実線・灰」でパターンも併用。
+      // (line-dasharrayはデータ駆動不可のため、浸水通過だけ別レイヤーで破線描画する)
       map.addSource("route", { type: "geojson", data: emptyFC() });
+      // 実線: 浸水を通らない(回避=緑) or 判定不能(灰)
       map.addLayer(
         {
           id: "route-line",
           type: "line",
           source: "route",
+          filter: ["!=", ["get", "flooded"], true],
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
             "line-width": 5,
-            "line-opacity": 0.8,
-            "line-color": [
-              "case",
-              ["==", ["get", "floodKnown"], false],
-              "#6b7280",
-              ["==", ["get", "flooded"], true],
-              "#f59e0b",
-              "#16a34a",
-            ],
+            "line-opacity": 0.85,
+            "line-color": ["case", ["==", ["get", "floodKnown"], false], "#6b7280", "#16a34a"],
           },
         },
-        "all-pts" // beforeId: all-pts の直下に挿入し、全ての点レイヤーより下に描画
+        "all-pts"
+      );
+      // 破線: 浸水域を通過(琥珀)。色覚に依存せずパターンで危険を区別
+      map.addLayer(
+        {
+          id: "route-line-flood",
+          type: "line",
+          source: "route",
+          filter: ["==", ["get", "flooded"], true],
+          layout: { "line-cap": "butt", "line-join": "round" },
+          paint: {
+            "line-width": 5,
+            "line-opacity": 0.9,
+            "line-color": "#f59e0b",
+            "line-dasharray": [2, 1.5],
+          },
+        },
+        "all-pts"
       );
 
       map.addSource("ranked", { type: "geojson", data: emptyFC() });
