@@ -57,5 +57,12 @@ npm run dev   # http://localhost:3000
 
 > コード本体は [Apache-2.0](LICENSE)。データのライセンスとは別に扱います。
 
+## 詳細ドキュメント
+- [docs/positioning.md](docs/positioning.md) — 課題設定・データ活用の核（単独データでは出せない「行ける順」）
+- [docs/usecases.md](docs/usecases.md) — **命を守るユースケース集**（夜×視覚障害／乳幼児×荒天／車椅子×洪水 ほか）
+- [docs/personas.md](docs/personas.md) — **当事者性とペルソナ**（一次情報に基づく想定ペルソナ・ヒアリング計画）
+- [docs/llm-rationale.md](docs/llm-rationale.md) — **なぜ生成AIか**（抽出への限定・構造化出力＋zod・多層フォールバック）
+- [docs/DATA.md](docs/DATA.md) — データ出典・ライセンス・再現手順
+
 ## 注意
 本リポジトリはハッカソン用プロトタイプです。避難の最終判断は自治体の公式情報に従ってください。
