@@ -710,8 +710,9 @@ export default function Home() {
     const params = new URLSearchParams();
     const shareText = submittedText.trim();
     if (shareText) params.set("q", shareText);
-    params.set("lat", origin[1].toFixed(6));
-    params.set("lng", origin[0].toFixed(6));
+    // プライバシー(#67): 共有URLの座標は小数3桁(≈100m)に粗粒度化し、自宅などのピンポイント特定を避ける
+    params.set("lat", origin[1].toFixed(3));
+    params.set("lng", origin[0].toFixed(3));
     params.set("lang", lang);
     return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
   }
@@ -776,6 +777,15 @@ export default function Home() {
             ことばで状況を伝えると、あなたが行ける避難所を探します
           </p>
         </header>
+
+        {/* 常時表示の免責(#25)。人命関与サービスとして最終判断は公式情報に委ねる旨を明示 */}
+        <div
+          role="note"
+          className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+        >
+          ⚠️ 本サービスは<b>参考情報</b>です（ハッカソン用プロトタイプ）。掲載データは時点情報で実態と異なる場合があります。
+          <b>避難の最終判断は必ず自治体の公式情報・指示に従ってください。</b>
+        </div>
 
         {/* 出力言語（やさしい日本語・多言語）＋ 音声入力 */}
         <div className="flex items-center gap-2">
@@ -853,6 +863,9 @@ export default function Home() {
             </button>
           </div>
           {geoError && <p className="mt-1 text-[11px] text-red-600">{geoError}</p>}
+          <p className="mt-1 text-[10px] text-gray-600">
+            ※ 現在地・住所は経路/地名検索のため外部サービス（OSRM・Nominatim）に送信されます
+          </p>
         </div>
 
         <textarea
@@ -893,7 +906,7 @@ export default function Home() {
                 災害: {attrs.hazard}
               </span>
             )}
-            {source && <span className="text-gray-400">（抽出: {source}）</span>}
+            {source && <span className="text-gray-600">（抽出: {source}）</span>}
           </div>
         )}
 
@@ -927,7 +940,7 @@ export default function Home() {
               );
             })}
           </div>
-          <p className="mt-1 text-[10px] text-gray-400">出典: ハザードマップポータルサイト(国土交通省)</p>
+          <p className="mt-1 text-[10px] text-gray-600">出典: ハザードマップポータルサイト(国土交通省)</p>
           <button
             onClick={() => setThreeD((v) => !v)}
             aria-pressed={threeD}
@@ -952,7 +965,7 @@ export default function Home() {
               ? "🏢 建物3D ON（高い建物＝垂直避難先・拡大で表示）"
               : "🏢 建物3Dで垂直避難先を見る（水害時・23区）"}
           </button>
-          <p className="mt-1 text-[10px] text-gray-400">
+          <p className="mt-1 text-[10px] text-gray-600">
             建物: Project PLATEAU(国土交通省) CC BY 4.0。高いほど濃い緑＝上階避難に適す
           </p>
         </div>
@@ -1017,7 +1030,7 @@ export default function Home() {
               🏢 一時滞在施設
             </button>
           </div>
-          <p className="mt-1 text-[10px] text-gray-400">
+          <p className="mt-1 text-[10px] text-gray-600">
             出典: 東京都オープンデータ（災害時給水ステーション／FREE Wi-Fi & TOKYO／「だれでも東京」施設情報／都立の一時滞在施設）・都営バスGTFS（東京都交通局／ODPT）— CC BY 4.0。バス停は拡大で表示。バリアフリー施設は避難経路上で立ち寄れる休憩先。一時滞在施設は帰宅困難者の待機先（都立・住所を国土地理院APIでジオコーディング）
           </p>
         </div>
@@ -1077,11 +1090,11 @@ export default function Home() {
             <p className="mt-1 text-[10px] text-gray-500">
               地図の
               {!routeAdvisory.floodKnown
-                ? "灰"
+                ? "灰の実線"
                 : routeAdvisory.recommended.flood.maxDepthM > 0
-                  ? "琥珀"
-                  : "緑"}
-              の線が経路。出典: 東京都「浸水予想区域図」（CC BY 4.0）を粗いグリッドに集約。OSRMの代替経路から浸水曝露が最小のものを選択（経路自体の再計算は行いません）
+                  ? "琥珀の破線"
+                  : "緑の実線"}
+              が経路（浸水域通過は破線・回避/判定不能は実線で色に頼らず区別）。出典: 東京都「浸水予想区域図」（CC BY 4.0）を粗いグリッドに集約。OSRMの代替経路から浸水曝露が最小のものを選択（経路自体の再計算は行いません）
             </p>
           </div>
         )}
@@ -1130,7 +1143,7 @@ export default function Home() {
                   </div>
                 ))}
                 {timelineSource && (
-                  <span className="text-[10px] text-gray-400">
+                  <span className="text-[10px] text-gray-600">
                     （生成: {timelineSource === "gemini" ? "AI" : "簡易ルール"}・参考情報です。最終判断は自治体の情報に従ってください）
                   </span>
                 )}
@@ -1153,7 +1166,10 @@ export default function Home() {
             </div>
             {!shareUrl && (
               <p className="mt-1 text-[11px] text-emerald-700">
-                今の状況・現在地・言語をリンク/QRにします。受け取った人が開くと同じ避難先が表示されます
+                今の状況・現在地・言語をリンク/QRにします。受け取った人が開くと同じ避難先が表示されます。
+                <span className="text-emerald-600">
+                  （プライバシー配慮のため位置は約100m粒度。共有先の取り扱いにご注意ください）
+                </span>
               </p>
             )}
             {shareUrl && (
@@ -1214,10 +1230,10 @@ export default function Home() {
                   {r.feature.properties.city}・
                   {r.feature.properties.kind === "center" ? "指定避難所" : "避難場所"}
                   {routeInfo[r.feature.properties.id] && (
-                    <span className="ml-1 text-gray-400">(道路距離)</span>
+                    <span className="ml-1 text-gray-600">(道路距離)</span>
                   )}
                   {r.feature.properties.agingRate != null && (
-                    <span className="ml-1 text-gray-400">
+                    <span className="ml-1 text-gray-600">
                       🧓 高齢化率{r.feature.properties.agingRate}%
                       {r.feature.properties.agingLevel === "chome" ? "(町丁目)" : ""}
                     </span>
