@@ -13,7 +13,7 @@
 ### ① 前処理パイプライン（build-time・ランタイム外）
 避難時のリアルタイム処理を軽くするため、重い加工は**事前バッチ**で済ませ、成果物(GeoJSON)をリポジトリに同梱して Cloud Run へデプロイする。
 
-- **`scripts/preprocess.py`**: 東京都オープンデータのCSV(避難所/避難場所/車椅子対応トイレ/給水・Wi-Fi/都営バスGTFS/住基年齢別人口/「だれでも東京」/都立一時滞在施設XLSX)を、エンコーディング自動判定のうえ正規化・バリアフリー列/災害種別のbool化を行い、`public/data/*.geojson` と `metadata.json` を生成。
+- **`scripts/preprocess.py`**: 東京都オープンデータのCSV(避難所/避難場所/車椅子対応トイレ/給水・Wi-Fi/都営バスGTFS/住基年齢別人口/「だれでも東京」/都立一時滞在施設XLSX)を、エンコーディング自動判定のうえ正規化・バリアフリー列/災害種別のbool化を行い、`public/data/*.geojson` と `public/data/metadata.json` を生成。
 - **`scripts/aging_bq.sh`**: e-Stat 国勢調査 小地域の年齢別人口×境界を、**BigQuery GIS の `ST_CONTAINS`** で避難所点と空間結合し、町丁目粒度の高齢化率 `data/chome_aging.json`(中間生成物)を出力。`preprocess.py` が evacuation.geojson に焼き込む。
 - **`scripts/flood_grid.py`**: 浸水予想区域図(流域別・計100MB超)を約278mグリッドに集約し `public/data/flood_grid.json` を生成。
 - **国土地理院 住所検索API**: 座標を持たない都立一時滞在施設の住所をジオコーディング（結果はキャッシュ）。
