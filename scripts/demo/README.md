@@ -13,7 +13,9 @@ scripts/demo/
 ├── narration/demo.ja.json # ナレーション cue（voice/rate/at/text）
 ├── render.py              # TTS生成 + adelay/amix + h264/AAC mux + 前後カード合成
 ├── cards/                 # タイトル/エンドカード（docs/slides.md のスライド1・12のPNG。
-│                          # スライド更新時は marp --images png で再生成して差し替える）
+│                          # スライド更新時は次で再生成して差し替える:
+│                          #   npx -y @marp-team/marp-cli@4.3.1 docs/slides.md -c marp.config.mjs --images png -o /tmp/slide.png
+│                          #   → /tmp/slide.001.png=title, /tmp/slide.012.png=end ）
 └── output/                # 生録画・中間生成物（gitignore。正本は docs/demo.mp4）
 ```
 

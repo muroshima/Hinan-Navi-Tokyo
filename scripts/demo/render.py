@@ -151,12 +151,14 @@ def main() -> None:
         # concat filter は全入力の v(fps/解像度/SAR/pix_fmt)・a(sample_rate/channels)が
         # 揃っていないと失敗する。カード画像だけでなく**本編[1]も同条件に正規化**してから連結する
         # （本編の fps/SAR/音声レートは録画環境や将来の変更で変わり得るため、揃える前提に頼らない）。
+        # 音声は sample_rate/channels に加え **sample_fmt(fltp)** まで揃える。
+        # 本編AACは fltp・anullsrc は既定で別fmtになり得るため、本編/無音を含む全音声を正規化。
         vnorm = "fps=25,scale=1280:720,setsar=1,format=yuv420p"
-        anorm = "aformat=sample_rates=24000:channel_layouts=mono"
+        anorm = "aformat=sample_rates=24000:channel_layouts=mono:sample_fmts=fltp"
         fc2 = (
             f"[0:v]{vnorm}[v0];[1:v]{vnorm}[v1];[2:v]{vnorm}[v2];"
-            f"[1:a]{anorm}[a1];"
-            f"[v0][3:a][v1][a1][v2][4:a]concat=n=3:v=1:a=1[v][a]"
+            f"[1:a]{anorm}[a1];[3:a]{anorm}[a3];[4:a]{anorm}[a4];"
+            f"[v0][a3][v1][a1][v2][a4]concat=n=3:v=1:a=1[v][a]"
         )
         run_checked(
             ["ffmpeg", "-y",
