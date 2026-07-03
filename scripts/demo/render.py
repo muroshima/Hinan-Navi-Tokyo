@@ -11,6 +11,7 @@
   3. Playwright 録画 webm（複数あれば concat）に音声を mux し h264/AAC の mp4 出力
 """
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -121,7 +122,7 @@ def main() -> None:
     # docs/ にも正本を配置（README / 提出物用）
     DOCS.mkdir(parents=True, exist_ok=True)
     dest = DOCS / f"{NAME}.mp4"
-    dest.write_bytes(out_mp4.read_bytes())
+    shutil.copyfile(out_mp4, dest)  # ストリーミングコピー（全体をメモリに載せない）
     print(f"\n✅ {out_mp4}  ({out_mp4.stat().st_size / 1e6:.1f} MB)")
     print(f"✅ {dest}")
 
