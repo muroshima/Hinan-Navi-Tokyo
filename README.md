@@ -20,9 +20,10 @@ https://hinan-navi-sceyw5h4sq-an.a.run.app
 発表スライド（全12枚）: **[docs/slides.pdf](docs/slides.pdf)**（HTML版 [docs/slides.html](docs/slides.html)）。ソースは [docs/slides.md](docs/slides.md)（[Marp](https://marp.app/)）。
 
 ```bash
-# ビルド（Marp CLI。テーマ・ローカル画像許可・絵文字ネイティブ表示は marp.config.mjs に集約）
-marp docs/slides.md -c marp.config.mjs -o docs/slides.html
-marp docs/slides.md -c marp.config.mjs -o docs/slides.pdf --pdf
+# ビルド（Marp CLI はリポジトリ依存に含めず npx で実行。テーマ・ローカル画像許可・
+# 絵文字ネイティブ表示は marp.config.mjs に集約）
+npx -y @marp-team/marp-cli@4.3.1 docs/slides.md -c marp.config.mjs -o docs/slides.html
+npx -y @marp-team/marp-cli@4.3.1 docs/slides.md -c marp.config.mjs -o docs/slides.pdf --pdf
 ```
 
 ## 対象課題

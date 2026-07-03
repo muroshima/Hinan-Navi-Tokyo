@@ -4,7 +4,8 @@
 // - html: スライド内の <div>/<b>/<br> を有効化
 // - options.emoji.unicode:false: 絵文字を Twemoji 画像(CDN)に変換せずネイティブ表示にし、
 //   HTML を外部CDN非依存(オフラインでも絵文字が出る)にする
-// 使い方: marp docs/slides.md -c marp.config.mjs -o docs/slides.html
+// 使い方(Marp CLIは依存に含めずnpxで実行):
+//   npx -y @marp-team/marp-cli@4.3.1 docs/slides.md -c marp.config.mjs -o docs/slides.html
 export default {
   allowLocalFiles: true,
   html: true,

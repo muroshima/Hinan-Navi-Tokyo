@@ -10,8 +10,9 @@ footer: "都知事杯オープンデータ・ハッカソン"
 
 <!--
 Marp スライド（HTML/PDF出力）。テーマ・ローカル画像許可・絵文字ネイティブ表示は marp.config.mjs に集約。
-ビルド: marp docs/slides.md -c marp.config.mjs -o docs/slides.html
-       marp docs/slides.md -c marp.config.mjs -o docs/slides.pdf --pdf
+ビルド(Marp CLIは依存に含めずnpxで実行):
+  npx -y @marp-team/marp-cli@4.3.1 docs/slides.md -c marp.config.mjs -o docs/slides.html
+  npx -y @marp-team/marp-cli@4.3.1 docs/slides.md -c marp.config.mjs -o docs/slides.pdf --pdf
 -->
 
 <!-- _class: title -->
