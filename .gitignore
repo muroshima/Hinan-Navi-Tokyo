@@ -46,3 +46,9 @@ next-env.d.ts
 
 shot_*.jpeg
 shot_*.jpg
+
+# playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
+/blob-report/
