@@ -34,6 +34,25 @@ jobs:
       - name: Build
         run: npm run build
 
+  e2e:
+    name: e2e (Playwright)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright browser (chromium)
+        run: npx playwright install --with-deps chromium
+      - name: Build
+        run: npm run build
+      - name: e2e
+        run: npx playwright test
+
   secret-scan:
     name: secret scan (gitleaks)
     runs-on: ubuntu-latest
