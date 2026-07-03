@@ -27,7 +27,7 @@ Vertex AI が有効なサーバに対して行う（fallback のまま収録す�
 
 ```bash
 gcloud auth application-default login   # 未認証なら
-GOOGLE_CLOUD_PROJECT=hinan-navi-tokyo PORT=3000 npm run start &
+GOOGLE_CLOUD_PROJECT=<your-gcp-project> PORT=3000 npm run start &
 curl -s -X POST localhost:3000/api/triage -H "Content-Type: application/json" \
   -d '{"text":"車椅子で避難したい"}' | grep -o '"source":"[a-z]*"'   # gemini を確認
 # → その後に収録（config の reuseExistingServer が既存サーバを拾う）
