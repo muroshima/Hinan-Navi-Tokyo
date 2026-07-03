@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """だれでも避難ナビ TOKYO デモ動画の一発エンコード。
 
-  python3 render.py            # narration/demo.ja.json + output/raw/**/video.webm → output/demo.mp4
+  python3 scripts/demo/render.py   # narration/demo.ja.json + output/raw/**/video.webm → output/demo.mp4
+  （__file__ 基準で動くのでどのディレクトリから実行してもよい）
 
 処理:
   1. narration の各 cue を edge-tts で MP3 生成（無料・APIキー不要・uvx経由）
@@ -30,7 +31,7 @@ def dur(path: Path) -> float:
 
 
 def main() -> None:
-    cfg = json.loads((HERE / "narration" / f"{NAME}.ja.json").read_text())
+    cfg = json.loads((HERE / "narration" / f"{NAME}.ja.json").read_text(encoding="utf-8"))
     voice, rate, cues = cfg["voice"], cfg["rate"], cfg["cues"]
 
     # 録画 webm を収集（ファイル名ソートで順序安定）
@@ -45,7 +46,8 @@ def main() -> None:
         video = webms[0]
     else:
         listfile = OUT / "concat.txt"
-        listfile.write_text("".join(f"file '{w}'\n" for w in webms))
+        # webm のディレクトリ名に日本語が入り得るため UTF-8 を明示
+        listfile.write_text("".join(f"file '{w}'\n" for w in webms), encoding="utf-8")
         video = OUT / "video.webm"
         subprocess.run(
             ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(listfile),

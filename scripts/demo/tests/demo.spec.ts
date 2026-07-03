@@ -70,10 +70,13 @@ test("だれでも避難ナビ TOKYO デモ", async ({ page }) => {
   await untilT(62.5); // 最終cue終端 + 余白まで dwell
 });
 
-// スクロール可能なサイドバー(aside)を dy px 下へスクロール
+// スクロール可能なサイドバー(aside)を dy px 下へスクロール。
+// UI構造が変わり aside が見つからない場合は例外にして収録を失敗させる
+// （黙ってno-opだと意図しない動画が「成功」で生成されるため）。
 async function scrollAside(page: Page, dy: number) {
   await page.evaluate((d) => {
     const aside = document.querySelector("aside");
-    if (aside) aside.scrollBy({ top: d, behavior: "smooth" });
+    if (!aside) throw new Error("収録シナリオ: aside 要素が見つかりません（UI構造の変更を確認）");
+    aside.scrollBy({ top: d, behavior: "smooth" });
   }, dy);
 }

@@ -30,7 +30,9 @@ export default defineConfig({
     cwd: ROOT,
     url: baseURL,
     timeout: 180 * 1000,
-    reuseExistingServer: true,
+    // ルートの playwright.config.ts と同様、CI では既存サーバを再利用しない
+    // （意図しない別プロセス/開発サーバへの誤接続を防ぐ）。ローカル収録では再利用OK。
+    reuseExistingServer: !process.env.CI,
     env: { PORT: String(PORT) },
   },
 });
