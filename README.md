@@ -17,7 +17,7 @@ https://hinan-navi-sceyw5h4sq-an.a.run.app
 ▶ サムネイルをクリックすると動画（[`docs/demo.mp4`](docs/demo.mp4)）が再生されます。収録パイプライン（Playwright 収録＋ナレーション合成）は [`scripts/demo/`](scripts/demo/) を参照。
 
 ## 📊 発表スライド
-発表スライド（全12枚）: **[docs/slides.pdf](docs/slides.pdf)**（HTML版 [docs/slides.html](docs/slides.html)）。ソースは [docs/slides.md](docs/slides.md)（[Marp](https://marp.app/)）。
+発表スライド（全12枚）: **[docs/slides.pdf](docs/slides.pdf)**（GitHub 上でそのまま閲覧できます）。HTML版 [docs/slides.html](docs/slides.html) はダウンロードしてブラウザで開いてください（GitHub 上ではソース表示になります）。ソースは [docs/slides.md](docs/slides.md)（[Marp](https://marp.app/)）。
 
 ```bash
 # ビルド（Marp CLI はリポジトリ依存に含めず npx で実行。テーマ・ローカル画像許可・
