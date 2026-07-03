@@ -63,6 +63,7 @@ npm run dev   # http://localhost:3000
 - [docs/usecases.md](docs/usecases.md) — **命を守るユースケース集**（夜×視覚障害／乳幼児×荒天／車椅子×洪水 ほか）
 - [docs/personas.md](docs/personas.md) — **当事者性とペルソナ**（一次情報に基づく想定ペルソナ・ヒアリング計画）
 - [docs/llm-rationale.md](docs/llm-rationale.md) — **なぜ生成AIか**（抽出への限定・構造化出力＋zod・多層フォールバック）
+- [docs/roadmap.md](docs/roadmap.md) — **社会実装ロードマップ**（自治体配布／福祉部局連携／データ更新継続・持続的提供）
 - [docs/DATA.md](docs/DATA.md) — データ出典・ライセンス・再現手順
 
 ## 注意
