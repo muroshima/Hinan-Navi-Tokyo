@@ -31,6 +31,7 @@ locals {
     "cloudresourcemanager.googleapis.com", # project IAM操作に必要
     "aiplatform.googleapis.com",           # Vertex AI Gemini(LLM)
     "bigquery.googleapis.com",             # 高齢化率の空間結合(前処理バッチ)
+    "billingbudgets.googleapis.com",       # 予算アラート(#69・コスト暴発の最終防波堤)
   ]
   repo_id = "app"
 }
@@ -145,4 +146,40 @@ resource "google_cloud_run_v2_service_iam_member" "public" {
   location = var.region
   role     = "roles/run.invoker"
   member   = "allUsers"
+}
+
+# 予算アラート(#69): Vertex/GCPのコスト暴発に対する最終防波堤。
+# レート制限・キャッシュ(#30/#21)はインスタンス単位のベストエフォートで上限保証ではないため、
+# 「使い過ぎたら通知で気づける」課金ガードを別途置く。billing_account_id 未指定なら作らない(count=0)。
+# 実行ロールには billing 権限(roles/billing.costsManager 等)が必要。通知は既定で請求先の
+# 請求管理者・ユーザ宛メール(threshold_rules を満たすと送信)。
+resource "google_billing_budget" "monthly" {
+  count           = var.billing_account_id != "" ? 1 : 0
+  billing_account = var.billing_account_id
+  display_name    = "hinan-navi 月次予算アラート(#69)"
+
+  # このプロジェクトの費用のみを対象にする
+  budget_filter {
+    projects = ["projects/${data.google_project.this.number}"]
+  }
+
+  amount {
+    specified_amount {
+      currency_code = var.billing_currency
+      units         = tostring(var.monthly_budget_amount)
+    }
+  }
+
+  # 実費が 50% / 90% / 100% に達したらアラート
+  threshold_rules {
+    threshold_percent = 0.5
+  }
+  threshold_rules {
+    threshold_percent = 0.9
+  }
+  threshold_rules {
+    threshold_percent = 1.0
+  }
+
+  depends_on = [google_project_service.apis]
 }
