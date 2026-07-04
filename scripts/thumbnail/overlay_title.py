@@ -12,11 +12,13 @@ scripts/thumbnail/base.png（生成AIで作成した16:9のベース絵・文字
 生成AIは日本語テキスト描画が苦手なため、テキストは常にこの後段で乗せる方針。
 フォントは macOS 同梱のヒラギノ角ゴ（W8/W6）。他環境では FONTS のパスを変更する。
 """
-import subprocess
 import sys
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
+
+# README/ポスター用JPGの横幅。原寸(2752)から縮小して軽量化する
+JPG_WIDTH = 1600
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
@@ -43,7 +45,7 @@ def main() -> None:
     f_title = ImageFont.truetype(FONT_TITLE, int(H * 0.105))
     f_sub = ImageFont.truetype(FONT_SUB, int(H * 0.050))
 
-    def draw_center(y: int, text: str, font, fill, stroke_fill=(6, 20, 36), stroke=6) -> int:
+    def draw_center(y: int, text: str, font, fill, stroke_fill=(15, 39, 64), stroke=6) -> int:  # 縁取り=#0f2740
         bb = draw.textbbox((0, 0), text, font=font, stroke_width=stroke)
         x = (W - (bb[2] - bb[0])) // 2 - bb[0]
         draw.text((x, y), text, font=font, fill=fill, stroke_width=stroke, stroke_fill=stroke_fill)
@@ -55,12 +57,10 @@ def main() -> None:
 
     OUT_PNG.parent.mkdir(parents=True, exist_ok=True)
     img.save(OUT_PNG)
-    # README/ポスター用に幅1600へ縮小した軽量JPG
-    subprocess.run(
-        ["sips", "-Z", "1600", "-s", "format", "jpeg", "-s", "formatOptions", "88",
-         str(OUT_PNG), "--out", str(OUT_JPG)],
-        check=True, capture_output=True,
-    )
+    # README/ポスター用に幅JPG_WIDTHへ縮小した軽量JPG。Pillowのみで完結しOS非依存
+    # （macOSのsips依存を避ける）。RGBなのでそのままJPEG保存可。
+    h2 = round(H * JPG_WIDTH / W)
+    img.resize((JPG_WIDTH, h2), Image.LANCZOS).save(OUT_JPG, quality=88)
     print(f"✅ {OUT_PNG}  ({OUT_PNG.stat().st_size / 1e6:.1f} MB)")
     print(f"✅ {OUT_JPG}  ({OUT_JPG.stat().st_size / 1e3:.0f} KB)")
 

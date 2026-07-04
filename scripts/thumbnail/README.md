@@ -9,6 +9,14 @@ base.png（生成AIの16:9ベース絵・文字なし）
 docs/video-thumb.png（原寸マスター）／ docs/video-thumb.jpg（軽量・README用）
 ```
 
+## 前提
+
+- Python 3 ＋ Pillow: `pip install Pillow`（または `uv pip install Pillow`）
+- 日本語フォント: 既定は macOS 同梱のヒラギノ角ゴ（W8/W6）。**非macOS環境では**
+  `overlay_title.py` の `FONT_TITLE`/`FONT_SUB` を手元の日本語太字フォント
+  （例: Noto Sans JP の Bold/Medium）のパスに変更する。
+- JPG 生成は Pillow だけで完結（OS非依存。macOS の `sips` には依存しない）。
+
 ## 手順
 
 ```bash
