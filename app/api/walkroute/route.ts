@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
       })
       .filter((r: { coordinates: unknown[] }) => r.coordinates.length >= 2);
     if (!out.length) return NextResponse.json({ error: "no route" }, { status: 404 });
-    walkCache.set(cacheKey, out as WalkRoute[]);
+    walkCache.set(cacheKey, out);
     return NextResponse.json({ routes: out });
   } catch (err) {
     console.error("walkroute error:", err instanceof Error ? err.message : String(err));
