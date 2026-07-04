@@ -1,0 +1,32 @@
+# 動画サムネイル生成
+
+デモ動画・提出用の 16:9 サムネイル（タイトル入り）を生成する。
+
+```
+base.png（生成AIの16:9ベース絵・文字なし）
+        │  overlay_title.py（PILでタイトル(白)＋サブ(琥珀)を濃紺#0f2740縁取りで合成）
+        ▼
+docs/video-thumb.png（原寸マスター）／ docs/video-thumb.jpg（軽量・README用）
+```
+
+## 前提
+
+- Python 3 ＋ Pillow: `pip install Pillow`（または `uv pip install Pillow`）
+- 日本語フォント: 既定は macOS 同梱のヒラギノ角ゴ（W8/W6）。**非macOS環境では**
+  `overlay_title.py` の `FONT_TITLE`/`FONT_SUB` を手元の日本語太字フォント
+  （例: Noto Sans JP の Bold/Medium）のパスに変更する。
+- JPG 生成は Pillow だけで完結（OS非依存。macOS の `sips` には依存しない）。
+
+## 手順
+
+```bash
+python3 scripts/thumbnail/overlay_title.py
+```
+
+- `base.png` … 生成AI（Gemini）で作成した文字なしのベース絵。プロンプトの骨子:
+  「雨・洪水の夜の東京の等角マップ。浸水域を**迂回**して光る避難所へ向かう琥珀→緑の
+  発光ルート、その路面の上を車椅子の当事者と介助者が歩く。濃紺(#0f2740)＋琥珀(#d97706)
+  ＋緑(#15803d)。文字なし・フルブリード・上部は暗い空（タイトル用余白）」。
+  生成AIは日本語描画が苦手なため、テキストは常に `overlay_title.py` で後乗せする。
+- タイトル文言・フォント・配置は `overlay_title.py` の定数を編集する（フォントは macOS
+  同梱のヒラギノ角ゴ。他環境ではパスを変更）。
