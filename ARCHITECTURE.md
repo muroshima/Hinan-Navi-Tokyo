@@ -48,7 +48,13 @@ Cloud Run は **min-instances=0** でアイドル時は無課金だが、提出�
   cd infra/terraform && terraform apply -var 'run_image=asia-northeast1-docker.pkg.dev/hinan-navi-tokyo/app/hinan-navi:TAG'
   ```
 - **新ビルドのデプロイ**: `gcloud builds submit --tag 'asia-northeast1-docker.pkg.dev/hinan-navi-tokyo/app/hinan-navi:NEW_TAG' .` → 上記 apply の `TAG` に `NEW_TAG` を渡す。
-- **予算の防波堤**: Vertex AI / GCP 側で**予算アラート・クォータ**を設定し、LLM/APIのコスト暴発を防ぐ（[#69](https://github.com/muroshima/Hinan-Navi-Tokyo/issues/69)）。LLMは IP単位レート制限＋10分キャッシュでも抑制済み（[#30](https://github.com/muroshima/Hinan-Navi-Tokyo/issues/30)）。
+- **予算の防波堤**（[#69](https://github.com/muroshima/Hinan-Navi-Tokyo/issues/69)）: Vertex/GCP のコスト暴発に対する最終防波堤として、**月次予算アラート**（実費 50%/90%/100% で通知）を Terraform に宣言済み（`google_billing_budget`）。請求先アカウント指定時のみ作成する count ガードで、素の apply では作られない。有効化:
+  ```bash
+  cd infra/terraform && terraform apply \
+    -var 'run_image=asia-northeast1-docker.pkg.dev/hinan-navi-tokyo/app/hinan-navi:TAG' \
+    -var billing_account_id=XXXXXX-XXXXXX-XXXXXX  # gcloud billing accounts list で取得
+  ```
+  ※ 予算通貨(既定 JPY)は請求先アカウントの通貨と一致必須。実行ロールに billing 権限が必要。Vertex 側のモデル別クォータは Console/Quotas で別途上限設定できる。LLM/経路/ジオコーディングは IP単位レート制限＋キャッシュでも抑制済み（[#30](https://github.com/muroshima/Hinan-Navi-Tokyo/issues/30)／[#21](https://github.com/muroshima/Hinan-Navi-Tokyo/issues/21)。ただしインスタンス単位のベストエフォート）。
 - ⚠️ `terraform apply` を `-var run_image` 無しで実行すると既定イメージで**再デプロイ**される（削除ではない。[#72](https://github.com/muroshima/Hinan-Navi-Tokyo/issues/72) の地雷対策）。**停止したい時は必ず `-var run_image=""` を明示**する。
 
 ### 設計上のポイント

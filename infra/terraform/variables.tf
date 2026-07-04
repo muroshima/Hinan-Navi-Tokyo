@@ -34,3 +34,30 @@ variable "gemini_location" {
   type        = string
   default     = "global"
 }
+
+# 予算アラート(#69・公開時のコスト暴発の最終防波堤)。
+# billing_account_id が空(既定)のときは予算リソースを作らない(count=0)ので、素の apply でも安全。
+# 有効化する時だけ `-var billing_account_id=XXXXXX-XXXXXX-XXXXXX` を渡す。
+# 取得: gcloud billing accounts list  (実行ロールに billing 権限が必要)
+variable "billing_account_id" {
+  description = "予算アラートを作成する請求先アカウントID。空なら予算リソースを作成しない(#69)"
+  type        = string
+  default     = ""
+}
+
+variable "monthly_budget_amount" {
+  description = "月次予算のしきい値額(通貨は billing_currency)。50%/90%/100%でアラート通知(#69)"
+  type        = number
+  default     = 3000
+  # units は整数文字列が要求されるため、正の整数のみ許可(小数はapply失敗するので事前に弾く)
+  validation {
+    condition     = var.monthly_budget_amount > 0 && floor(var.monthly_budget_amount) == var.monthly_budget_amount
+    error_message = "monthly_budget_amount は正の整数で指定してください。"
+  }
+}
+
+variable "billing_currency" {
+  description = "予算の通貨コード。請求先アカウントの通貨と一致させること(不一致だと作成失敗)"
+  type        = string
+  default     = "JPY"
+}
