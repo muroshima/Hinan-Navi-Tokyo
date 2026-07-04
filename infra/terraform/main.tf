@@ -158,9 +158,11 @@ resource "google_billing_budget" "monthly" {
   billing_account = var.billing_account_id
   display_name    = "hinan-navi 月次予算アラート(#69)"
 
-  # このプロジェクトの費用のみを対象にする
+  # このプロジェクトの費用のみを対象に、毎月リセットの月次予算として扱う
+  # (calendar_period を明示しないと累積予算扱いになり得るため MONTH を指定)
   budget_filter {
-    projects = ["projects/${data.google_project.this.number}"]
+    projects        = ["projects/${data.google_project.this.number}"]
+    calendar_period = "MONTH"
   }
 
   amount {

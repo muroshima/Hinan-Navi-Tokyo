@@ -49,6 +49,11 @@ variable "monthly_budget_amount" {
   description = "月次予算のしきい値額(通貨は billing_currency)。50%/90%/100%でアラート通知(#69)"
   type        = number
   default     = 3000
+  # units は整数文字列が要求されるため、正の整数のみ許可(小数はapply失敗するので事前に弾く)
+  validation {
+    condition     = var.monthly_budget_amount > 0 && floor(var.monthly_budget_amount) == var.monthly_budget_amount
+    error_message = "monthly_budget_amount は正の整数で指定してください。"
+  }
 }
 
 variable "billing_currency" {
