@@ -9,12 +9,22 @@ https://hinan-navi-sceyw5h4sq-an.a.run.app
 
 （Google Cloud Run 上で稼働。インフラは Terraform で管理 → [infra/terraform/](infra/terraform/)。デモ提供期間は限定される場合があります）
 
-## 🎬 デモ動画（約60秒）
+## 🎬 デモ動画（約1分）
 自然文入力 → 配慮属性の抽出 → 「行ける順」再ランキング → **なぜ1位かを点数の内訳で説明** → 洪水ハザード＋建物3D（垂直避難先）の重ね表示までを一気に紹介します。
 
 [![だれでも避難ナビ TOKYO デモ動画（クリックで再生）](docs/demo-thumb.jpg)](docs/demo.mp4)
 
 ▶ サムネイルをクリックすると動画（[`docs/demo.mp4`](docs/demo.mp4)）が再生されます。収録パイプライン（Playwright 収録＋ナレーション合成）は [`scripts/demo/`](scripts/demo/) を参照。
+
+## 📊 発表スライド
+発表スライド（全12枚）: **[docs/slides.pdf](docs/slides.pdf)**（GitHub 上でそのまま閲覧できます）。HTML版 [docs/slides.html](docs/slides.html) はダウンロードしてブラウザで開いてください（GitHub 上ではソース表示になります）。ソースは [docs/slides.md](docs/slides.md)（[Marp](https://marp.app/)）。
+
+```bash
+# ビルド（Marp CLI はリポジトリ依存に含めず npx で実行。テーマ・ローカル画像許可・
+# 絵文字ネイティブ表示は marp.config.mjs に集約）
+npx -y @marp-team/marp-cli@4.3.1 docs/slides.md -c marp.config.mjs -o docs/slides.html
+npx -y @marp-team/marp-cli@4.3.1 docs/slides.md -c marp.config.mjs -o docs/slides.pdf --pdf
+```
 
 ## 対象課題
 **東京全域の、あらゆる要配慮者**（車椅子/高齢/乳幼児/視覚・聴覚障害/オストメイト/要介護/外国語…）が直面する「**最寄り ≠ 自分が本当に行ける避難先**」という普遍課題に、地域・災害種別を限定せず答えます。最も切実な代表ケースとして **江戸川区（江東5区）の大規模水害**（陸域の約7割がゼロメートル地帯・避難行動要支援者 約5,800人）も重視。詳細・出典は [docs/positioning.md](docs/positioning.md)。
