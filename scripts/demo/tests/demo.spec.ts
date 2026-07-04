@@ -64,10 +64,10 @@ test("だれでも避難ナビ TOKYO デモ", async ({ page }) => {
   await page.getByRole("button", { name: /建物3D/ }).click(); // PLATEAU建物3D（垂直避難・pitch傾斜）
   await page.mouse.move(880, 360);
 
-  // ── シーン⑦: まとめ（cue6 54-61.6）。地図（ハザード＋3D建物）で余韻
+  // ── シーン⑦: まとめ（cue6 54-62.3）。地図（ハザード＋3D建物）で余韻
   await untilT(55.0);
   await page.mouse.move(820, 420);
-  await untilT(62.5); // 最終cue終端 + 余白まで dwell
+  await untilT(63.5); // 最終cue終端(62.3s) + 余白まで dwell
 });
 
 // スクロール可能なサイドバー(aside)を dy px 下へスクロール。
