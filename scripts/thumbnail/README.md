@@ -4,7 +4,7 @@
 
 ```
 base.png（生成AIの16:9ベース絵・文字なし）
-        │  overlay_title.py（PILで日本語タイトルを白抜き合成）
+        │  overlay_title.py（PILでタイトル(白)＋サブ(琥珀)を濃紺#0f2740縁取りで合成）
         ▼
 docs/video-thumb.png（原寸マスター）／ docs/video-thumb.jpg（軽量・README用）
 ```
