@@ -4,13 +4,13 @@
   python3 scripts/thumbnail/overlay_title.py
 
 scripts/thumbnail/base.png（生成AIで作成した16:9のベース絵・文字なし）の上部の
-暗い空エリアに、日本語タイトルを白抜き（濃紺の縁取り付き）で合成し、
+暗い空エリアに、タイトル（白）＋サブタイトル（琥珀色）を濃紺(#0f2740)の縁取り付きで合成し、
 - docs/video-thumb.png（合成後の原寸マスター）
-- docs/video-thumb.jpg（README/ポスター用の軽量版・幅1600）
-を出力する。ベース絵は Gemini で生成（プロンプトは本スクリプト冒頭のコメント参照）。
+- docs/video-thumb.jpg（README/ポスター用の軽量版・幅 JPG_WIDTH）
+を出力する。ベース絵の生成プロンプトの骨子は scripts/thumbnail/README.md を参照。
 
 生成AIは日本語テキスト描画が苦手なため、テキストは常にこの後段で乗せる方針。
-フォントは macOS 同梱のヒラギノ角ゴ（W8/W6）。他環境では FONTS のパスを変更する。
+フォントは macOS 同梱のヒラギノ角ゴ（W8/W6）。他環境では FONT_TITLE / FONT_SUB のパスを変更する。
 """
 import sys
 from pathlib import Path
