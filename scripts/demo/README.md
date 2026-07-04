@@ -69,7 +69,8 @@ spec 側は `untilT(sec)` で「動画時間 sec までwait」して視覚を cu
 ## README への埋め込み
 
 GitHub は README の `<video>` タグを strip するため、クリック可能な
-サムネイル（`docs/demo-thumb.jpg` → `docs/demo.mp4`）で埋め込んでいる。
+サムネイル（`docs/video-thumb.jpg` → `docs/demo.mp4`。サムネイル生成は
+[`scripts/thumbnail/`](../thumbnail/) 参照）で埋め込んでいる。
 インライン再生プレーヤーにしたい場合は、Issue/PR のコメント欄に
 `docs/demo.mp4` を drag-and-drop して得られる `user-attachments` URL を
 README に素のテキストで貼る（GitHub が自動で video player に変換）。

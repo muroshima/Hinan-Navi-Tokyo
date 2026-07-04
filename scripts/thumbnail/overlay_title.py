@@ -39,7 +39,8 @@ def main() -> None:
         if not Path(f).exists():
             sys.exit(f"フォントが見つかりません: {f}（macOS以外は環境のフォントに変更してください）")
 
-    img = Image.open(BASE).convert("RGB")
+    with Image.open(BASE) as _im:  # ファイルハンドルを確実にクローズ
+        img = _im.convert("RGB")
     W, H = img.size
     draw = ImageDraw.Draw(img)
     f_title = ImageFont.truetype(FONT_TITLE, int(H * 0.105))
