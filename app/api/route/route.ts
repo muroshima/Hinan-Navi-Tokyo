@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { enforceRateLimit } from "@/lib/rateLimit";
+import { enforceRateLimit, TtlCache, stableKey } from "@/lib/rateLimit";
+
+// 実経路(距離・所要)の共有キャッシュ（#21）。同一 origin×dests は結果が安定なので、
+// 公開OSRMデモへの再問い合わせを避けて負荷を下げる。1hTTL・件数上限つき（インスタンス単位）。
+type RouteCell = { distM: number | null; durSec: number | null };
+const routeCache = new TtlCache<RouteCell[]>(500, 60 * 60_000);
 
 // 出発地 → 複数候補 の徒歩実経路の距離・所要を OSRM table service でまとめて取得
 // body: { origin: [lng,lat], dests: [[lng,lat], ...] }
@@ -25,6 +30,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "origin and dests must be [lng,lat] pairs" }, { status: 400 });
   }
 
+  // キャッシュヒットなら公開OSRMを叩かず即返す
+  const cacheKey = stableKey({ origin, dests });
+  const cachedResult = routeCache.get(cacheKey);
+  if (cachedResult) return NextResponse.json({ result: cachedResult });
+
   const coords = [origin, ...dests].map((c) => `${c[0]},${c[1]}`).join(";");
   const url =
     `https://router.project-osrm.org/table/v1/foot/${coords}` +
@@ -41,6 +51,7 @@ export async function POST(req: NextRequest) {
       distM: dist[i + 1] ?? null,
       durSec: dur[i + 1] ?? null,
     }));
+    routeCache.set(cacheKey, result);
     return NextResponse.json({ result });
   } catch (err) {
     console.error("route error:", err instanceof Error ? err.message : String(err));
