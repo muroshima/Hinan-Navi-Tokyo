@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { enforceRateLimit } from "@/lib/rateLimit";
+import { enforceRateLimit, TtlCache, stableKey } from "@/lib/rateLimit";
+
+// 経路ジオメトリの共有キャッシュ（#21）。同一 origin×dest は結果が安定なので、公開OSRMデモへの
+// 再問い合わせを避けて負荷を下げる。1hTTL・件数上限つき（インスタンス単位）。
+type WalkRoute = { coordinates: [number, number][]; distM: number | null; durSec: number | null };
+const walkCache = new TtlCache<WalkRoute[]>(500, 60 * 60_000);
 
 // 出発地→避難先 の徒歩実経路ジオメトリ(+代替経路)をOSRM route serviceで取得(#38)。
 // 既存の /api/route(table service=距離のみ)と別に、線形ジオメトリと複数代替を返す。
@@ -30,6 +35,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "origin and dest must be valid [lng,lat]" }, { status: 400 });
   }
 
+  // キャッシュヒットなら公開OSRMを叩かず即返す
+  const cacheKey = stableKey({ origin, dest });
+  const cachedRoutes = walkCache.get(cacheKey);
+  if (cachedRoutes) return NextResponse.json({ routes: cachedRoutes });
+
   const coords = `${origin[0]},${origin[1]};${dest[0]},${dest[1]}`;
   const url =
     `https://router.project-osrm.org/route/v1/foot/${coords}` +
@@ -56,6 +66,7 @@ export async function POST(req: NextRequest) {
       })
       .filter((r: { coordinates: unknown[] }) => r.coordinates.length >= 2);
     if (!out.length) return NextResponse.json({ error: "no route" }, { status: 404 });
+    walkCache.set(cacheKey, out);
     return NextResponse.json({ routes: out });
   } catch (err) {
     console.error("walkroute error:", err instanceof Error ? err.message : String(err));

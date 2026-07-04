@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { enforceRateLimit } from "@/lib/rateLimit";
+import { enforceRateLimit, TtlCache } from "@/lib/rateLimit";
+
+// ジオコーディング結果の共有キャッシュ（#21）。同じ地名は座標が安定なので、公開Nominatimへの
+// 再問い合わせを避けて負荷を下げる。プロセス内メモリ・24hTTL・件数上限つき（インスタンス単位）。
+type GeoHit = { lat: number; lng: number; label: string };
+const geoCache = new TtlCache<GeoHit>(1000, 24 * 60 * 60_000);
 
 // 住所・地名 → 座標（OpenStreetMap Nominatim をサーバー経由で利用）
 export async function GET(req: NextRequest) {
@@ -13,6 +18,11 @@ export async function GET(req: NextRequest) {
   if (q.length > 200) {
     return NextResponse.json({ error: "q is too long (max 200 chars)" }, { status: 400 });
   }
+
+  // キャッシュヒットなら公開Nominatimを叩かず即返す（大小同一視のため小文字化キー）
+  const cacheKey = q.toLowerCase();
+  const cached = geoCache.get(cacheKey);
+  if (cached) return NextResponse.json(cached);
 
   const url =
     "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=jp&q=" +
@@ -46,7 +56,9 @@ export async function GET(req: NextRequest) {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
       return NextResponse.json({ error: "invalid coordinates" }, { status: 502 });
     }
-    return NextResponse.json({ lat, lng, label: hit.display_name });
+    const payload: GeoHit = { lat, lng, label: hit.display_name };
+    geoCache.set(cacheKey, payload); // 成功結果のみキャッシュ（404等は再問い合わせ余地を残す）
+    return NextResponse.json(payload);
   } catch (err) {
     console.error("geocode error:", err instanceof Error ? err.message : String(err));
     return NextResponse.json({ error: "geocoding failed" }, { status: 502 });
