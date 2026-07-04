@@ -92,9 +92,9 @@ scripts/flood_grid.py   # 流域別の浸水深CSVを自動DL(data-raw/flood/に
 
 | 用途 | 提供 | 出典/ライセンス | 留意点 |
 |---|---|---|---|
-| 住所・地名→座標（`/api/geocode`） | OpenStreetMap Nominatim 公開サーバ | データ © OpenStreetMap contributors（ODbL）。Nominatim **Usage Policy**（1req/s上限・重利用禁止） | User-Agent/連絡先付与済み。**IP単位レート制限 30回/分＋入力長200文字超は400拒否（#30）**。ただしNominatimの1req/sはサーバ全体制約のため、公開常用時は自前運用が必要 |
-| 徒歩経路距離（`/api/route`） | OSRM デモサーバ（router.project-osrm.org） | OSRM(BSD)。**デモサーバは本番利用不可・heavy use禁止** | 道路距離のみ採用し所要は徒歩速度で概算。**IP単位レート制限 30回/分（#30）**。公開常用時は自前/商用ルーティングへ差替が必要 |
-| 徒歩経路ジオメトリ（`/api/walkroute`・#38） | OSRM デモサーバ（route service・alternatives） | OSRM(BSD)。同上 | 推奨避難所への経路形状と代替経路を取得。OSRMは重み付け不可のため、**代替経路の中から浸水曝露が最小の経路を選ぶ**形で冠水回避（経路自体の再計算はしない）。IP単位レート制限 30回/分 |
+| 住所・地名→座標（`/api/geocode`） | OpenStreetMap Nominatim 公開サーバ | データ © OpenStreetMap contributors（ODbL）。Nominatim **Usage Policy**（1req/s上限・重利用禁止） | User-Agent/連絡先付与済み。**IP単位レート制限 30回/分＋入力長200文字超は400拒否（#30）＋成功結果を24hサーバキャッシュ（#21・インスタンス単位）**。ただしNominatimの1req/sはサーバ全体制約のため、公開常用時は自前運用が必要 |
+| 徒歩経路距離（`/api/route`） | OSRM デモサーバ（router.project-osrm.org） | OSRM(BSD)。**デモサーバは本番利用不可・heavy use禁止** | 道路距離のみ採用し所要は徒歩速度で概算。**IP単位レート制限 30回/分（#30）＋同一 origin×dests を1hサーバキャッシュ（#21・インスタンス単位）**。公開常用時は自前/商用ルーティングへ差替が必要 |
+| 徒歩経路ジオメトリ（`/api/walkroute`・#38） | OSRM デモサーバ（route service・alternatives） | OSRM(BSD)。同上 | 推奨避難所への経路形状と代替経路を取得。OSRMは重み付け不可のため、**代替経路の中から浸水曝露が最小の経路を選ぶ**形で冠水回避（経路自体の再計算はしない）。IP単位レート制限 30回/分＋同一 origin×dest を1hサーバキャッシュ（#21・インスタンス単位） |
 | 徒歩ルート表示（リンク誘導） | Google Maps | リンク誘導のみ（API不使用） | 規約上ほぼ問題なし |
 
 ## 4. LLM（任意）
