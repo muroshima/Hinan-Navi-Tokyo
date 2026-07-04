@@ -12,9 +12,9 @@ https://hinan-navi-sceyw5h4sq-an.a.run.app
 ## 🎬 デモ動画（約1分）
 自然文入力 → 配慮属性の抽出 → 「行ける順」再ランキング → **なぜ1位かを点数の内訳で説明** → 洪水ハザード＋建物3D（垂直避難先）の重ね表示までを一気に紹介します。
 
-[![だれでも避難ナビ TOKYO デモ動画（クリックで再生）](docs/demo-thumb.jpg)](docs/demo.mp4)
+[![だれでも避難ナビ TOKYO デモ動画（クリックで再生）](docs/video-thumb.jpg)](docs/demo.mp4)
 
-▶ サムネイルをクリックすると動画（[`docs/demo.mp4`](docs/demo.mp4)）が再生されます。収録パイプライン（Playwright 収録＋ナレーション合成）は [`scripts/demo/`](scripts/demo/) を参照。
+▶ サムネイルをクリックすると動画（[`docs/demo.mp4`](docs/demo.mp4)）が再生されます。収録パイプライン（Playwright 収録＋ナレーション合成）は [`scripts/demo/`](scripts/demo/)、サムネイル生成は [`scripts/thumbnail/`](scripts/thumbnail/) を参照。
 
 ## 📊 発表スライド
 発表スライド（全12枚）: **[docs/slides.pdf](docs/slides.pdf)**（GitHub 上でそのまま閲覧できます）。HTML版 [docs/slides.html](docs/slides.html) はダウンロードしてブラウザで開いてください（GitHub 上ではソース表示になります）。ソースは [docs/slides.md](docs/slides.md)（[Marp](https://marp.app/)）。
