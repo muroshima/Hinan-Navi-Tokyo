@@ -44,12 +44,19 @@ export async function POST(req: NextRequest) {
     const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return NextResponse.json({ error: `osrm ${res.status}` }, { status: 502 });
     const j = await res.json();
-    const dist: (number | null)[] = j?.distances?.[0] ?? [];
-    const dur: (number | null)[] = j?.durations?.[0] ?? [];
+    const dist: unknown = j?.distances?.[0];
+    const dur: unknown = j?.durations?.[0];
+    // OSRM は HTTP 200 でも壊れたペイロード（distances 配列の欠落・長さ不足等）を返し得る。
+    // 不正応答を「全null」で 1h キャッシュ固定しないよう検証し、満たさなければ 502 を返す
+    // （クライアントは直線距離にフォールバックする）。index 0 は origin 自身なので dests+1 必要。
+    if (!Array.isArray(dist) || dist.length < dests.length + 1) {
+      return NextResponse.json({ error: "osrm malformed response" }, { status: 502 });
+    }
+    const durArr: unknown[] = Array.isArray(dur) ? dur : [];
     // index 0 は origin 自身なので 1 以降が dests に対応
     const result = dests.map((_, i) => ({
-      distM: dist[i + 1] ?? null,
-      durSec: dur[i + 1] ?? null,
+      distM: typeof dist[i + 1] === "number" ? (dist[i + 1] as number) : null,
+      durSec: typeof durArr[i + 1] === "number" ? (durArr[i + 1] as number) : null,
     }));
     routeCache.set(cacheKey, result);
     return NextResponse.json({ result });
