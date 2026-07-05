@@ -1,6 +1,6 @@
 // Marp CLI 設定（発表スライド docs/slides.md 用）。
 // - themeSet: カスタムテーマを登録（slides.md の `theme: hinan` で選択）
-// - allowLocalFiles: ローカル画像（demo-thumb.jpg / shot-triage.jpg / architecture 等）の埋め込みを許可
+// - allowLocalFiles: ローカル画像（shot-triage.jpg / shot-breakdown.jpg / qr-*.png 等）の埋め込みを許可
 // - html: スライド内の <div>/<b>/<br> を有効化
 // - options.emoji.{unicode,shortcode}:false: 絵文字を Twemoji 画像(CDN)へ変換せずネイティブ表示に。
 //   unicode:false で直書き絵文字(🎬等)がCDN非依存になる。shortcode:false は `:smile:` 記法も
