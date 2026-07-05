@@ -91,6 +91,7 @@ npm run dev   # http://localhost:3000
 - [docs/llm-rationale.md](docs/llm-rationale.md) — **なぜ生成AIか**（抽出への限定・構造化出力＋zod・多層フォールバック）
 - [docs/roadmap.md](docs/roadmap.md) — **社会実装ロードマップ**（自治体配布／福祉部局連携／データ更新継続・持続的提供）
 - [docs/DATA.md](docs/DATA.md) — データ出典・ライセンス・再現手順
+- [docs/realtime-shelter.md](docs/realtime-shelter.md) — **避難所開設状況のリアルタイム化 可否調査**（SOBO-WEB/SIP4D/L-Alert の提供条件と代替設計）
 - [SUBMISSION.md](SUBMISSION.md) — **提出チェックリスト**（提出物・フォーム記入内容・使用データ・最終チェック）
 
 ## 注意
