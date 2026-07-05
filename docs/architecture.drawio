@@ -16,7 +16,7 @@
     <mxCell id="raw" value="data-raw/&#10;（CSV / XLSX）" style="shape=mxgraph.flowchart.document;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
       <mxGeometry x="70" y="110" width="140" height="60" as="geometry"/>
     </mxCell>
-    <mxCell id="preprocess" value="scripts/preprocess.py&#10;/ aging_bq.sh" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+    <mxCell id="preprocess" value="scripts/preprocess.py&#10;scripts/aging_bq.sh" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;" vertex="1" parent="1">
       <mxGeometry x="70" y="200" width="140" height="60" as="geometry"/>
     </mxCell>
     <mxCell id="geojson" value="public/data/&#10;*.geojson" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;fontStyle=1;" vertex="1" parent="1">
@@ -37,7 +37,7 @@
     <mxCell id="ranking" value="lib/ranking.ts&#10;（決定論的スコアリング）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
       <mxGeometry x="450" y="200" width="160" height="60" as="geometry"/>
     </mxCell>
-    <mxCell id="apiroutes" value="API ルート&#10;/api/triage・geocode・route" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4a90d9;fontSize=11;" vertex="1" parent="1">
+    <mxCell id="apiroutes" value="API ルート&#10;/api/triage・/api/geocode・/api/route" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4a90d9;fontSize=11;" vertex="1" parent="1">
       <mxGeometry x="640" y="110" width="140" height="60" as="geometry"/>
     </mxCell>
 
