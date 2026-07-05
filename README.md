@@ -4,6 +4,9 @@
 
 自然文（例: 「雨の日、車椅子の母と避難したい」）から配慮属性（車椅子/高齢/乳幼児/視覚・聴覚障害/外国語/介助者/オストメイト/重度介護/夜間/天候/想定災害）を抽出し、避難所・避難場所を **バリアフリー × ハザード × 距離 × 当事者要件** で再ランキングします。
 
+### 提出物リンク
+[🌐 ライブデモ](https://hinan-navi-sceyw5h4sq-an.a.run.app) ／ [🎬 デモ動画](docs/demo.mp4) ／ [📊 発表スライド](docs/slides.pdf) ／ [📋 提出チェックリスト](SUBMISSION.md)
+
 ## 🌐 ライブデモ
 https://hinan-navi-sceyw5h4sq-an.a.run.app
 
@@ -19,7 +22,7 @@ https://hinan-navi-sceyw5h4sq-an.a.run.app
 ▶ サムネイルをクリックすると動画（[`docs/demo.mp4`](docs/demo.mp4)）が再生されます。収録パイプライン（Playwright 収録＋ナレーション合成）は [`scripts/demo/`](scripts/demo/)、サムネイル生成は [`scripts/thumbnail/`](scripts/thumbnail/) を参照。
 
 ## 📊 発表スライド
-発表スライド（全12枚）: **[docs/slides.pdf](docs/slides.pdf)**（GitHub 上でそのまま閲覧できます）。HTML版 [docs/slides.html](docs/slides.html) はダウンロードしてブラウザで開いてください（GitHub 上ではソース表示になります）。ソースは [docs/slides.md](docs/slides.md)（[Marp](https://marp.app/)）。
+発表スライド（全12枚）: **[docs/slides.pdf](docs/slides.pdf)**（GitHub 上でそのまま閲覧できます）。ソースは [docs/slides.md](docs/slides.md)（[Marp](https://marp.app/)）。HTML版が欲しい場合は下記コマンドで手元にビルドしてください（ビルド生成物のためリポジトリには含めていません）。
 
 ```bash
 # ビルド（Marp CLI はリポジトリ依存に含めず npx で実行。テーマ・ローカル画像許可・
@@ -52,7 +55,9 @@ Next.js 16 / React 19 / TypeScript / Tailwind CSS / MapLibre GL JS / **Google Cl
 - **止まらない設計**: 認証未設定/API障害/検証失敗/オフライン時は語句一致フォールバックへ自動切替（`source` で手段を明示）。前処理の高齢化率算出には **BigQuery GIS（`ST_CONTAINS`空間結合）** も使用。
 - 詳細 → [docs/llm-rationale.md](docs/llm-rationale.md)。
 
-## セットアップ
+## 開発者向けセットアップ
+
+### セットアップ
 ```bash
 npm install
 
@@ -65,7 +70,9 @@ npm run dev   # http://localhost:3000
 ```
 `public/data/evacuation.geojson` / `toilets.geojson` が生成されていれば、地図・ランキングは動作します。
 
-## 環境変数（任意）
+（Claude Code 等の AI 支援開発を使う場合の設定は [AGENTS.md](AGENTS.md) を参照）
+
+### 環境変数（任意）
 | 変数 | 用途 |
 |---|---|
 | `GOOGLE_CLOUD_PROJECT` | `/api/triage`・`/api/timeline` の LLM は **Vertex AI Gemini**（IAM認証・APIキー不要）。プロジェクトIDを設定。未設定なら語句一致のフォールバックで動作 |

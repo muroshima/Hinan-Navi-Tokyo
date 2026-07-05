@@ -17,6 +17,12 @@ docs/video-thumb.png（原寸マスター）／ docs/video-thumb.jpg（軽量・
   （例: Noto Sans JP の Bold/Medium）のパスに変更する。
 - JPG 生成は Pillow だけで完結（OS非依存。macOS の `sips` には依存しない）。
 
+## 運用ルール（履歴肥大の抑制・#94）
+
+`base.png`（約5.2MB）／`docs/video-thumb.png`（約4MB）はバイナリのため、
+再生成のたびに git 履歴へ差分が積み上がる。**再生成・再コミットは「提出版の
+確定時」のみに限定**し、微調整のたびに都度コミットしない。
+
 ## 手順
 
 ```bash

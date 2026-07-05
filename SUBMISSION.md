@@ -18,7 +18,7 @@
 ## 提出物（First Stage）
 | 要件 | 本作品の該当物 | 置き場所 | 状態 |
 |---|---|---|---|
-| **スライド資料**（収録プレゼン用） | 発表スライド 全12枚 | [docs/slides.pdf](docs/slides.pdf)（PDF）／[docs/slides.html](docs/slides.html)（HTML） | ✅ |
+| **スライド資料**（収録プレゼン用） | 発表スライド 全12枚 | [docs/slides.pdf](docs/slides.pdf)（PDF。HTML版が必要な場合は README 記載のコマンドで手元ビルド） | ✅ |
 | **プロトタイプの動画** | デモ動画 約1分（ナレーション付き） | [docs/demo.mp4](docs/demo.mp4) | ✅ |
 | 動画サムネイル（任意・カバー用） | タイトル入り 16:9 | [docs/video-thumb.png](docs/video-thumb.png) | ✅ |
 | ライブデモ（任意・審査補助） | Cloud Run 稼働 | https://hinan-navi-sceyw5h4sq-an.a.run.app | ✅（審査・検証用の限定公開。[#21](https://github.com/muroshima/Hinan-Navi-Tokyo/issues/21)） |

@@ -52,3 +52,9 @@ shot_*.jpg
 /playwright-report/
 /playwright/.cache/
 /blob-report/
+
+# marp html出力（ビルド生成物。正はdocs/slides.pdf。npxで再生成可能）
+docs/slides.html
+
+# draw.io 編集中ロックファイル
+*.dtmp
