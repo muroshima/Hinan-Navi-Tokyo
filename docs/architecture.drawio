@@ -1,159 +1,117 @@
-<mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
-  <root>
-    <mxCell id="0"/>
-    <mxCell id="1" parent="0"/>
-
-    <!-- Title -->
-    <mxCell id="title" value="だれでも避難ナビ TOKYO システムアーキテクチャ" style="text;html=1;fontSize=20;fontStyle=1;align=center;" vertex="1" parent="1">
-      <mxGeometry x="40" y="20" width="1520" height="30" as="geometry"/>
-    </mxCell>
-    <mxCell id="subtitle" value="データ流れ: CSV/XLSX → preprocess → GeoJSON → 決定論スコアリング(ranking) → 地図" style="text;html=1;fontSize=12;fontColor=#555555;align=center;" vertex="1" parent="1">
-      <mxGeometry x="40" y="50" width="1520" height="20" as="geometry"/>
-    </mxCell>
-
-    <!-- ========== Layer 1: Preprocess pipeline (build-time) ========== -->
-    <mxCell id="l1" value="① 前処理パイプライン（build-time・ランタイム外）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;fontStyle=1;fontSize=13;align=left;spacingLeft=10;spacingTop=6;dashed=0;" vertex="1" parent="1">
-      <mxGeometry x="40" y="90" width="740" height="560" as="geometry"/>
-    </mxCell>
-
-    <!-- Raw data sources -->
-    <mxCell id="raw" value="data-raw/（未コミット・要配置）&#10;避難所 / 避難場所(災害種別) / 車椅子対応トイレ /&#10;給水・Wi-Fi / 都営バスGTFS / 住基 年齢別人口 /&#10;だれでも東京(7カテゴリ) / 都立一時滞在施設(XLSX)" style="shape=mxgraph.flowchart.document;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="1">
-      <mxGeometry x="60" y="130" width="330" height="120" as="geometry"/>
-    </mxCell>
-
-    <mxCell id="estat" value="e-Stat 国勢調査 小地域&#10;年齢別人口 + 境界Shapefile" style="shape=mxgraph.flowchart.document;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
-      <mxGeometry x="60" y="270" width="200" height="60" as="geometry"/>
-    </mxCell>
-    <mxCell id="floodcsv" value="東京都 浸水予想区域図&#10;流域別 浸水深CSV(100MB+)" style="shape=mxgraph.flowchart.document;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
-      <mxGeometry x="60" y="350" width="200" height="60" as="geometry"/>
-    </mxCell>
-
-    <!-- Preprocess scripts -->
-    <mxCell id="preprocess" value="scripts/preprocess.py&#10;正規化・bool化・高齢化率付与" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;" vertex="1" parent="1">
-      <mxGeometry x="440" y="140" width="200" height="60" as="geometry"/>
-    </mxCell>
-    <mxCell id="agingbq" value="scripts/aging_bq.sh&#10;BigQuery GIS ST_CONTAINS 空間結合" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
-      <mxGeometry x="300" y="270" width="220" height="60" as="geometry"/>
-    </mxCell>
-    <mxCell id="floodgrid" value="scripts/flood_grid.py&#10;278mグリッドへ集約" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
-      <mxGeometry x="300" y="350" width="200" height="60" as="geometry"/>
-    </mxCell>
-    <mxCell id="gsi" value="国土地理院 住所検索API&#10;(一時滞在の住所→座標)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
-      <mxGeometry x="440" y="210" width="200" height="50" as="geometry"/>
-    </mxCell>
-
-    <!-- Intermediate -->
-    <mxCell id="chome" value="data/chome_aging.json&#10;(中間・町丁目高齢化率)" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
-      <mxGeometry x="560" y="270" width="80" height="60" as="geometry"/>
-    </mxCell>
-
-    <!-- Generated data (bridge to runtime) -->
-    <mxCell id="geojson" value="public/data/&#10;*.geojson + flood_grid.json&#10;+ metadata.json" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;fontStyle=1;" vertex="1" parent="1">
-      <mxGeometry x="640" y="450" width="120" height="80" as="geometry"/>
-    </mxCell>
-    <mxCell id="genlabel" value="生成データ（リポジトリに同梱・Cloud Runへデプロイ）" style="text;html=1;fontSize=11;fontColor=#7f6000;align=center;" vertex="1" parent="1">
-      <mxGeometry x="440" y="540" width="320" height="20" as="geometry"/>
-    </mxCell>
-
-    <!-- Layer1 edges -->
-    <mxCell id="e_raw_pre" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="raw" target="preprocess"><mxGeometry relative="1" as="geometry"/></mxCell>
-    <mxCell id="e_estat_bq" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="estat" target="agingbq"><mxGeometry relative="1" as="geometry"/></mxCell>
-    <mxCell id="e_bq_chome" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#82b366;" edge="1" parent="1" source="agingbq" target="chome"><mxGeometry relative="1" as="geometry"/></mxCell>
-    <mxCell id="e_chome_pre" value="焼き込み" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#82b366;fontSize=9;dashed=1;" edge="1" parent="1" source="chome" target="preprocess"><mxGeometry relative="1" as="geometry"/></mxCell>
-    <mxCell id="e_gsi_pre" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#d79b00;" edge="1" parent="1" source="gsi" target="preprocess"><mxGeometry relative="1" as="geometry"/></mxCell>
-    <mxCell id="e_flood_grid" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="floodcsv" target="floodgrid"><mxGeometry relative="1" as="geometry"/></mxCell>
-    <mxCell id="e_pre_geo" value="出力" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#82b366;fontStyle=1;" edge="1" parent="1" source="preprocess" target="geojson"><mxGeometry relative="1" as="geometry"/></mxCell>
-    <mxCell id="e_fg_geo" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#82b366;" edge="1" parent="1" source="floodgrid" target="geojson"><mxGeometry relative="1" as="geometry"/></mxCell>
-
-    <!-- ========== Layer 2: Runtime (Cloud Run / Next.js) ========== -->
-    <mxCell id="l2" value="② ランタイム（GCP Cloud Run / Next.js 16）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0f7ff;strokeColor=#4a90d9;verticalAlign=top;fontStyle=1;fontSize=13;align=left;spacingLeft=10;spacingTop=6;" vertex="1" parent="1">
-      <mxGeometry x="820" y="90" width="740" height="560" as="geometry"/>
-    </mxCell>
-
-    <!-- Client -->
-    <mxCell id="clientbox" value="クライアント（React 19 / MapLibre GL JS）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4a90d9;verticalAlign=top;fontStyle=1;fontSize=12;align=left;spacingLeft=8;spacingTop=4;" vertex="1" parent="1">
-      <mxGeometry x="840" y="130" width="340" height="330" as="geometry"/>
-    </mxCell>
-    <mxCell id="loadgeo" value="GeoJSON 読込" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
-      <mxGeometry x="860" y="165" width="140" height="40" as="geometry"/>
-    </mxCell>
-    <mxCell id="triageform" value="自然文入力&#10;（音声/多言語）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
-      <mxGeometry x="1020" y="165" width="140" height="40" as="geometry"/>
-    </mxCell>
-    <mxCell id="ranking" value="lib/ranking.ts&#10;決定論的スコアリング&#10;(基準点±距離±災害適否±BF±状況)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;" vertex="1" parent="1">
-      <mxGeometry x="860" y="230" width="300" height="70" as="geometry"/>
-    </mxCell>
-    <mxCell id="floodroute" value="lib/floodRoute.ts&#10;浸水回避(代替経路から曝露最小を選択)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
-      <mxGeometry x="860" y="315" width="300" height="50" as="geometry"/>
-    </mxCell>
-    <mxCell id="mapview" value="MapView（地図描画・ランキング・経路・レイヤ）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;" vertex="1" parent="1">
-      <mxGeometry x="860" y="385" width="300" height="50" as="geometry"/>
-    </mxCell>
-
-    <!-- API routes -->
-    <mxCell id="apibox" value="API ルート（Next server / Node runtime・IP単位レート制限）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4a90d9;verticalAlign=top;fontStyle=1;fontSize=12;align=left;spacingLeft=8;spacingTop=4;" vertex="1" parent="1">
-      <mxGeometry x="1200" y="130" width="340" height="330" as="geometry"/>
-    </mxCell>
-    <mxCell id="apitriage" value="/api/triage・/api/timeline&#10;(自然文→11属性 / 行動タイムライン)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
-      <mxGeometry x="1220" y="165" width="300" height="55" as="geometry"/>
-    </mxCell>
-    <mxCell id="apigeo" value="/api/geocode（住所→座標）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
-      <mxGeometry x="1220" y="235" width="300" height="40" as="geometry"/>
-    </mxCell>
-    <mxCell id="apiroute" value="/api/route・/api/walkroute（徒歩経路）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
-      <mxGeometry x="1220" y="290" width="300" height="40" as="geometry"/>
-    </mxCell>
-    <mxCell id="fallback" value="語句一致フォールバック（lib/triageFallback.ts）&#10;認証無/例外/検証失敗/オフライン時" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;dashed=1;" vertex="1" parent="1">
-      <mxGeometry x="1220" y="360" width="300" height="55" as="geometry"/>
-    </mxCell>
-
-    <!-- Layer2 internal edges -->
-    <mxCell id="e_geo_load" value="/data/*" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#d6b656;fontStyle=1;" edge="1" parent="1" source="geojson" target="loadgeo"><mxGeometry relative="1" as="geometry"/></mxCell>
-    <mxCell id="e_load_rank" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#82b366;" edge="1" parent="1" source="loadgeo" target="ranking"><mxGeometry relative="1" as="geometry"/></mxCell>
-    <mxCell id="e_form_triage" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#9673a6;" edge="1" parent="1" source="triageform" target="apitriage"><mxGeometry relative="1" as="geometry"/></mxCell>
-    <mxCell id="e_triage_rank" value="属性(JSON)" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#9673a6;fontSize=9;" edge="1" parent="1" source="apitriage" target="ranking"><mxGeometry relative="1" as="geometry"/></mxCell>
-    <mxCell id="e_rank_flood" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#82b366;" edge="1" parent="1" source="ranking" target="floodroute"><mxGeometry relative="1" as="geometry"/></mxCell>
-    <mxCell id="e_flood_map" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="floodroute" target="mapview"><mxGeometry relative="1" as="geometry"/></mxCell>
-    <mxCell id="e_map_route" value="経路要求" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#9673a6;fontSize=9;dashed=1;" edge="1" parent="1" source="mapview" target="apiroute"><mxGeometry relative="1" as="geometry"/></mxCell>
-    <mxCell id="e_triage_fb" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#b85450;dashed=1;" edge="1" parent="1" source="apitriage" target="fallback"><mxGeometry relative="1" as="geometry"/></mxCell>
-
-    <!-- ========== External services (right/bottom) ========== -->
-    <mxCell id="l3" value="③ 外部サービス（第三者・公開エンドポイント）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7f0;strokeColor=#d79b00;verticalAlign=top;fontStyle=1;fontSize=13;align=left;spacingLeft=10;spacingTop=6;" vertex="1" parent="1">
-      <mxGeometry x="820" y="680" width="740" height="200" as="geometry"/>
-    </mxCell>
-    <mxCell id="vertex" value="Vertex AI Gemini&#10;(gemini-2.5-flash・IAM認証)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;fontStyle=1;" vertex="1" parent="1">
-      <mxGeometry x="840" y="720" width="200" height="60" as="geometry"/>
-    </mxCell>
-    <mxCell id="nominatim" value="Nominatim（ジオコーディング）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
-      <mxGeometry x="1060" y="720" width="200" height="40" as="geometry"/>
-    </mxCell>
-    <mxCell id="osrm" value="OSRM（徒歩経路）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
-      <mxGeometry x="1060" y="780" width="200" height="40" as="geometry"/>
-    </mxCell>
-    <mxCell id="tiles" value="クライアント直: OSM地図 / 国交省ハザード /&#10;AWS Terrarium DEM / PLATEAU建物MVT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
-      <mxGeometry x="1300" y="720" width="240" height="60" as="geometry"/>
-    </mxCell>
-    <mxCell id="ext_note" value="※ OSM/OSRM/Nominatim/PLATEAU等は公開/デモ依存。本番公開時は自前化が必要（issue #21）" style="text;html=1;fontSize=10;fontColor=#b06a00;align=left;" vertex="1" parent="1">
-      <mxGeometry x="840" y="835" width="700" height="30" as="geometry"/>
-    </mxCell>
-
-    <!-- External edges -->
-    <mxCell id="e_triage_vertex" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#9673a6;" edge="1" parent="1" source="apitriage" target="vertex"><mxGeometry relative="1" as="geometry"/></mxCell>
-    <mxCell id="e_geo_nom" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#d79b00;" edge="1" parent="1" source="apigeo" target="nominatim"><mxGeometry relative="1" as="geometry"/></mxCell>
-    <mxCell id="e_route_osrm" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#d79b00;" edge="1" parent="1" source="apiroute" target="osrm"><mxGeometry relative="1" as="geometry"/></mxCell>
-    <mxCell id="e_map_tiles" value="タイル直取得" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#d79b00;fontSize=9;dashed=1;" edge="1" parent="1" source="mapview" target="tiles"><mxGeometry relative="1" as="geometry"/></mxCell>
-
-    <!-- ========== Infra ========== -->
-    <mxCell id="infra" value="インフラ: Terraform（GCS backend）→ Cloud Run / Vertex AI / Artifact Registry / Cloud Build / BigQuery" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8e8e8;strokeColor=#666666;fontSize=12;fontStyle=1;align=center;" vertex="1" parent="1">
-      <mxGeometry x="40" y="680" width="740" height="50" as="geometry"/>
-    </mxCell>
-    <mxCell id="infra_note" value="Cloud Build でコンテナビルド → Artifact Registry → Cloud Run（min-instances=0）にデプロイ。BigQuery は前処理(空間結合)のみ使用。" style="text;html=1;fontSize=10;fontColor=#555555;align=left;" vertex="1" parent="1">
-      <mxGeometry x="50" y="740" width="720" height="40" as="geometry"/>
-    </mxCell>
-
-    <!-- Cross-layer bridge edge: geojson (layer1) to client already drawn -->
-    <mxCell id="legend" value="凡例: 青=データ / 緑=処理・ロジック / 黄=生成データ / 紫=LLM・AI / 橙=外部サービス / 赤=フォールバック" style="text;html=1;fontSize=10;fontColor=#555555;align=left;" vertex="1" parent="1">
-      <mxGeometry x="40" y="800" width="740" height="20" as="geometry"/>
-    </mxCell>
-  </root>
-</mxGraphModel>
+<mxfile host="Electron">
+  <diagram id="Ul-R6_ejXXyFawHADFSa" name="ページ-1">
+    <mxGraphModel dx="2934" dy="1303" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="600" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;fontSize=20;fontStyle=1;align=center;" value="だれでも避難ナビ TOKYO システムアーキテクチャ" vertex="1">
+          <mxGeometry height="30" width="965" x="290" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="l1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;fontStyle=1;fontSize=13;align=left;spacingLeft=10;spacingTop=6;dashed=0;" value="① 前処理パイプライン（build-time）" vertex="1">
+          <mxGeometry height="410" width="415" x="590" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="raw" parent="1" style="shape=mxgraph.flowchart.document;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="元データ&#xa;（CSV / XLSX）" vertex="1">
+          <mxGeometry height="50" width="130" x="732.5" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="preprocess" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;" value="&lt;span style=&quot;font-weight: normal;&quot;&gt;前処理&lt;br&gt;(GeoJSON変換など)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="60" width="130" x="732.5" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="bigquery" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" value="BigQuery&lt;br&gt;（空間集計など）" vertex="1">
+          <mxGeometry height="60" width="130" x="732.5" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="output" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;fontStyle=1;" value="&lt;span style=&quot;font-weight: normal;&quot;&gt;前処理済みデータ&lt;/span&gt;" vertex="1">
+          <mxGeometry height="60" width="160" x="717.5" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="e_raw_pre" edge="1" parent="1" source="raw" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#6c8ebf;" target="preprocess">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_pre_bq" edge="1" parent="1" source="preprocess" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#82b366;" target="bigquery">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_bq_out" edge="1" parent="1" source="bigquery" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#9673a6;" target="output">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0f7ff;strokeColor=#4a90d9;verticalAlign=top;fontStyle=1;fontSize=13;align=left;spacingLeft=10;spacingTop=6;" value="② ランタイム" vertex="1">
+          <mxGeometry height="410" width="500" x="505" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="runtime" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eaf3ff;strokeColor=#4a90d9;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=12;fontStyle=1;" value="Next.js（Cloud Run）" vertex="1">
+          <mxGeometry height="360" width="250" x="535" y="590" as="geometry" />
+        </mxCell>
+        <mxCell id="static" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="&lt;span style=&quot;font-weight: normal;&quot;&gt;静的データ&lt;br&gt;（public/data/*.geojson 等）&lt;/span&gt;" vertex="1">
+          <mxGeometry height="60" width="210" x="555" y="630" as="geometry" />
+        </mxCell>
+        <mxCell id="client" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;" value="&lt;span style=&quot;font-weight: normal;&quot;&gt;クライアント&lt;br&gt;（React / MapLibre GL・ranking.ts）&lt;/span&gt;" vertex="1">
+          <mxGeometry height="75" width="210" x="555" y="735" as="geometry" />
+        </mxCell>
+        <mxCell id="apiroutes" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;" value="&lt;span style=&quot;font-weight: normal;&quot;&gt;APIルート&lt;/span&gt;" vertex="1">
+          <mxGeometry height="75" width="210" x="555" y="860" as="geometry" />
+        </mxCell>
+        <mxCell id="tiles" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="地図タイル&#xa;（OSM / PLATEAU 等）" vertex="1">
+          <mxGeometry height="60" width="150" x="825" y="710" as="geometry" />
+        </mxCell>
+        <mxCell id="vertex" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" value="Vertex AI Gemini" vertex="1">
+          <mxGeometry height="40" width="150" x="825" y="780" as="geometry" />
+        </mxCell>
+        <mxCell id="nominatim" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="Nominatim" vertex="1">
+          <mxGeometry height="40" width="150" x="825" y="830" as="geometry" />
+        </mxCell>
+        <mxCell id="osrm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="OSRM" vertex="1">
+          <mxGeometry height="40" width="150" x="825" y="877.5" as="geometry" />
+        </mxCell>
+        <mxCell id="user" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;fontSize=10;fontStyle=1;" value="ユーザー&#xa;（ブラウザ）" vertex="1">
+          <mxGeometry height="55" width="70" x="420" y="745" as="geometry" />
+        </mxCell>
+        <mxCell id="e_user_client" edge="1" parent="1" source="user" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#666666;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="client">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_out_static" edge="1" parent="1" source="output" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#d6b656;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;entryPerimeter=0;exitPerimeter=0;" target="static">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="798" y="530" />
+              <mxPoint x="798" y="660" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_client_static" edge="1" parent="1" source="client" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#d6b656;dashed=1;startArrow=classic;startFill=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="static">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_client_api" edge="1" parent="1" source="client" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#6c8ebf;dashed=1;startArrow=classic;startFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="apiroutes">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_api_vertex" edge="1" parent="1" source="apiroutes" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#9673a6;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="vertex">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_api_nom" edge="1" parent="1" source="apiroutes" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#d79b00;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="nominatim">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_api_osrm" edge="1" parent="1" source="apiroutes" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#d79b00;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="osrm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_client_tiles" edge="1" parent="1" source="client" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#d79b00;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="tiles">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_title" parent="1" style="text;html=1;fontSize=12;fontStyle=1;align=left;" value="凡例" vertex="1">
+          <mxGeometry height="20" width="200" x="40" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_line1" edge="1" parent="1" style="html=1;strokeColor=#333333;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="40" y="150" as="sourcePoint" />
+            <mxPoint x="100" y="150" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend_label1" parent="1" style="text;html=1;fontSize=11;align=left;" value="呼び出し／データフロー" vertex="1">
+          <mxGeometry height="20" width="220" x="110" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_line2" edge="1" parent="1" style="html=1;strokeColor=#333333;dashed=1;startArrow=classic;startFill=1;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="40" y="185" as="sourcePoint" />
+            <mxPoint x="100" y="185" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend_label2" parent="1" style="text;html=1;fontSize=11;align=left;" value="クライアント側の呼び出し＋応答" vertex="1">
+          <mxGeometry height="20" width="240" x="110" y="175" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
