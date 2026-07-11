@@ -22,7 +22,7 @@ scripts/demo/
 ## 運用ルール（履歴肥大の抑制・#94）
 
 `docs/demo.mp4`（約10.5MB）はバイナリで git 履歴を肥大させるため、**リポジトリには
-コミットしない**（`.gitignore` 済み）。公開版は YouTube（https://youtu.be/1wp2LkwUc_4 ）
+コミットしない**（`.gitignore` 済み）。公開版は YouTube（<https://youtu.be/1wp2LkwUc_4>）
 にアップロードし、README・スライド・提出フォームはこの YouTube URL を参照する。
 `docs/demo.mp4` はローカルでの視聴確認・YouTube 再アップロード用の正本として手元に置く。
 
@@ -78,5 +78,5 @@ spec 側は `untilT(sec)` で「動画時間 sec までwait」して視覚を cu
 GitHub は README の `<video>` タグを strip するため、クリック可能な
 サムネイル（`docs/video-thumb.jpg` → YouTube の URL。サムネイル生成は
 [`scripts/thumbnail/`](../thumbnail/) 参照）で埋め込んでいる。動画本体は
-リポジトリに含めず YouTube（https://youtu.be/1wp2LkwUc_4 ）で公開し、
+リポジトリに含めず YouTube（<https://youtu.be/1wp2LkwUc_4>）で公開し、
 サムネイルのリンク先をこの URL にしている。

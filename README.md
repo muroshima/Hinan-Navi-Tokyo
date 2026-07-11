@@ -19,7 +19,7 @@ https://hinan-navi-sceyw5h4sq-an.a.run.app
 
 [![だれでも避難ナビ TOKYO デモ動画（クリックで再生）](docs/video-thumb.jpg)](https://youtu.be/1wp2LkwUc_4)
 
-▶ サムネイルをクリックすると YouTube で動画（https://youtu.be/1wp2LkwUc_4 ）が再生されます。収録パイプライン（Playwright 収録＋ナレーション合成）は [`scripts/demo/`](scripts/demo/)、サムネイル生成は [`scripts/thumbnail/`](scripts/thumbnail/) を参照。
+▶ サムネイルをクリックすると YouTube で動画（<https://youtu.be/1wp2LkwUc_4>）が再生されます。収録パイプライン（Playwright 収録＋ナレーション合成）は [`scripts/demo/`](scripts/demo/)、サムネイル生成は [`scripts/thumbnail/`](scripts/thumbnail/) を参照。
 
 ## 📊 発表スライド
 発表スライド（全12枚）: **[docs/slides.pdf](docs/slides.pdf)**（GitHub 上でそのまま閲覧できます）。ソースは [docs/slides.md](docs/slides.md)（[Marp](https://marp.app/)）。HTML版が欲しい場合は下記コマンドで手元にビルドしてください（ビルド生成物のためリポジトリには含めていません）。
