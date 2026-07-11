@@ -19,7 +19,7 @@
 | 要件 | 本作品の該当物 | 置き場所 | 状態 |
 |---|---|---|---|
 | **スライド資料**（収録プレゼン用） | 発表スライド 全12枚 | [docs/slides.pdf](docs/slides.pdf)（PDF。HTML版が必要な場合は README 記載のコマンドで手元ビルド） | ✅ |
-| **プロトタイプの動画** | デモ動画 約1分（ナレーション付き） | [docs/demo.mp4](docs/demo.mp4) | ✅ |
+| **プロトタイプの動画** | デモ動画 約1分（ナレーション付き） | [YouTube](https://youtu.be/1wp2LkwUc_4) | ✅ |
 | 動画サムネイル（任意・カバー用） | タイトル入り 16:9 | [docs/video-thumb.png](docs/video-thumb.png) | ✅ |
 | ライブデモ（任意・審査補助） | Cloud Run 稼働 | https://hinan-navi-sceyw5h4sq-an.a.run.app | ✅（審査・検証用の限定公開。[#21](https://github.com/muroshima/Hinan-Navi-Tokyo/issues/21)） |
 | ソースコード | GitHub | https://github.com/muroshima/Hinan-Navi-Tokyo | ✅ |
@@ -39,7 +39,7 @@
 - ライブデモ: https://hinan-navi-sceyw5h4sq-an.a.run.app
 - GitHub: https://github.com/muroshima/Hinan-Navi-Tokyo
 - スライド: docs/slides.pdf（リポジトリ同梱）
-- デモ動画: docs/demo.mp4（リポジトリ同梱）
+- デモ動画: https://youtu.be/1wp2LkwUc_4
 
 ## 使用オープンデータ（出典明示・審査で重要）
 - **東京都オープンデータ（CC BY 4.0）**: 避難所・避難場所一覧／車椅子対応トイレ バリアフリー情報／住民基本台帳 年齢別人口／災害時給水ステーション／FREE Wi-Fi & TOKYO／「だれでも東京」施設情報／都立一時滞在施設／都営バス GTFS（交通局・ODPT）

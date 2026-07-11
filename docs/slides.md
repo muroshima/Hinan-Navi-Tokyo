@@ -101,7 +101,7 @@ Marp スライド（HTML/PDF出力）。テーマ・ローカル画像許可・�
 </div>
 </div>
 
-<span class="muted">▶ docs/demo.mp4（リポジトリ同梱）</span>
+<span class="muted">▶ https://youtu.be/1wp2LkwUc_4</span>
 
 ---
 

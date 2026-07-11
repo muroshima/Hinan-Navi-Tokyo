@@ -5,7 +5,7 @@
 自然文（例: 「雨の日、車椅子の母と避難したい」）から配慮属性（車椅子/高齢/乳幼児/視覚・聴覚障害/外国語/介助者/オストメイト/重度介護/夜間/天候/想定災害）を抽出し、避難所・避難場所を **バリアフリー × ハザード × 距離 × 当事者要件** で再ランキングします。
 
 ### 提出物リンク
-[🌐 ライブデモ](https://hinan-navi-sceyw5h4sq-an.a.run.app) ／ [🎬 デモ動画](docs/demo.mp4) ／ [📊 発表スライド](docs/slides.pdf) ／ [📋 提出チェックリスト](SUBMISSION.md)
+[🌐 ライブデモ](https://hinan-navi-sceyw5h4sq-an.a.run.app) ／ [🎬 デモ動画](https://youtu.be/1wp2LkwUc_4) ／ [📊 発表スライド](docs/slides.pdf) ／ [📋 提出チェックリスト](SUBMISSION.md)
 
 ## 🌐 ライブデモ
 https://hinan-navi-sceyw5h4sq-an.a.run.app
@@ -17,9 +17,9 @@ https://hinan-navi-sceyw5h4sq-an.a.run.app
 ## 🎬 デモ動画（約1分）
 自然文入力 → 配慮属性の抽出 → 「行ける順」再ランキング → **なぜ1位かを点数の内訳で説明** → 洪水ハザード＋建物3D（垂直避難先）の重ね表示までを一気に紹介します。
 
-[![だれでも避難ナビ TOKYO デモ動画（クリックで再生）](docs/video-thumb.jpg)](docs/demo.mp4)
+[![だれでも避難ナビ TOKYO デモ動画（クリックで再生）](docs/video-thumb.jpg)](https://youtu.be/1wp2LkwUc_4)
 
-▶ サムネイルをクリックすると動画（[`docs/demo.mp4`](docs/demo.mp4)）が再生されます。収録パイプライン（Playwright 収録＋ナレーション合成）は [`scripts/demo/`](scripts/demo/)、サムネイル生成は [`scripts/thumbnail/`](scripts/thumbnail/) を参照。
+▶ サムネイルをクリックすると YouTube で動画（https://youtu.be/1wp2LkwUc_4 ）が再生されます。収録パイプライン（Playwright 収録＋ナレーション合成）は [`scripts/demo/`](scripts/demo/)、サムネイル生成は [`scripts/thumbnail/`](scripts/thumbnail/) を参照。
 
 ## 📊 発表スライド
 発表スライド（全12枚）: **[docs/slides.pdf](docs/slides.pdf)**（GitHub 上でそのまま閲覧できます）。ソースは [docs/slides.md](docs/slides.md)（[Marp](https://marp.app/)）。HTML版が欲しい場合は下記コマンドで手元にビルドしてください（ビルド生成物のためリポジトリには含めていません）。
