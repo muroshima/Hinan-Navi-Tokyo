@@ -5,7 +5,7 @@
 自然文（例: 「雨の日、車椅子の母と避難したい」）から配慮属性（車椅子/高齢/乳幼児/視覚・聴覚障害/外国語/介助者/オストメイト/重度介護/夜間/天候/想定災害）を抽出し、避難所・避難場所を **バリアフリー × ハザード × 距離 × 当事者要件** で再ランキングします。
 
 ### 提出物リンク
-[🌐 ライブデモ](https://hinan-navi-sceyw5h4sq-an.a.run.app) ／ [🎬 デモ動画](https://youtu.be/1wp2LkwUc_4) ／ [📊 発表スライド](docs/slides.pdf) ／ [📋 提出チェックリスト](SUBMISSION.md)
+[🌐 ライブデモ](https://hinan-navi-sceyw5h4sq-an.a.run.app) ／ [🎬 デモ動画](https://youtu.be/1wp2LkwUc_4) ／ [📊 発表スライド](docs/slides.pdf)
 
 ## 🌐 ライブデモ
 https://hinan-navi-sceyw5h4sq-an.a.run.app
@@ -99,7 +99,6 @@ npm run dev   # http://localhost:3000
 - [docs/roadmap.md](docs/roadmap.md) — **社会実装ロードマップ**（自治体配布／福祉部局連携／データ更新継続・持続的提供）
 - [docs/DATA.md](docs/DATA.md) — データ出典・ライセンス・再現手順
 - [docs/realtime-shelter.md](docs/realtime-shelter.md) — **避難所開設状況のリアルタイム化 可否調査**（SOBO-WEB/SIP4D/L-Alert の提供条件と代替設計）
-- [SUBMISSION.md](SUBMISSION.md) — **提出チェックリスト**（提出物・フォーム記入内容・使用データ・最終チェック）
 
 ## 注意
 本リポジトリはハッカソン用プロトタイプです。避難の最終判断は自治体の公式情報に従ってください。
