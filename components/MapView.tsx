@@ -18,6 +18,7 @@ import type {
   QuakeRiskLayer,
 } from "@/lib/types";
 import { RANK_LABEL } from "@/lib/quakeRisk";
+import type { RouteRisk } from "@/lib/floodRoute";
 import {
   OSM_TILE_HOST,
   GSI_HAZARD_HOST,
@@ -82,7 +83,7 @@ interface Props {
   showAccessible?: boolean; // バリアフリー施設レイヤ表示
   tempStay?: TempStayFeature[]; // 帰宅困難者向け 都立一時滞在施設
   showTempStay?: boolean; // 一時滞在施設レイヤ表示
-  routeLine?: { coordinates: [number, number][]; flooded: boolean; floodKnown: boolean } | null; // 推奨避難所への徒歩経路(#38)
+  routeLine?: { coordinates: [number, number][]; risk: RouteRisk } | null; // 推奨避難所への徒歩経路(#38, #110)
   quakeRisk?: QuakeRiskFeature[]; // 地震に関する地域危険度(町丁目)(#106)
   quakeRiskLayer?: QuakeRiskLayer | null; // 表示する危険度指標（null=非表示）
   quakeGrid?: QuakeGrid | null; // 想定震度・液状化の250mメッシュ
@@ -132,6 +133,46 @@ const LIQ_COLOR: maplibregl.ExpressionSpecification = [
   30, "#4c1d95",
 ];
 
+// 避難経路の線幅(#110)。引きでも寄りでも追えるようズームに連動させる
+const ROUTE_WIDTH: maplibregl.ExpressionSpecification = [
+  "interpolate", ["linear"], ["zoom"],
+  10, 4,
+  14, 6,
+  17, 10,
+];
+// 縁取りは本線より一回り太くする
+const ROUTE_CASING_WIDTH: maplibregl.ExpressionSpecification = [
+  "interpolate", ["linear"], ["zoom"],
+  10, 7,
+  14, 10,
+  17, 15,
+];
+
+// 危険な経路の破線パターン。視差の軽減が有効な環境ではこの形のまま静止させる
+const DASH_STATIC: [number, number] = [2, 1.5];
+
+// 破線を少しずつずらして「流れる」ように見せる連番（marching ants）。
+// 点滅(フラッシュ)は採用しない: WCAG 2.3.1 の光過敏性発作リスクがあり、
+// 災害時に長く見続ける画面では疲労も大きい。流れる破線なら進行方向も示せる。
+const DASH_SEQUENCE: number[][] = [
+  [0, 4, 3],
+  [0.5, 4, 2.5],
+  [1, 4, 2],
+  [1.5, 4, 1.5],
+  [2, 4, 1],
+  [2.5, 4, 0.5],
+  [3, 4, 0],
+  [0, 0.5, 3, 3.5],
+  [0, 1, 3, 3],
+  [0, 1.5, 3, 2.5],
+  [0, 2, 3, 2],
+  [0, 2.5, 3, 1.5],
+  [0, 3, 3, 1],
+  [0, 3.5, 3, 0.5],
+];
+// 1コマの表示時間(ms)。滑らかに見えて描画負荷も低い程度に間引く
+const DASH_FRAME_MS = 70;
+
 function emptyFC(): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features: [] };
 }
@@ -171,6 +212,20 @@ export default function MapView({
   // load完了をstateで管理し、各反映effectの依存に含める
   // (loadより先にデータが届いても、loaded反転で確実に再反映される)
   const [loaded, setLoaded] = useState(false);
+  // 端末の「視差の軽減」設定。有効なら経路の破線アニメーションを止める(#110)
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduceMotion(mq.matches);
+    update();
+    // 旧Safari(addEventListener非対応)は addListener にフォールバック
+    if (mq.addEventListener) mq.addEventListener("change", update);
+    else mq.addListener(update);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", update);
+      else mq.removeListener(update);
+    };
+  }, []);
 
   // 初期化（マウント時に1回）＋アンマウントで破棄
   useEffect(() => {
@@ -551,39 +606,75 @@ export default function MapView({
         });
       }
 
-      // 推奨避難所への徒歩経路(#38)。全ポイントレイヤーより下(all-ptsの直下)に敷き、点を隠さない。
-      // a11y: 色だけに頼らず「浸水域通過=破線・琥珀 / 回避=実線・緑 / 判定不能=実線・灰」でパターンも併用。
-      // (line-dasharrayはデータ駆動不可のため、浸水通過だけ別レイヤーで破線描画する)
+      // 推奨避難所への徒歩経路(#38, #110)。全ポイントレイヤーより下(all-ptsの直下)に敷き、点を隠さない。
+      // 経路は常に1本だけ表示するので、色は「どの線か」ではなく「その経路がどれだけ危険か」を表す。
+      // a11y: 色だけに頼らず「危険=赤・破線 / 注意=橙・破線 / 通常=青・実線」でパターンも併用。
+      // (line-dasharrayはデータ駆動不可のため、警戒度ごとにレイヤーを分ける)
       map.addSource("route", { type: "geojson", data: emptyFC() });
-      // 実線: 浸水を通らない(回避=緑) or 判定不能(灰)
+      // 白い縁取り。OSMの道路は黄〜橙系が多く、線を重ねただけでは背景に埋もれて追えない(#110)
+      map.addLayer(
+        {
+          id: "route-line-casing",
+          type: "line",
+          source: "route",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-width": ROUTE_CASING_WIDTH,
+            "line-color": "#ffffff",
+            "line-opacity": 0.95,
+          },
+        },
+        "all-pts"
+      );
+      // 実線(青): 通常。深い浸水想定を通らない場合と、判定できない場合をまとめる。
+      // 以前は「回避=緑」と分けていたが、緑は安全のお墨付きに見える一方、
+      // 実際は想定区域図に照らして通っていないだけで当日の冠水・通行止めは保証しない。
+      // 利用者の行動も変わらないため、判定不能と同じ扱いにした(#110)
       map.addLayer(
         {
           id: "route-line",
           type: "line",
           source: "route",
-          filter: ["!=", ["get", "flooded"], true],
+          filter: ["==", ["get", "risk"], "normal"],
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
-            "line-width": 5,
-            "line-opacity": 0.85,
-            "line-color": ["case", ["==", ["get", "floodKnown"], false], "#6b7280", "#16a34a"],
+            "line-width": ROUTE_WIDTH,
+            "line-opacity": 0.95,
+            "line-color": "#1d4ed8",
           },
         },
         "all-pts"
       );
-      // 破線: 浸水域を通過(琥珀)。色覚に依存せずパターンで危険を区別
+      // 破線(橙): 注意。くるぶし〜膝下の浸水想定。流れがあれば危険だが歩ける場合もある
       map.addLayer(
         {
-          id: "route-line-flood",
+          id: "route-line-caution",
           type: "line",
           source: "route",
-          filter: ["==", ["get", "flooded"], true],
+          filter: ["==", ["get", "risk"], "caution"],
           layout: { "line-cap": "butt", "line-join": "round" },
           paint: {
-            "line-width": 5,
-            "line-opacity": 0.9,
-            "line-color": "#f59e0b",
-            "line-dasharray": [2, 1.5],
+            "line-width": ROUTE_WIDTH,
+            "line-opacity": 1,
+            "line-color": "#ea580c",
+            "line-dasharray": DASH_STATIC,
+          },
+        },
+        "all-pts"
+      );
+      // 破線(赤): 危険。膝上以上の浸水想定で歩行が困難になる。ここだけ破線を流して注意を引く
+      map.addLayer(
+        {
+          id: "route-line-danger",
+          type: "line",
+          source: "route",
+          filter: ["==", ["get", "risk"], "danger"],
+          layout: { "line-cap": "butt", "line-join": "round" },
+          paint: {
+            "line-width": ROUTE_WIDTH,
+            "line-opacity": 1,
+            "line-color": "#dc2626",
+            "line-dasharray": DASH_STATIC,
           },
         },
         "all-pts"
@@ -785,7 +876,7 @@ export default function MapView({
         {
           type: "Feature",
           geometry: { type: "LineString", coordinates: routeLine.coordinates },
-          properties: { flooded: routeLine.flooded, floodKnown: routeLine.floodKnown },
+          properties: { risk: routeLine.risk },
         },
       ],
     });
@@ -900,6 +991,34 @@ export default function MapView({
       map.easeTo({ pitch: buildings3d ? 55 : 0, duration: 700 });
     }
   }, [buildings3d, threeD, loaded]);
+
+  // 危険な経路の破線を流して注意を引く(#110)。
+  // 危険な経路が表示されているときだけ動かし、それ以外では requestAnimationFrame を回さない。
+  const routeDanger = routeLine?.risk === "danger";
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded || !map.getLayer("route-line-danger")) return;
+    if (!routeDanger || reduceMotion) {
+      map.setPaintProperty("route-line-danger", "line-dasharray", DASH_STATIC);
+      return;
+    }
+    let raf = 0;
+    let step = 0;
+    let last = 0;
+    const tick = (t: number) => {
+      if (t - last >= DASH_FRAME_MS) {
+        step = (step + 1) % DASH_SEQUENCE.length;
+        // スタイル差し替え等でレイヤーが消えている場合に備えて都度確認する
+        if (map.getLayer("route-line-danger")) {
+          map.setPaintProperty("route-line-danger", "line-dasharray", DASH_SEQUENCE[step]);
+        }
+        last = t;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [routeDanger, reduceMotion, loaded]);
 
   // 結果リストで選ばれた避難所へ寄せる(#107)。
   // スマホでは一覧と地図を同時に見られないため、カードから位置を確かめる導線を用意する
