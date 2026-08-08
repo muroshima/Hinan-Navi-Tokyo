@@ -24,4 +24,27 @@ body {
   color: var(--foreground);
   /* layout.tsx で設定した Geist(--font-sans) を実際に使う。日本語等は sans-serif にフォールバック */
   font-family: var(--font-sans), sans-serif;
+  /* 地図とボトムシートで完結する画面なので、ページ自体の引っぱり（iOSのバウンス）は止める */
+  overscroll-behavior: none;
+}
+
+/* スマホ向けの操作性（#107）。
+   パネルがボトムシートになる幅（Tailwind の md 未満）に揃えて切り替え、
+   加えて指で操作する端末では幅によらず適用する。
+   手が震える状況でも押し間違えないよう、操作要素の高さを確保する。 */
+@media (max-width: 767px), (pointer: coarse) {
+  aside button,
+  aside select,
+  aside input,
+  aside [role="button"] {
+    min-height: 44px;
+  }
+
+  /* iOS Safari は 16px 未満の入力欄にフォーカスすると自動でズームし、
+     戻せないまま地図が操作しづらくなる。入力系だけ 16px を保証する */
+  aside input,
+  aside select,
+  aside textarea {
+    font-size: 16px;
+  }
 }
