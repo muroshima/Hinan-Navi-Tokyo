@@ -22,3 +22,25 @@ test("自然文で検索すると配慮属性が抽出され避難所がラン�
   // ランキング結果（1位の根拠パネル）が表示される
   await expect(page.getByText("が1位？")).toBeVisible({ timeout: 15_000 });
 });
+
+// 地震ユースケース(#106): 想定災害が地震のとき、地域危険度・想定震度が現在地に当たり、
+// 外出中なら帰宅困難者向けの一時滞在施設が先に提示される。
+// LLM未設定でも語句一致fallback(地震/職場/電車)で属性が立つため外部依存なく通る。
+test("地震×外出中で帰宅困難者モードと地震リスクが表示される", async ({ page }) => {
+  await page.goto("/");
+
+  await page
+    .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
+    .fill("職場にいるときに地震が起きたら。電車が止まって帰れない");
+  await page.getByRole("button", { name: "避難所をさがす" }).click();
+
+  // 外出中の属性チップが立つ
+  await expect(page.getByText("🚶 外出中", { exact: true })).toBeVisible({ timeout: 15_000 });
+
+  // 帰宅困難者モード: 一時滞在施設の案内が出る
+  await expect(page.getByText("外出中に地震が起きたら")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("むやみに歩いて帰らないでください")).toBeVisible();
+
+  // 現在地の地震リスク（同梱の地域危険度・想定震度から算出。既定の現在地=東京駅で必ず値が引ける）
+  await expect(page.getByText("いまいる場所の地震リスク")).toBeVisible({ timeout: 15_000 });
+});

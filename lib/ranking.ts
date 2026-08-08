@@ -5,9 +5,12 @@ import type {
   RankedEvac,
   UserAttrs,
   HazardKey,
+  QuakeGrid,
+  QuakeRisk,
   ScoreFactor,
   ScoreCategory,
 } from "./types";
+import { lookupQuakeRisk, liquefactionLabel, shindoLabel, type QuakeRiskIndex } from "./quakeRisk";
 
 const HAZARD_LABEL: Record<HazardKey, string> = {
   flood: "洪水",
@@ -32,6 +35,7 @@ const ATTR_LABEL: { key: keyof UserAttrs; label: string }[] = [
   { key: "severe_care", label: "重度・要介護" },
   { key: "night", label: "夜間" },
   { key: "bad_weather", label: "雨・荒天" },
+  { key: "outside", label: "外出中" },
 ];
 
 // ハーバサイン距離(km)
@@ -289,6 +293,129 @@ export function enrichToiletNeeds(
     return { ...r, ...add, reasons, factors, score };
   });
   return enriched.sort((a, b) => b.score - a.score);
+}
+
+// --- 地震（#106） ---------------------------------------------------------------
+// 地震は水害と前提が異なる。事前の警戒レベルが無く、危険は「浸かるか」ではなく
+// 「周りが燃えるか・建物が倒れるか・地面が使えるか」で決まる。
+// そのため既存の距離とバリアフリーのスコアに、東京都の地域危険度と想定被害を重ねる。
+
+/** 想定災害が地震・大規模火事のとき、地震リスクをスコアへ織り込むか */
+export function isQuakeContext(attrs: UserAttrs): boolean {
+  return attrs.hazard === "earthquake" || attrs.hazard === "fire";
+}
+
+// 液状化した路面は車椅子・ベビーカー・担架を通さない。同じPL値でも意味が違うので重みを分ける
+function needsFirmGround(attrs: UserAttrs): boolean {
+  return attrs.wheelchair || attrs.severe_care || attrs.stroller || attrs.elderly;
+}
+
+/**
+ * 避難先ごとの地震リスク（町丁目の危険度 + 想定震度・液状化）を付与し、スコアへ反映する。
+ * originRisk は現在地のリスク。延焼火災から逃れる必要があるかの判断に使う。
+ */
+export function enrichQuakeRisk(
+  ranked: RankedEvac[],
+  index: QuakeRiskIndex | null,
+  grid: QuakeGrid | null,
+  attrs: UserAttrs,
+  originRisk: QuakeRisk | null
+): RankedEvac[] {
+  if (!isQuakeContext(attrs) || (!index && !grid)) return ranked;
+
+  // 現在地が延焼の危険が高い地域なら、屋外の広域避難場所へ逃れる選択が正解になり得る
+  const fleeingFire = (originRisk?.fireRank ?? 0) >= 4 || attrs.hazard === "fire";
+  const firmGround = needsFirmGround(attrs);
+
+  const enriched = ranked.map((r) => {
+    const quake = lookupQuakeRisk(r.feature.geometry.coordinates, index, grid);
+    const reasons = [...r.reasons];
+    const cautions = [...r.cautions];
+    const factors = [...r.factors];
+    let score = r.score;
+    const add = (label: string, delta: number) => {
+      score += delta;
+      factors.push({ label, delta, category: "quake" });
+    };
+
+    // 火災危険度（延焼のしやすさ）。地震火災は避難所そのものを飲み込む
+    if (quake.fireRank !== null) {
+      if (quake.fireRank >= 5) {
+        add("延焼の危険が特に高い地域", -22);
+        cautions.push("周辺は延焼の危険が特に高い地域（地域危険度ランク5）");
+      } else if (quake.fireRank === 4) {
+        add("延焼の危険が高い地域", -12);
+        cautions.push("周辺は延焼の危険が高い地域（地域危険度ランク4）");
+      } else if (quake.fireRank <= 2) {
+        add("延焼の危険が低い地域", 8);
+        reasons.push("延焼の危険が低い地域");
+      }
+    }
+
+    // 建物倒壊危険度。避難先周辺で建物が倒れれば、たどり着く道も塞がれる
+    if (quake.buildingRank !== null) {
+      if (quake.buildingRank >= 5) {
+        add("建物倒壊の危険が特に高い地域", -14);
+        cautions.push("周辺は建物倒壊の危険が特に高い地域");
+      } else if (quake.buildingRank === 4) {
+        add("建物倒壊の危険が高い地域", -7);
+      }
+    }
+
+    // 液状化。噴砂と段差で路面が使えなくなるため、車輪や担架を使う人には致命的
+    if (quake.liquefactionPL !== null && quake.liquefactionPL > 5) {
+      const severe = quake.liquefactionPL > 15;
+      add(
+        severe ? "液状化の危険度が極めて高い" : "液状化の危険度が高い",
+        severe ? (firmGround ? -22 : -10) : firmGround ? -10 : -4
+      );
+      cautions.push(
+        firmGround
+          ? `${liquefactionLabel(quake.liquefactionPL)}（車輪・担架での移動が困難になる想定）`
+          : liquefactionLabel(quake.liquefactionPL)
+      );
+    }
+
+    // 想定震度。どこも強く揺れるため差は小さいが、相対比較の材料として反映する
+    if (quake.shindo !== null) {
+      if (quake.shindo >= 6.5) add("想定震度7", -8);
+      else if (quake.shindo >= 6.0) add("想定震度6強", -4);
+    }
+
+    // 延焼から逃れる局面では、屋外の広域避難場所が正解になる。
+    // 水害向けの「屋内優遇」と逆の判断になるため、火災対応の避難場所を明示的に持ち上げる
+    if (
+      fleeingFire &&
+      r.feature.properties.kind === "area" &&
+      r.feature.properties.hazards?.fire
+    ) {
+      add("延焼火災から逃れられる避難場所", 18);
+      reasons.unshift("🔥 延焼火災から逃れられる指定の避難場所（屋外・広い空間）");
+    }
+
+    return { ...r, quake, reasons, cautions, factors, score };
+  });
+
+  return enriched.sort((a, b) => b.score - a.score);
+}
+
+/** 現在地の地震リスクを読める文にする（UIの注意喚起用） */
+export function describeOriginQuakeRisk(risk: QuakeRisk | null): string[] {
+  if (!risk) return [];
+  const out: string[] = [];
+  if (risk.totalRank !== null && risk.chome) {
+    out.push(`${risk.city ?? ""}${risk.chome} の総合危険度はランク${risk.totalRank}`);
+  }
+  if (risk.fireRank !== null && risk.fireRank >= 4) {
+    out.push("延焼の危険が高い地域です。火が広がる前に、広い空間へ早めに離れてください");
+  }
+  if (risk.shindo !== null) {
+    out.push(`想定される揺れは${shindoLabel(risk.shindo)}（計測震度${risk.shindo.toFixed(1)}）`);
+  }
+  if (risk.liquefactionPL !== null && risk.liquefactionPL > 5) {
+    out.push(`${liquefactionLabel(risk.liquefactionPL)}地域です`);
+  }
+  return out;
 }
 
 // 当事者の意思決定を支援する説明

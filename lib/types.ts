@@ -61,6 +61,7 @@ export interface UserAttrs {
   severe_care: boolean; // 寝たきり・重度・要介護（大型ベッド等が必要）
   night: boolean; // 夜間の避難
   bad_weather: boolean; // 雨・荒天（屋内/近距離を優先）
+  outside: boolean; // 外出中（自宅から離れている＝地震では帰宅困難者になり得る）
   hazard: HazardKey | null; // 想定している災害(あれば)
 }
 
@@ -76,6 +77,7 @@ export const DEFAULT_ATTRS: UserAttrs = {
   severe_care: false,
   night: false,
   bad_weather: false,
+  outside: false,
   hazard: null,
 };
 
@@ -86,7 +88,8 @@ export type ScoreCategory =
   | "hazard" // 想定災害への適否
   | "barrier_free" // バリアフリー設備
   | "facility" // 屋内/設備の充実
-  | "context"; // 夜間・天候など状況
+  | "context" // 夜間・天候など状況
+  | "quake"; // 地震リスク（延焼・液状化・想定震度）
 
 export interface ScoreFactor {
   label: string; // 例: "車椅子対応トイレ"
@@ -157,6 +160,44 @@ export interface TempStayProps {
 }
 export type TempStayFeature = GeoJSON.Feature<GeoJSON.Point, TempStayProps>;
 
+// 地震に関する地域危険度測定調査(第9回)の町丁目ポリゴン。ランクは1(低)〜5(高)
+export interface QuakeRiskProps {
+  city: string;
+  chome: string;
+  buildingRank: number; // 建物倒壊危険度
+  fireRank: number; // 火災危険度（延焼のしやすさ）
+  totalRank: number; // 総合危険度
+}
+export type QuakeRiskFeature = GeoJSON.Feature<
+  GeoJSON.Polygon | GeoJSON.MultiPolygon,
+  QuakeRiskProps
+>;
+
+// 想定地震の250mメッシュ格子（計測震度・液状化）。cells の値は [震度, PL値, 沈下量m]
+export interface QuakeGrid {
+  scenario: string; // 想定シナリオ名（例: 都心南部直下地震）
+  cellLat: number;
+  cellLon: number;
+  cells: Record<string, [number | null, number | null, number | null]>;
+}
+
+// 地域危険度の表示指標。町丁目ポリゴンを危険度ランクで塗り分ける
+export type QuakeRiskLayer = "totalRank" | "buildingRank" | "fireRank";
+// 格子で見せる指標。想定震度と液状化はメッシュのカバー範囲が違うため分けて扱う
+export type QuakeGridLayer = "shindo" | "liquefaction";
+
+// ある地点の地震リスク（町丁目の危険度 + 格子の想定震度・液状化）
+export interface QuakeRisk {
+  city: string | null;
+  chome: string | null;
+  buildingRank: number | null;
+  fireRank: number | null;
+  totalRank: number | null;
+  shindo: number | null; // 計測震度（例 6.13）
+  liquefactionPL: number | null; // 液状化危険度 PL値
+  subsidenceM: number | null; // 想定沈下量(m)
+}
+
 // マイ・タイムライン（局面別の避難行動。/api/timeline が生成）
 export interface TimelinePhase {
   phase: string; // 局面名（例: 避難開始）
@@ -178,4 +219,5 @@ export interface RankedEvac {
   callM?: number | null; // 最寄り非常用ボタン付きトイレ(m)
   walkM?: number | null; // 実経路の徒歩距離(m) ※OSRM
   walkMin?: number | null; // 実経路の徒歩所要(分)
+  quake?: QuakeRisk | null; // 避難先の地震リスク ※想定災害が地震・火災のとき
 }

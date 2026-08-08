@@ -15,8 +15,18 @@ import type {
   BusStopFeature,
   AccessibleFacilityFeature,
   TempStayFeature,
+  QuakeGrid,
+  QuakeGridLayer,
+  QuakeRiskFeature,
+  QuakeRiskLayer,
 } from "@/lib/types";
 import { DEFAULT_ATTRS, LANGS, LANG_CODES } from "@/lib/types";
+import {
+  buildQuakeRiskIndex,
+  lookupQuakeRisk,
+  analyzeQuakeRoute,
+  RANK_LABEL,
+} from "@/lib/quakeRisk";
 import { QRCodeSVG } from "qrcode.react";
 import { fallbackExtract, type FallbackAttrs } from "@/lib/triageFallback";
 import { pickSafestRoute, type FloodGrid, type RouteInfo } from "@/lib/floodRoute";
@@ -32,7 +42,11 @@ import {
   rankEvacuations,
   explainDecision,
   enrichToiletNeeds,
+  enrichQuakeRisk,
+  describeOriginQuakeRisk,
+  isQuakeContext,
   activeAttrLabels,
+  distanceKm as straightDistanceKm,
   HAZARD_LABEL,
   type ToiletIndex,
 } from "@/lib/ranking";
@@ -54,6 +68,7 @@ const ATTR_LABELS: { key: keyof UserAttrs; label: string }[] = [
   { key: "severe_care", label: "重度・要介護" },
   { key: "night", label: "🌙 夜間" },
   { key: "bad_weather", label: "☂ 雨・荒天" },
+  { key: "outside", label: "🚶 外出中" },
 ];
 
 const EMPTY_TOILET_IDX: ToiletIndex = { baby: [], ostomate: [], largeBed: [], call: [] };
@@ -64,6 +79,8 @@ const SAMPLES = [
   "ベビーカーと0歳の子ども連れです。近くて入りやすい場所は？",
   "高齢の祖父と一緒。地震のとき逃げられる所を教えて",
   "夜に、目の不自由な父と逃げたい",
+  "大地震で火事が広がっている。足の悪い祖母と逃げたい",
+  "職場にいるときに地震が起きたら。電車が止まって帰れない",
   "江戸川区で水害が心配。車椅子の母と避難したい",
 ];
 
@@ -189,6 +206,11 @@ export default function Home() {
   const [showAccessible, setShowAccessible] = useState(false);
   const [tempStay, setTempStay] = useState<TempStayFeature[]>([]); // 帰宅困難者向け 都立一時滞在施設
   const [showTempStay, setShowTempStay] = useState(false);
+  // 地震(#106): 地域危険度(町丁目)・想定震度/液状化(250mメッシュ)
+  const [quakeRisk, setQuakeRisk] = useState<QuakeRiskFeature[]>([]);
+  const [quakeGrid, setQuakeGrid] = useState<QuakeGrid | null>(null);
+  const [quakeRiskLayer, setQuakeRiskLayer] = useState<QuakeRiskLayer | null>(null);
+  const [quakeGridLayer, setQuakeGridLayer] = useState<QuakeGridLayer | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [originLabel, setOriginLabel] = useState("自動取得 / 東京駅");
   const [placeInput, setPlaceInput] = useState("");
@@ -411,6 +433,22 @@ export default function Home() {
         console.warn("temp_stay_facilities load failed", e);
         setTempStay([]);
       });
+    // 地震の地域危険度(町丁目・#106)
+    fetch("/data/quake_risk.geojson")
+      .then((r) => r.json())
+      .then((fc: { features?: QuakeRiskFeature[] }) => setQuakeRisk(fc.features ?? []))
+      .catch((e) => {
+        console.warn("quake_risk load failed", e);
+        setQuakeRisk([]);
+      });
+    // 想定震度・液状化の250mメッシュ(#106)
+    fetch("/data/quake_grid.json")
+      .then((r) => r.json())
+      .then((g: QuakeGrid) => setQuakeGrid(g && g.cells ? g : null))
+      .catch((e) => {
+        console.warn("quake_grid load failed", e);
+        setQuakeGrid(null);
+      });
     // 浸水回避ルーティング用の浸水グリッド(#38)
     fetch("/data/flood_grid.json")
       .then((r) => r.json())
@@ -479,11 +517,38 @@ export default function Home() {
     }
   }
 
+  // 町丁目ポリゴンは5,192件。検索のたびに総当たりしないよう bbox 索引を1度だけ組む
+  const quakeIndex = useMemo(
+    () => (quakeRisk.length ? buildQuakeRiskIndex(quakeRisk) : null),
+    [quakeRisk]
+  );
+
+  // 現在地の地震リスク（想定災害が地震・火災のときだけ引く）
+  const originQuakeRisk = useMemo(() => {
+    if (!isQuakeContext(attrs)) return null;
+    if (!quakeIndex && !quakeGrid) return null;
+    return lookupQuakeRisk(origin, quakeIndex, quakeGrid);
+  }, [attrs, origin, quakeIndex, quakeGrid]);
+
   const ranked: RankedEvac[] = useMemo(() => {
     if (!submitted || all.length === 0) return [];
     const base = rankEvacuations(all, origin, attrs, 20);
-    return enrichToiletNeeds(base, toiletIdx, attrs);
-  }, [submitted, all, origin, attrs, toiletIdx]);
+    const withToilets = enrichToiletNeeds(base, toiletIdx, attrs);
+    return enrichQuakeRisk(withToilets, quakeIndex, quakeGrid, attrs, originQuakeRisk);
+  }, [submitted, all, origin, attrs, toiletIdx, quakeIndex, quakeGrid, originQuakeRisk]);
+
+  // 帰宅困難者モード（#106）: 地震 × 外出中。指定避難所は自宅を失った人の受け皿であり、
+  // 帰宅できないだけの人がまず向かうべきなのは一時滞在施設。近い順に提示する
+  const stranded = useMemo(() => {
+    if (!submitted || !isQuakeContext(attrs) || !attrs.outside) return [];
+    return tempStay
+      .map((f) => ({
+        feature: f,
+        km: straightDistanceKm(origin, f.geometry.coordinates as [number, number]),
+      }))
+      .sort((a, b) => a.km - b.km)
+      .slice(0, 3);
+  }, [submitted, attrs, tempStay, origin]);
 
   // 1位の根拠 ＋「より近いのに見送った候補」（意思決定支援）
   const decision = useMemo(() => {
@@ -582,16 +647,31 @@ export default function Home() {
   }, [rawRoutes, floodGrid]);
 
   // 地図へ渡す経路線。identityを安定させ、実データが変わった時だけMapViewが再描画するようにする
-  const routeLine = useMemo(
-    () =>
-      routeAdvisory
-        ? {
-            coordinates: routeAdvisory.recommended.coordinates,
-            flooded: routeAdvisory.floodKnown && routeAdvisory.recommended.flood.maxDepthM > 0,
-            floodKnown: routeAdvisory.floodKnown,
-          }
-        : null,
-    [routeAdvisory]
+  // 地震を想定しているときは浸水の色分けを使わない（洪水想定の破線が地震の文脈では誤解を招く）。
+  // 経路そのものは中立色の実線で出し、危険の説明は延焼・液状化チェックのパネルが担う
+  const routeLine = useMemo(() => {
+    if (!routeAdvisory) return null;
+    if (isQuakeContext(attrs)) {
+      return { coordinates: routeAdvisory.recommended.coordinates, flooded: false, floodKnown: false };
+    }
+    return {
+      coordinates: routeAdvisory.recommended.coordinates,
+      flooded: routeAdvisory.floodKnown && routeAdvisory.recommended.flood.maxDepthM > 0,
+      floodKnown: routeAdvisory.floodKnown,
+    };
+  }, [routeAdvisory, attrs]);
+
+  // 推奨避難所までの経路が、延焼・液状化の危険が高い地域を通らないか（#106）。
+  // 地震では「避難先が安全か」より「そこへ行き着けるか」が問題になる
+  const quakeRouteAdvisory = useMemo(() => {
+    if (!isQuakeContext(attrs) || !routeAdvisory) return null;
+    return analyzeQuakeRoute(routeAdvisory.recommended.coordinates, quakeIndex, quakeGrid);
+  }, [attrs, routeAdvisory, quakeIndex, quakeGrid]);
+
+  // 現在地の地震リスクを読める文にしたもの
+  const originQuakeLines = useMemo(
+    () => (submitted ? describeOriginQuakeRisk(originQuakeRisk) : []),
+    [submitted, originQuakeRisk]
   );
 
   // 複合ニーズ（同時最適している配慮要件）のラベル
@@ -615,6 +695,16 @@ export default function Home() {
           distanceKm: top.distanceKm,
           hazardLabel: attrs.hazard ? HAZARD_LABEL[attrs.hazard] : undefined,
           language: lang,
+          // 地震のときは現在地の地域危険度・想定被害を渡し、行動計画を土地の実情に寄せる
+          quake: originQuakeRisk
+            ? {
+                fireRank: originQuakeRisk.fireRank,
+                buildingRank: originQuakeRisk.buildingRank,
+                totalRank: originQuakeRisk.totalRank,
+                shindo: originQuakeRisk.shindo,
+                liquefactionPL: originQuakeRisk.liquefactionPL,
+              }
+            : undefined,
         }),
       });
       // 新しい検索/再生成が走っていたら、古いレスポンスは破棄（不整合防止）
@@ -664,6 +754,13 @@ export default function Home() {
       // 抽出された災害に対応するハザードレイヤを自動でON
       if (hazard && HAZARD_LAYERS.some((h) => h.key === hazard)) {
         setHazards((prev) => (prev.includes(hazard) ? prev : [...prev, hazard]));
+      }
+      // 地震・大規模火事は重ねるタイルが無いかわりに、地域危険度を自動表示する(#106)。
+      // 火災を想定しているなら延焼のしやすさ、地震一般なら総合危険度を出す
+      if (hazard === "earthquake" || hazard === "fire") {
+        setQuakeRiskLayer(hazard === "fire" ? "fireRank" : "totalRank");
+        // 外出中なら帰宅困難者の待機先が要るため、一時滞在施設を地図に出す
+        if (a.outside) setShowTempStay(true);
       }
       // 文中に地名があれば現在地に反映（ジオコーディングは要ネットワーク。オフライン時はスキップ）
       if (allowGeocode && typeof location === "string" && location.trim()) {
@@ -903,7 +1000,7 @@ export default function Home() {
             ))}
             {attrs.hazard && (
               <span className="rounded bg-orange-100 px-2 py-1 text-orange-800">
-                災害: {attrs.hazard}
+                災害: {HAZARD_LABEL[attrs.hazard]}
               </span>
             )}
             {source && <span className="text-gray-600">（抽出: {source}）</span>}
@@ -967,6 +1064,82 @@ export default function Home() {
           </button>
           <p className="mt-1 text-[10px] text-gray-600">
             建物: Project PLATEAU(国土交通省) CC BY 4.0。高いほど濃い緑＝上階避難に適す
+          </p>
+        </div>
+
+        {/* 地震の危険度レイヤ（#106）。地震には重ねる浸水タイルが無いかわりに、
+            町丁目の地域危険度と想定震度・液状化を面で見せる */}
+        <div className="rounded-lg border border-gray-200 p-2">
+          <div className="mb-1 text-xs font-bold text-gray-700">地震の危険度（町丁目）</div>
+          <div className="flex flex-wrap gap-1">
+            {(
+              [
+                { key: "totalRank", label: "総合" },
+                { key: "buildingRank", label: "建物倒壊" },
+                { key: "fireRank", label: "火災（延焼）" },
+              ] as const
+            ).map((it) => {
+              const on = quakeRiskLayer === it.key;
+              return (
+                <button
+                  key={it.key}
+                  onClick={() => setQuakeRiskLayer(on ? null : it.key)}
+                  aria-pressed={on}
+                  className={`rounded-full border px-2 py-1 text-xs ${
+                    on
+                      ? "border-red-500 bg-red-100 text-red-800"
+                      : "border-gray-300 text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  {on ? "● " : "○ "}
+                  {it.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {(
+              [
+                { key: "shindo", label: "🌐 想定震度" },
+                { key: "liquefaction", label: "💧 液状化" },
+              ] as const
+            ).map((it) => {
+              const on = quakeGridLayer === it.key;
+              return (
+                <button
+                  key={it.key}
+                  onClick={() => setQuakeGridLayer(on ? null : it.key)}
+                  aria-pressed={on}
+                  className={`rounded-full border px-2 py-1 text-xs ${
+                    on
+                      ? "border-violet-500 bg-violet-100 text-violet-800"
+                      : "border-gray-300 text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  {on ? "● " : "○ "}
+                  {it.label}
+                </button>
+              );
+            })}
+          </div>
+          {quakeRiskLayer && (
+            <div className="mt-1 flex items-center gap-1 text-[10px] text-gray-600">
+              <span>低</span>
+              {["#fef9c3", "#fde68a", "#fb923c", "#ef4444", "#991b1b"].map((c, i) => (
+                <span
+                  key={c}
+                  title={`ランク${i + 1}（${RANK_LABEL[i + 1]}）`}
+                  className="inline-block h-2.5 w-5 rounded-sm"
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+              <span>高</span>
+              <span className="ml-1">ランク1〜5</span>
+            </div>
+          )}
+          <p className="mt-1 text-[10px] text-gray-600">
+            出典: 地震に関する地域危険度測定調査（第9回・東京都都市整備局）／首都直下地震等による東京の被害想定（令和4年度・東京都総務局）— CC BY
+            4.0。想定震度・液状化は{quakeGrid?.scenario ?? "都心南部直下地震"}のケース。液状化データは沖積低地など対象地域のみ
           </p>
         </div>
 
@@ -1035,6 +1208,49 @@ export default function Home() {
           </p>
         </div>
 
+        {/* 帰宅困難者モード（#106）: 地震 × 外出中。
+            指定避難所は自宅を失った人の受け皿。帰宅できないだけなら一時滞在施設で待つのが原則 */}
+        {stranded.length > 0 && (
+          <div className="rounded-lg border border-indigo-300 bg-indigo-50 p-3">
+            <div className="text-xs font-bold text-indigo-800">🏢 外出中に地震が起きたら</div>
+            <p className="mt-1 text-sm text-indigo-900">
+              <b>むやみに歩いて帰らないでください。</b>
+              一斉徒歩帰宅は救助活動の妨げになり、余震での落下物・沿道火災に晒されます。まず近くの
+              <b>一時滞在施設</b>で待機し、鉄道の再開と安否確認を優先してください。
+            </p>
+            <ul className="mt-2 flex flex-col gap-1">
+              {stranded.map((s) => (
+                <li key={s.feature.properties.id} className="text-xs text-gray-800">
+                  <a
+                    href={gmapsWalkingUrl(origin, s.feature.geometry.coordinates as [number, number])}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-bold text-indigo-700 underline decoration-dotted underline-offset-2"
+                  >
+                    {s.feature.properties.name}
+                  </a>
+                  <span className="ml-1 text-gray-600">直線{s.km.toFixed(1)}km</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1 text-[10px] text-indigo-700">
+              出典: 都立の一時滞在施設（東京都総務局）。区市町村・民間の施設は含みません。開設状況は必ず現地・公式情報で確認してください
+            </p>
+          </div>
+        )}
+
+        {/* 現在地の地震リスク（#106） */}
+        {originQuakeLines.length > 0 && (
+          <div className="rounded-lg border border-orange-300 bg-orange-50 p-3">
+            <div className="text-xs font-bold text-orange-800">🌐 いまいる場所の地震リスク</div>
+            <ul className="mt-1 flex flex-col gap-0.5 text-sm text-orange-900">
+              {originQuakeLines.map((line) => (
+                <li key={line}>・{line}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* 1位の根拠 ＋ 行けない理由（意思決定支援） */}
         {decision && (
           <div className="flex flex-col gap-2">
@@ -1057,8 +1273,9 @@ export default function Home() {
           </div>
         )}
 
-        {/* 浸水回避ルーティング(#38): 推奨避難所への経路の浸水曝露アドバイザリ */}
-        {routeAdvisory && (
+        {/* 浸水回避ルーティング(#38): 推奨避難所への経路の浸水曝露アドバイザリ。
+            地震を想定しているときは洪水浸水想定の話が混乱を招くため出さない（代わりに延焼チェックを出す） */}
+        {routeAdvisory && !isQuakeContext(attrs) && (
           <div
             className={`rounded-lg border p-3 text-sm ${
               !routeAdvisory.floodKnown
@@ -1099,6 +1316,40 @@ export default function Home() {
           </div>
         )}
 
+        {/* 避難経路の地震リスク（#106）。浸水チェックの地震版 */}
+        {quakeRouteAdvisory && (
+          <div
+            className={`rounded-lg border p-3 text-sm ${
+              (quakeRouteAdvisory.maxFireRank ?? 0) >= 4
+                ? "border-red-300 bg-red-50 text-red-900"
+                : "border-green-300 bg-green-50 text-green-900"
+            }`}
+          >
+            <div className="text-xs font-bold">🔥 避難経路の延焼・液状化チェック</div>
+            {(quakeRouteAdvisory.maxFireRank ?? 0) >= 4 ? (
+              <p className="mt-1">
+                この経路は<b>延焼の危険が高い地域</b>を通ります
+                {quakeRouteAdvisory.worstChome && `（${quakeRouteAdvisory.worstChome}・火災危険度ランク${quakeRouteAdvisory.maxFireRank}）`}
+                。煙や火が見えたら、無理に通らず広い道・広場側へ迂回してください。
+              </p>
+            ) : (
+              <p className="mt-1">
+                この経路が通るのは<b>延焼の危険が高い地域ではありません</b>
+                （通過区間の最大 火災危険度ランク{quakeRouteAdvisory.maxFireRank ?? "—"}）。
+              </p>
+            )}
+            {quakeRouteAdvisory.maxPL != null && quakeRouteAdvisory.maxPL > 5 && (
+              <p className="mt-1 text-[12px]">
+                経路上に<b>液状化の危険度が高い区間</b>があります（PL値 約
+                {quakeRouteAdvisory.maxPL.toFixed(0)}）。段差・噴砂で車椅子やベビーカーが進めなくなる想定です。
+              </p>
+            )}
+            <p className="mt-1 text-[10px] text-gray-500">
+              地図の灰の実線が推奨避難所までの経路。経路上を約100m間隔でサンプリングし、通過する町丁目の地域危険度と250mメッシュの液状化想定を当てています。
+            </p>
+          </div>
+        )}
+
         {/* マイ・タイムライン（属性×災害×推奨避難先 → 時系列の避難行動） */}
         {submitted && ranked.length > 0 && (
           <div className="rounded-lg border border-sky-300 bg-sky-50 p-3">
@@ -1125,7 +1376,10 @@ export default function Home() {
             </div>
             {!timeline && !timelineLoading && (
               <p className="mt-1 text-[11px] text-sky-700">
-                あなたの状況と推奨避難先「{ranked[0].feature.properties.name}」に合わせ、警戒レベルに沿った避難の手順を作成します
+                あなたの状況と推奨避難先「{ranked[0].feature.properties.name}」に合わせ、
+                {isQuakeContext(attrs)
+                  ? "発災直後からの行動の手順を作成します（地震に警戒レベルはありません）"
+                  : "警戒レベルに沿った避難の手順を作成します"}
               </p>
             )}
             {timeline && (
@@ -1238,6 +1492,15 @@ export default function Home() {
                       {r.feature.properties.agingLevel === "chome" ? "(町丁目)" : ""}
                     </span>
                   )}
+                  {/* 地震のときは、その避難先が建つ町丁目の延焼リスクを一目で分かるようにする */}
+                  {r.quake?.fireRank != null && (
+                    <span
+                      className={`ml-1 ${r.quake.fireRank >= 4 ? "text-red-700" : "text-gray-600"}`}
+                      title="地震に関する地域危険度測定調査（第9回）の火災危険度ランク"
+                    >
+                      🔥 延焼{RANK_LABEL[r.quake.fireRank]}
+                    </span>
+                  )}
                 </span>
                 <a
                   href={gmapsWalkingUrl(origin, r.feature.geometry.coordinates)}
@@ -1306,6 +1569,10 @@ export default function Home() {
           tempStay={tempStay}
           showTempStay={showTempStay}
           routeLine={routeLine}
+          quakeRisk={quakeRisk}
+          quakeRiskLayer={quakeRiskLayer}
+          quakeGrid={quakeGrid}
+          quakeGridLayer={quakeGridLayer}
         />
       </main>
     </div>

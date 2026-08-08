@@ -13,7 +13,12 @@ const timelineCache = new TtlCache<TimelinePhase[]>(300, 10 * 60_000);
 // 長さ制約で空配列・過剰件数の不正形を弾き、UIが空になるのを防ぐ（不正ならparse失敗→fallback）
 const PhaseSchema = z.object({
   phase: z.string().min(1).describe("局面の名前。例: 事前の備え / 情報収集 / 避難開始 / 避難先で"),
-  level: z.string().min(1).describe("対応する警戒レベルや時点。例: 警戒レベル3（高齢者等避難）/ 平時"),
+  level: z
+    .string()
+    .min(1)
+    .describe(
+      "対応する警戒レベルや時点。気象災害は例「警戒レベル3（高齢者等避難）」、地震は例「発災直後（0〜3分）」"
+    ),
   actions: z
     .array(z.string().min(1))
     .min(1)
@@ -66,6 +71,7 @@ const InputAttrsSchema = z.object({
   severe_care: z.boolean().catch(false),
   night: z.boolean().catch(false),
   bad_weather: z.boolean().catch(false),
+  outside: z.boolean().catch(false),
   hazard: z
     .enum([
       "flood",
@@ -80,12 +86,23 @@ const InputAttrsSchema = z.object({
     .nullable()
     .catch(null),
 });
+// 現在地の地震リスク（#106）。クライアントが町丁目危険度・想定震度から算出して渡す
+const QuakeInputSchema = z.object({
+  fireRank: z.number().int().min(1).max(5).nullable().catch(null),
+  buildingRank: z.number().int().min(1).max(5).nullable().catch(null),
+  totalRank: z.number().int().min(1).max(5).nullable().catch(null),
+  shindo: z.number().finite().nullable().catch(null),
+  liquefactionPL: z.number().finite().nullable().catch(null),
+});
+type QuakeInput = z.infer<typeof QuakeInputSchema>;
+
 const InputSchema = z.object({
   attrs: InputAttrsSchema,
   destName: z.string().max(100).optional().catch(undefined),
   hazardLabel: z.string().max(40).optional().catch(undefined),
   distanceKm: z.number().finite().optional().catch(undefined), // Infinity/NaNはundefinedへ
   language: z.enum(LANG_CODES).optional().catch(undefined),
+  quake: QuakeInputSchema.optional().catch(undefined),
 });
 
 // 出力言語の指示（LLM版のみ。fallbackは日本語固定）。
@@ -100,6 +117,23 @@ const LANG_INSTRUCTION = {
 
 // 返却型は @/lib/types の TimelinePhase に統一（PhaseSchemaと構造一致。二重定義を避ける）
 
+// 地震は予報が出ないため、気象災害の警戒レベル（1〜5）を時間軸にできない。
+// 「発災してから何分後に何をするか」を軸に組み替える。
+const SYSTEM_QUAKE = `あなたは地震に備える避難計画（マイ・タイムライン）作成を支援するアシスタントです。
+利用者の状況（配慮属性・推奨避難先）に合わせ、【発災を起点とした時間軸】で行動を作成します。
+
+重要な原則:
+- 地震には警戒レベルも予報もありません。時間軸は「事前の備え（平時）／発災直後（0〜3分）／揺れが収まって（3〜10分）／その後（10分〜数時間）／数時間〜数日」を使います。警戒レベルという言葉は使いません。
+- 発災直後にまずすることは避難ではなく【その場で身を守ること】です。車椅子ならブレーキをかけて頭と首を守る、寝たきりなら布団や枕で頭部を保護する、など属性に即して具体化します。
+- 揺れが収まったら、火の始末・出口の確保・足元の安全（ガラス・転倒物）を先に行います。スリッパや靴を履くことは要配慮者ほど重要です。
+- 【全員がすぐ避難所へ行くわけではありません】。自宅が無事なら在宅避難が基本で、避難が必要なのは「延焼が迫る」「建物が危険」「ライフラインが断たれ生活できない」場合です。この判断基準を必ず示します。
+- 延焼火災が迫る場合は、屋内の指定避難所ではなく【屋外の広域避難場所】へ向かうのが原則です。水害とは逆になることを明示します。
+- 液状化が想定される地域では、路面の段差・噴砂で車椅子やベビーカーが進めなくなります。該当する属性があれば代替手段（担架・背負い・人手の確保）に触れます。
+- 単身で支援が必要な人は、無理に動かず【助けを呼ぶ・居場所を知らせる】ことが正解になる場合があります。ホイッスルや携帯の音、玄関の解錠など具体的に書きます。
+- 外出中（帰宅困難）の場合は【むやみに移動を開始しない】が大原則です。一時滞在施設で待機し、鉄道の再開や安否確認の手順を書きます。
+- 4〜6局面。各局面 actions は2〜5個、簡潔な命令形で。
+- 医療・救命の最終判断は本人と自治体・支援者に委ねる前提で、断定的な医療指示はしません。`;
+
 const SYSTEM = `あなたは防災の避難計画（マイ・タイムライン）作成を支援するアシスタントです。
 利用者の状況（配慮属性・想定災害・推奨避難先）に合わせ、内閣府の「警戒レベル」(1〜5)に沿った時系列の避難行動を作成します。
 
@@ -109,6 +143,77 @@ const SYSTEM = `あなたは防災の避難計画（マイ・タイムライン�
 - 一般論を避け、当事者が「次に何をするか」が分かる粒度にします。
 - 4〜6局面（例: 事前の備え/情報収集/避難開始/避難中/避難先で）。各局面 actions は2〜5個、簡潔な命令形で。
 - 医療・救命の最終判断は本人と自治体・支援者に委ねる前提で、断定的な医療指示はしません。`;
+
+// 発災起点のルールベース地震タイムライン（LLM未設定・オフラインでも動かす）
+function fallbackQuakeTimeline(
+  attrs: UserAttrs,
+  destName?: string,
+  quake?: QuakeInput
+): TimelinePhase[] {
+  const dest = destName ? `「${destName}」` : "避難先";
+  const isSupport =
+    attrs.wheelchair || attrs.elderly || attrs.severe_care || attrs.stroller || attrs.visual_impairment;
+  const alone = !attrs.has_caregiver && (attrs.wheelchair || attrs.elderly || attrs.severe_care);
+
+  // 事前の備え
+  const prep: string[] = [
+    "家具・家電を固定し、寝る場所と避難経路に倒れてくる物を置かない",
+    "室内で靴やスリッパをすぐ履ける場所に置く（ガラス片で足を切ると避難できなくなる）",
+  ];
+  if (attrs.wheelchair) prep.push("車椅子の予備タイヤ・パンク修理具を備え、段差解消の代替経路を決めておく");
+  if (attrs.severe_care) prep.push("常用薬・医療物品を最低3日分、停電時の電源確保も含めて準備する");
+  if (attrs.ostomate) prep.push("ストーマ装具を最低3日分ストックし、持ち出せる場所に置く");
+  if (attrs.stroller) prep.push("ミルク・おむつ・抱っこ紐を用意する（がれきの道でベビーカーは使えない）");
+  if (alone) prep.push("近所・地域の支援者に、助けが必要なことと居場所を事前に伝えておく");
+
+  // 発災直後
+  const now: string[] = [];
+  if (attrs.wheelchair) now.push("車椅子のブレーキをかけ、頭と首をクッションや腕で守る。窓・棚から離れる");
+  else if (attrs.severe_care) now.push("布団・枕で頭部を保護する。移動させず、家具の転倒範囲から遠ざける");
+  else now.push("頭を守り、その場でじっとして揺れが収まるのを待つ（あわてて外へ出ない）");
+  if (attrs.visual_impairment) now.push("その場から動かず、落下物が止まるまで待つ。周囲に声を出して居場所を知らせる");
+  if (attrs.hearing_impairment) now.push("揺れが収まったら周囲の掲示・スマホの文字情報で状況を確認する");
+  if (attrs.stroller) now.push("子どもに覆いかぶさって頭を守る");
+
+  // 揺れが収まって
+  const after: string[] = [
+    "火を止め、ブレーカーを落とす（通電火災を防ぐ）",
+    "ドアや窓を開けて出口を確保し、靴を履いて足元を守る",
+  ];
+  if (alone) after.push("自力で動けなければ無理をせず、ホイッスル・大きな音で助けを求め、玄関の鍵を開けておく");
+  if (attrs.severe_care) after.push("医療機器の電源とバッテリー残量を確認する");
+
+  // 避難するか判断
+  const judge: string[] = [
+    "自宅が無事なら在宅避難が基本。避難するのは「火が迫る」「建物が危険」「生活できない」ときと決めておく",
+    `延焼が迫る場合は屋内の避難所ではなく、広い屋外の避難場所へ向かう（水害と逆）`,
+  ];
+  if (isSupport) judge.push(`移動には人手と時間がかかる。迷ったら早めに${dest}へ向かう判断をする`);
+  if (attrs.wheelchair || attrs.stroller)
+    judge.push("液状化や段差で車輪が使えないことがある。担架・背負い等の代替手段を確保する");
+  if (attrs.outside)
+    judge.push("外出中はむやみに歩き出さず、一時滞在施設で待機して鉄道の再開を待つ");
+  // 現在地の地域危険度が分かっていれば、判断材料として具体的に織り込む
+  if (quake?.fireRank != null && quake.fireRank >= 4)
+    judge.push("この地域は延焼の危険が高い（地域危険度ランク4以上）。煙が見えたら迷わず広い場所へ移動する");
+  if (quake?.liquefactionPL != null && quake.liquefactionPL > 15)
+    judge.push("液状化の危険度が極めて高い地域。噴砂と段差で道が使えない前提で経路を選ぶ");
+
+  // 避難後・数日
+  const life: string[] = [`${dest}で受付し、配慮事項（バリアフリー・医療・服薬）を職員に伝える`];
+  if (attrs.severe_care || attrs.wheelchair) life.push("必要なら福祉避難所への移動を相談する");
+  if (attrs.ostomate) life.push("オストメイト対応トイレの場所を確認する");
+  if (attrs.stroller) life.push("授乳・おむつ替えのできる場所を確認する");
+  life.push("余震に備え、家族・支援者に居場所と無事を伝える");
+
+  return [
+    { phase: "事前の備え", level: "平時", actions: prep },
+    { phase: "身を守る", level: "発災直後（0〜3分）", actions: now },
+    { phase: "安全を確保する", level: "揺れが収まって（3〜10分）", actions: after },
+    { phase: "避難するか判断する", level: "その後（10分〜数時間）", actions: judge },
+    { phase: "避難先・在宅避難で", level: "数時間〜数日", actions: life },
+  ];
+}
 
 // 警戒レベルに沿ったルールベースのタイムライン（APIキー未設定でも動かす）
 function fallbackTimeline(
@@ -167,6 +272,34 @@ function fallbackTimeline(
   ];
 }
 
+/** 想定災害が地震・大規模火事なら発災起点、それ以外は警戒レベル起点のタイムラインを返す */
+function isQuake(attrs: UserAttrs): boolean {
+  return attrs.hazard === "earthquake" || attrs.hazard === "fire";
+}
+
+function buildFallback(
+  attrs: UserAttrs,
+  destName?: string,
+  hazardLabel?: string,
+  quake?: QuakeInput
+): TimelinePhase[] {
+  return isQuake(attrs)
+    ? fallbackQuakeTimeline(attrs, destName, quake)
+    : fallbackTimeline(attrs, destName, hazardLabel);
+}
+
+// 現在地の地震リスクをプロンプトの一行にする（値が無ければ空文字）
+function quakeContextLine(quake?: QuakeInput): string {
+  if (!quake) return "";
+  const parts: string[] = [];
+  if (quake.totalRank != null) parts.push(`総合危険度ランク${quake.totalRank}`);
+  if (quake.fireRank != null) parts.push(`火災危険度ランク${quake.fireRank}`);
+  if (quake.buildingRank != null) parts.push(`建物倒壊危険度ランク${quake.buildingRank}`);
+  if (quake.shindo != null) parts.push(`想定計測震度${quake.shindo.toFixed(1)}`);
+  if (quake.liquefactionPL != null) parts.push(`液状化PL値${quake.liquefactionPL.toFixed(1)}`);
+  return parts.length ? `現在地の地震リスク（東京都の地域危険度・被害想定）: ${parts.join(" / ")}` : "";
+}
+
 export async function POST(req: NextRequest) {
   // IP単位レート制限（Geminiコスト悪用対策・#30）
   const limited = enforceRateLimit("timeline", req, 15, 60_000);
@@ -184,14 +317,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid input" }, { status: 400 });
   }
   const attrs: UserAttrs = parsed.data.attrs;
-  const { destName, hazardLabel, distanceKm } = parsed.data;
+  const { destName, hazardLabel, distanceKm, quake } = parsed.data;
   const language = parsed.data.language ?? "ja";
 
   // Vertex(project/認証)が無ければルールベースにフォールバック
   const ai = getGeminiClient();
   if (!ai) {
     return NextResponse.json({
-      timeline: fallbackTimeline(attrs, destName, hazardLabel),
+      timeline: buildFallback(attrs, destName, hazardLabel, quake),
       source: "fallback",
     });
   }
@@ -203,6 +336,7 @@ export async function POST(req: NextRequest) {
     hazardLabel,
     distanceKm: distanceKm != null ? Math.round(distanceKm * 10) / 10 : undefined,
     language,
+    quake,
   });
   const cachedTimeline = timelineCache.get(cacheKey);
   if (cachedTimeline) {
@@ -213,9 +347,10 @@ export async function POST(req: NextRequest) {
     .filter(([, v]) => v === true)
     .map(([k]) => k)
     .join(", ");
+  const quakeLine = isQuake(attrs) ? quakeContextLine(quake) : "";
   const prompt = `利用者の配慮属性: ${activeAttrs || "特になし"}
 想定災害: ${hazardLabel ?? "未指定"}
-推奨避難先: ${destName ?? "未指定"}${distanceKm != null ? `（現在地から約${distanceKm.toFixed(1)}km）` : ""}
+推奨避難先: ${destName ?? "未指定"}${distanceKm != null ? `（現在地から約${distanceKm.toFixed(1)}km）` : ""}${quakeLine ? `\n${quakeLine}` : ""}
 
 この利用者の状況に合わせた避難のマイ・タイムラインを作成してください。`;
 
@@ -224,7 +359,8 @@ export async function POST(req: NextRequest) {
       model: GEMINI_MODEL,
       contents: prompt,
       config: {
-        systemInstruction: `${SYSTEM}\n\n出力言語: ${LANG_INSTRUCTION[language]}`,
+        // 地震は警戒レベルで時間軸を作れないため、発災起点の指示に切り替える
+        systemInstruction: `${isQuake(attrs) ? SYSTEM_QUAKE : SYSTEM}\n\n出力言語: ${LANG_INSTRUCTION[language]}`,
         responseMimeType: "application/json",
         responseSchema: GEMINI_SCHEMA,
       },
@@ -232,7 +368,7 @@ export async function POST(req: NextRequest) {
     const out = TimelineSchema.safeParse(JSON.parse(res.text ?? "{}"));
     if (!out.success || out.data.phases.length === 0) {
       return NextResponse.json({
-        timeline: fallbackTimeline(attrs, destName, hazardLabel),
+        timeline: buildFallback(attrs, destName, hazardLabel, quake),
         source: "fallback",
       });
     }
@@ -242,7 +378,7 @@ export async function POST(req: NextRequest) {
     // 失敗してもアプリを止めない。詳細はサーバーログのみ（内部情報をクライアントに出さない）
     console.error("timeline error:", err instanceof Error ? err.message : String(err));
     return NextResponse.json({
-      timeline: fallbackTimeline(attrs, destName, hazardLabel),
+      timeline: buildFallback(attrs, destName, hazardLabel, quake),
       source: "fallback",
     });
   }

@@ -12,7 +12,12 @@ import type {
   BusStopFeature,
   AccessibleFacilityFeature,
   TempStayFeature,
+  QuakeGrid,
+  QuakeGridLayer,
+  QuakeRiskFeature,
+  QuakeRiskLayer,
 } from "@/lib/types";
+import { RANK_LABEL } from "@/lib/quakeRisk";
 import {
   OSM_TILE_HOST,
   GSI_HAZARD_HOST,
@@ -78,7 +83,52 @@ interface Props {
   tempStay?: TempStayFeature[]; // 帰宅困難者向け 都立一時滞在施設
   showTempStay?: boolean; // 一時滞在施設レイヤ表示
   routeLine?: { coordinates: [number, number][]; flooded: boolean; floodKnown: boolean } | null; // 推奨避難所への徒歩経路(#38)
+  quakeRisk?: QuakeRiskFeature[]; // 地震に関する地域危険度(町丁目)(#106)
+  quakeRiskLayer?: QuakeRiskLayer | null; // 表示する危険度指標（null=非表示）
+  quakeGrid?: QuakeGrid | null; // 想定震度・液状化の250mメッシュ
+  quakeGridLayer?: QuakeGridLayer | null; // 表示する格子指標（null=非表示）
 }
+
+// 危険度ランク1〜5の色（黄→赤。ランク1は淡く、面が地図を覆いすぎないようにする）
+const RANK_COLORS = ["#fef9c3", "#fde68a", "#fb923c", "#ef4444", "#991b1b"];
+
+// 指標(総合/建物倒壊/火災)の切替は、データを持ち替えず paint 式だけ差し替える。
+// 3指標とも properties に載せてあるので setData の再構築(5,192ポリゴン)が起きない
+function rankColorExpr(key: QuakeRiskLayer): maplibregl.ExpressionSpecification {
+  return [
+    "match",
+    ["get", key],
+    1, RANK_COLORS[0],
+    2, RANK_COLORS[1],
+    3, RANK_COLORS[2],
+    4, RANK_COLORS[3],
+    5, RANK_COLORS[4],
+    "#e5e7eb",
+  ];
+}
+
+function rankOpacityExpr(key: QuakeRiskLayer): maplibregl.ExpressionSpecification {
+  // ランクが高いほど濃く。低ランクは地図が読めるよう薄くする
+  return ["interpolate", ["linear"], ["get", key], 1, 0.18, 3, 0.4, 5, 0.6];
+}
+
+// 計測震度 5.0(震度5強)〜6.5(震度7)
+const SHINDO_COLOR: maplibregl.ExpressionSpecification = [
+  "interpolate", ["linear"], ["get", "s"],
+  5.0, "#fef3c7",
+  5.5, "#fdba74",
+  6.0, "#f97316",
+  6.5, "#b91c1c",
+];
+
+// 液状化 PL値 0〜30（PL>15 で危険度が極めて高いとされる）
+const LIQ_COLOR: maplibregl.ExpressionSpecification = [
+  "interpolate", ["linear"], ["get", "p"],
+  0, "#e0f2fe",
+  5, "#7dd3fc",
+  15, "#2563eb",
+  30, "#4c1d95",
+];
 
 function emptyFC(): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features: [] };
@@ -108,6 +158,10 @@ export default function MapView({
   tempStay = [],
   showTempStay = false,
   routeLine = null,
+  quakeRisk = [],
+  quakeRiskLayer = null,
+  quakeGrid = null,
+  quakeGridLayer = null,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -196,6 +250,52 @@ export default function MapView({
             "#15803d",
           ],
         },
+      });
+
+      // 地震の地域危険度(町丁目・#106)。面なので背景側に敷き、避難所の点を隠さない。
+      // 塗りの指標(総合/建物倒壊/火災)はレイヤー1枚を feature-state ではなく
+      // paint の切替で差し替える(データを持ち替えず描画式だけ変える)
+      map.addSource("quake-risk", {
+        type: "geojson",
+        data: emptyFC(),
+        attribution:
+          "地震に関する地域危険度測定調査（第9回）東京都都市整備局 CC BY 4.0",
+      });
+      map.addLayer({
+        id: "quake-risk-fill",
+        type: "fill",
+        source: "quake-risk",
+        layout: { visibility: "none" },
+        paint: {
+          "fill-color": rankColorExpr("totalRank"),
+          "fill-opacity": rankOpacityExpr("totalRank"),
+        },
+      });
+      map.addLayer({
+        id: "quake-risk-line",
+        type: "line",
+        source: "quake-risk",
+        layout: { visibility: "none" },
+        minzoom: 12, // 引きの画面で境界線を出すと真っ黒になるため、寄ったときだけ
+        paint: { "line-color": "#9ca3af", "line-width": 0.5, "line-opacity": 0.6 },
+      });
+
+      // 想定震度・液状化の250mメッシュ(#106)
+      map.addSource("quake-grid", {
+        type: "geojson",
+        data: emptyFC(),
+        attribution:
+          "首都直下地震等による東京の被害想定（令和4年度）東京都総務局 CC BY 4.0",
+      });
+      // 震度と液状化はメッシュのカバー範囲が違う（液状化は沖積低地のみ）。
+      // 1ソースに両方の値を載せ、filter で欠損セルを落として指標を切り替える
+      map.addLayer({
+        id: "quake-grid-fill",
+        type: "fill",
+        source: "quake-grid",
+        layout: { visibility: "none" },
+        filter: ["has", "s"],
+        paint: { "fill-color": SHINDO_COLOR, "fill-opacity": 0.45 },
       });
 
       map.addSource("all", { type: "geojson", data: emptyFC() });
@@ -374,6 +474,39 @@ export default function MapView({
         map.getCanvas().style.cursor = "pointer";
       });
       map.on("mouseleave", "tempstay-pts", () => {
+        map.getCanvas().style.cursor = "";
+      });
+
+      // 地域危険度のクリックで町丁目の3指標をまとめて表示（#106）
+      const riskPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true });
+      map.on("click", "quake-risk-fill", (e) => {
+        const f = e.features?.[0];
+        if (!f) return;
+        const p = f.properties as {
+          city?: string;
+          chome?: string;
+          totalRank?: number;
+          buildingRank?: number;
+          fireRank?: number;
+        };
+        const rank = (v?: number) =>
+          v == null ? "—" : `ランク${v}（${RANK_LABEL[v] ?? "—"}）`;
+        riskPopup
+          .setLngLat(e.lngLat)
+          .setHTML(
+            `<div style="font-size:12px;line-height:1.5">` +
+              `<b>${escapeHtml(String(p.city ?? ""))}${escapeHtml(String(p.chome ?? ""))}</b><br>` +
+              `総合危険度: ${rank(p.totalRank)}<br>` +
+              `建物倒壊: ${rank(p.buildingRank)}<br>` +
+              `火災（延焼）: ${rank(p.fireRank)}` +
+              `</div>`
+          )
+          .addTo(map);
+      });
+      map.on("mouseenter", "quake-risk-fill", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "quake-risk-fill", () => {
         map.getCanvas().style.cursor = "";
       });
 
@@ -654,6 +787,87 @@ export default function MapView({
       ],
     });
   }, [routeLine, loaded]);
+
+  // 地域危険度(町丁目)の反映。3指標すべてを properties に載せ、切替は paint 式で行う
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded) return;
+    (map.getSource("quake-risk") as maplibregl.GeoJSONSource | undefined)?.setData({
+      type: "FeatureCollection",
+      features: quakeRisk,
+    });
+  }, [quakeRisk, loaded]);
+
+  // 地域危険度の表示指標の切替（null なら非表示）
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded) return;
+    const visible = quakeRiskLayer ? "visible" : "none";
+    for (const id of ["quake-risk-fill", "quake-risk-line"]) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", visible);
+    }
+    if (quakeRiskLayer && map.getLayer("quake-risk-fill")) {
+      map.setPaintProperty("quake-risk-fill", "fill-color", rankColorExpr(quakeRiskLayer));
+      map.setPaintProperty("quake-risk-fill", "fill-opacity", rankOpacityExpr(quakeRiskLayer));
+    }
+  }, [quakeRiskLayer, loaded]);
+
+  // 250mメッシュ(想定震度・液状化)の反映。セルは矩形ポリゴンとして起こす
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded) return;
+    const src = map.getSource("quake-grid") as maplibregl.GeoJSONSource | undefined;
+    if (!src) return;
+    if (!quakeGrid) {
+      src.setData(emptyFC());
+      return;
+    }
+    const { cellLat, cellLon, cells } = quakeGrid;
+    const features: GeoJSON.Feature[] = [];
+    for (const [key, v] of Object.entries(cells)) {
+      const [iLatStr, iLonStr] = key.split(",");
+      const iLat = Number(iLatStr);
+      const iLon = Number(iLonStr);
+      if (!Number.isFinite(iLat) || !Number.isFinite(iLon)) continue;
+      const y0 = iLat * cellLat;
+      const x0 = iLon * cellLon;
+      const y1 = y0 + cellLat;
+      const x1 = x0 + cellLon;
+      const props: Record<string, number> = {};
+      if (v[0] != null) props.s = v[0];
+      if (v[1] != null) props.p = v[1];
+      if (Object.keys(props).length === 0) continue;
+      features.push({
+        type: "Feature",
+        geometry: {
+          type: "Polygon",
+          coordinates: [
+            [
+              [x0, y0],
+              [x1, y0],
+              [x1, y1],
+              [x0, y1],
+              [x0, y0],
+            ],
+          ],
+        },
+        properties: props,
+      });
+    }
+    src.setData({ type: "FeatureCollection", features });
+  }, [quakeGrid, loaded]);
+
+  // 250mメッシュの表示指標の切替（震度 / 液状化）
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded || !map.getLayer("quake-grid-fill")) return;
+    map.setLayoutProperty("quake-grid-fill", "visibility", quakeGridLayer ? "visible" : "none");
+    if (!quakeGridLayer) return;
+    const shindo = quakeGridLayer === "shindo";
+    // 値を持たないセルを filter で落とす（液状化は沖積低地しかデータが無い）
+    map.setFilter("quake-grid-fill", ["has", shindo ? "s" : "p"]);
+    map.setPaintProperty("quake-grid-fill", "fill-color", shindo ? SHINDO_COLOR : LIQ_COLOR);
+  }, [quakeGridLayer, loaded]);
 
   // 3D地形(坂・起伏)の切替
   useEffect(() => {
