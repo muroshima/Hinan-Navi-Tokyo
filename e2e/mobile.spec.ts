@@ -4,7 +4,8 @@ import { test, expect, devices } from "@playwright/test";
 // 実機と同じ条件で見るため、このファイルだけ iPhone 相当のエミュレーションを使う。
 // defaultBrowserType は外す。付いたままだと chromium プロジェクトで WebKit を起動しようとして
 // 失敗し、CI に WebKit のインストールまで要求してしまう（画面サイズとタッチの再現には不要）。
-const { defaultBrowserType: _unusedBrowserType, ...iPhone } = devices["iPhone 13"];
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const { defaultBrowserType, ...iPhone } = devices["iPhone 13"];
 test.use(iPhone);
 
 test("ボトムシートが3段階で開閉し、検索後は避難先が先に見える", async ({ page }) => {
@@ -38,6 +39,37 @@ test("ボトムシートが3段階で開閉し、検索後は避難先が先に�
   // つまみをタップすると最大まで開く
   await handle.click();
   await expect(handle).toHaveAttribute("aria-expanded", "true");
+});
+
+// pointerup のあとに click も発火するため、両方でスナップを変えると必ず1段ずれる。
+// ドラッグした先にそのまま着地することを固定する（Copilot 指摘で見つかった不具合の回帰防止）
+test("つまみをドラッグした先にそのまま着地する", async ({ page }) => {
+  await page.goto("/");
+  const handle = page.getByRole("button", { name: /情報パネルの高さを変える/ });
+  await expect(handle).toHaveAccessibleName(/現在: 小/);
+
+  // つまみの中心を掴んで dy ピクセルだけ動かす（相対移動。閾値の判定と条件を揃える）
+  const dragBy = async (dy: number) => {
+    const box = (await handle.boundingBox())!;
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    await page.mouse.move(cx, cy + dy, { steps: 15 });
+    await page.mouse.up();
+  };
+
+  // 大きく上へ引き上げれば最大まで開く（1段戻ってはいけない）
+  await dragBy(-420);
+  await expect(handle).toHaveAccessibleName(/現在: 大/);
+
+  // 大きく下げれば畳まれる
+  await dragBy(420);
+  await expect(handle).toHaveAccessibleName(/現在: 小/);
+
+  // ほとんど動かさない操作はタップとして扱い、次の段階へ進む
+  await dragBy(3);
+  await expect(handle).toHaveAccessibleName(/現在: 中/);
 });
 
 test("結果カードから地図の該当地点へ寄せられる", async ({ page }) => {

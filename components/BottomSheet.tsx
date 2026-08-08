@@ -16,8 +16,12 @@ export type Snap = "peek" | "half" | "full";
 
 // シート全体の高さ（dvh）。iOS Safari のアドレスバー伸縮で跳ねないよう vh ではなく dvh を使う
 const SHEET_HEIGHT = 88;
+/** 畳んだ状態でシートが占める高さ（dvh）。この上に重ねるもの（FAB等）が位置合わせに使う */
+export const PEEK_VH = 36;
 // 各スナップで見せる高さ（dvh）。peek でも入力欄と検索ボタンが収まる高さにする
-const VISIBLE: Record<Snap, number> = { peek: 36, half: 62, full: SHEET_HEIGHT };
+const VISIBLE: Record<Snap, number> = { peek: PEEK_VH, half: 62, full: SHEET_HEIGHT };
+// この距離までの動きはタップとみなす（px）。指は静止しているつもりでも数px動く
+const TAP_THRESHOLD_PX = 8;
 const ORDER: Snap[] = ["peek", "half", "full"];
 const SNAP_LABEL: Record<Snap, string> = { peek: "小", half: "中", full: "大" };
 
@@ -109,7 +113,28 @@ export default function BottomSheet({
     setDragOffset(next);
   }, []);
 
+  // ドラッグで着地させた直後は click を無視する。
+  // pointerup のあとに click も発火するため、両方でスナップを変えると必ず1段ずれてしまう
+  const suppressClick = useRef(false);
+
   const endDrag = useCallback(
+    (e: React.PointerEvent) => {
+      const d = dragging.current;
+      if (!d || d.pointerId !== e.pointerId) return;
+      dragging.current = null;
+      const landed = dragOffset;
+      setDragOffset(null);
+      // 指がほとんど動いていなければタップ。スナップは変えず、続けて起きる click に任せる
+      // （click 経由にしておくと、支援技術からの操作でも同じ動きになる）
+      if (Math.abs(e.clientY - d.startY) < TAP_THRESHOLD_PX) return;
+      suppressClick.current = true;
+      if (landed != null) onSnapChange(nearestSnap(landed));
+    },
+    [dragOffset, onSnapChange]
+  );
+
+  // ポインタが奪われた場合(pointercancel)は click が発火しないので、抑制フラグを残さない
+  const cancelDrag = useCallback(
     (e: React.PointerEvent) => {
       const d = dragging.current;
       if (!d || d.pointerId !== e.pointerId) return;
@@ -161,8 +186,14 @@ export default function BottomSheet({
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onClick={cycle}
+        onPointerCancel={cancelDrag}
+        onClick={() => {
+          if (suppressClick.current) {
+            suppressClick.current = false; // ドラッグの後始末。次の click は通常どおり効かせる
+            return;
+          }
+          cycle();
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();

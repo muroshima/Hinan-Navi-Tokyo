@@ -28,7 +28,7 @@ import {
   RANK_LABEL,
 } from "@/lib/quakeRisk";
 import { QRCodeSVG } from "qrcode.react";
-import BottomSheet, { type Snap } from "@/components/BottomSheet";
+import BottomSheet, { PEEK_VH, type Snap } from "@/components/BottomSheet";
 import { fallbackExtract, type FallbackAttrs } from "@/lib/triageFallback";
 import { pickSafestRoute, type FloodGrid, type RouteInfo } from "@/lib/floodRoute";
 import {
@@ -889,7 +889,9 @@ export default function Home() {
         desktopWidth={isDesktop ? sidebarWidth : undefined}
         handleLabel={
           submitted && ranked.length > 0
-            ? `${ranked[0].feature.properties.name} ほか ${Math.min(ranked.length, 8) - 1}件`
+            ? ranked.length > 1
+              ? `${ranked[0].feature.properties.name} ほか ${Math.min(ranked.length, 8) - 1}件`
+              : ranked[0].feature.properties.name
             : undefined
         }
         scrollTopSignal={sheetScrollSignal}
@@ -1367,7 +1369,7 @@ export default function Home() {
                       setSnap("peek"); // 地図を広く見せる
                     }}
                     aria-label={`${r.feature.properties.name}を地図で見る`}
-                    className="inline-flex min-h-[36px] items-center rounded border border-gray-300 px-2 text-gray-700 active:bg-gray-100 md:hidden"
+                    className="inline-flex min-h-[44px] items-center rounded border border-gray-300 px-2 text-gray-700 active:bg-gray-100 md:hidden"
                   >
                     📍 地図
                   </button>
@@ -1375,7 +1377,7 @@ export default function Home() {
                     href={gmapsWalkingUrl(origin, r.feature.geometry.coordinates)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex min-h-[36px] items-center rounded border border-blue-300 px-2 text-blue-700 hover:bg-blue-50"
+                    className="inline-flex min-h-[44px] items-center rounded border border-blue-300 px-2 text-blue-700 hover:bg-blue-50"
                   >
                     🗺 ルート
                   </a>
@@ -1659,7 +1661,8 @@ export default function Home() {
           disabled={geoLoading}
           aria-label="現在地を取得する"
           className="absolute right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-white text-xl shadow-lg active:bg-gray-100 disabled:opacity-50 md:hidden"
-          style={{ bottom: "calc(36dvh + 0.75rem)" }}
+          // 畳んだシートのすぐ上に置く。高さは BottomSheet 側の定数を参照し、二重管理にしない
+          style={{ bottom: `calc(${PEEK_VH}dvh + 0.75rem)` }}
         >
           {geoLoading ? "…" : "📍"}
         </button>
