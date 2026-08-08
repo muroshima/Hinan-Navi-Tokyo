@@ -30,7 +30,14 @@ import {
 import { QRCodeSVG } from "qrcode.react";
 import BottomSheet, { PEEK_VH, type Snap } from "@/components/BottomSheet";
 import { fallbackExtract, type FallbackAttrs } from "@/lib/triageFallback";
-import { pickSafestRoute, type FloodGrid, type RouteInfo } from "@/lib/floodRoute";
+import {
+  pickSafestRoute,
+  routeFloodRisk,
+  FLOOD_CAUTION_M,
+  FLOOD_DANGER_M,
+  type FloodGrid,
+  type RouteInfo,
+} from "@/lib/floodRoute";
 import {
   createRecognition,
   canRecognize,
@@ -663,15 +670,18 @@ export default function Home() {
   // 経路そのものは中立色の実線で出し、危険の説明は延焼・液状化チェックのパネルが担う
   const routeLine = useMemo(() => {
     if (!routeAdvisory) return null;
-    if (isQuakeContext(attrs)) {
-      return { coordinates: routeAdvisory.recommended.coordinates, flooded: false, floodKnown: false };
-    }
+    const coordinates = routeAdvisory.recommended.coordinates;
+    if (isQuakeContext(attrs)) return { coordinates, risk: "normal" as const };
     return {
-      coordinates: routeAdvisory.recommended.coordinates,
-      flooded: routeAdvisory.floodKnown && routeAdvisory.recommended.flood.maxDepthM > 0,
-      floodKnown: routeAdvisory.floodKnown,
+      coordinates,
+      risk: routeFloodRisk(routeAdvisory.recommended.flood.maxDepthM, routeAdvisory.floodKnown),
     };
   }, [routeAdvisory, attrs]);
+
+  // 表示中の経路の警戒度。地図の色分けと説明文で同じ判定を使う（食い違いを防ぐ）
+  const routeRisk = routeLine?.risk ?? "normal";
+  // 深く浸かる区間が経路のどれだけを占めるか。「1点だけ深い」と「全区間が深い」を区別して伝える
+  const deepPercent = Math.max(1, Math.round((routeAdvisory?.recommended.flood.deepRatio ?? 0) * 100));
 
   // 推奨避難所までの経路が、延焼・液状化の危険が高い地域を通らないか（#106）。
   // 地震では「避難先が安全か」より「そこへ行き着けるか」が問題になる
@@ -1135,9 +1145,11 @@ export default function Home() {
             className={`rounded-lg border p-3 text-sm ${
               !routeAdvisory.floodKnown
                 ? "border-gray-300 bg-gray-50 text-gray-700"
-                : routeAdvisory.recommended.flood.maxDepthM > 0
-                  ? "border-amber-300 bg-amber-50 text-amber-900"
-                  : "border-green-300 bg-green-50 text-green-900"
+                : routeRisk === "danger"
+                  ? "border-red-300 bg-red-50 text-red-900"
+                  : routeRisk === "caution"
+                    ? "border-orange-300 bg-orange-50 text-orange-900"
+                    : "border-blue-300 bg-blue-50 text-blue-900"
             }`}
           >
             <div className="text-xs font-bold">🧭 避難経路の浸水チェック（推奨避難所まで）</div>
@@ -1145,28 +1157,42 @@ export default function Home() {
               <p className="mt-1">
                 浸水想定データを読み込めなかったため、<b>浸水判定はできません</b>（経路のみ地図に表示）。
               </p>
-            ) : routeAdvisory.recommended.flood.maxDepthM > 0 ? (
+            ) : routeRisk === "danger" ? (
               <p className="mt-1">
-                この経路は<b>浸水想定域を通過</b>します（想定最大浸水深{" "}
-                <b>約{routeAdvisory.recommended.flood.maxDepthM}m</b>）。冠水時は迂回・垂直避難も検討してください。
+                この経路は<b>約{deepPercent}%の区間</b>が<b>膝の上（{FLOOD_DANGER_M}m）以上</b>浸かる想定です（想定最大{" "}
+                <b>約{routeAdvisory.recommended.flood.maxDepthM}m</b>）。この深さでは歩けません。
+                <b>浸水する前に避難を終える</b>ことを前提にしてください。間に合わないと判断したら、建物の上階へ移る垂直避難に切り替えます。
+              </p>
+            ) : routeRisk === "caution" ? (
+              <p className="mt-1">
+                この経路には<b>足首〜膝下（{FLOOD_CAUTION_M}〜{FLOOD_DANGER_M}m）</b>の浸水想定区間があります（想定最大{" "}
+                <b>約{routeAdvisory.recommended.flood.maxDepthM}m</b>）。歩ける深さですが、流れがあると転倒します。
+                マンホールや側溝が見えなくなる点にも注意してください。
               </p>
             ) : (
-              <p className="mt-1">この経路は<b>浸水想定域を通りません</b>（想定区域図ベース）。</p>
+              <p className="mt-1">
+                この経路に<b>{FLOOD_CAUTION_M}m以上の浸水想定区間はありません</b>
+                {routeAdvisory.recommended.flood.maxDepthM > 0 &&
+                  `（想定最大 約${routeAdvisory.recommended.flood.maxDepthM}m）`}
+                。ただし当日の冠水や通行止めまでは分かりません。
+              </p>
             )}
             {routeAdvisory.floodKnown && routeAdvisory.avoidedFlood && (
               <p className="mt-1 text-[12px]">
                 ✅ 最短経路（最大浸水深 約{routeAdvisory.shortest.flood.maxDepthM}m）より
-                <b>浸水を避けられる経路</b>を地図に表示しています。
+                <b>浸水の浅い経路</b>を地図に表示しています。
               </p>
             )}
             <p className="mt-1 text-[10px] text-gray-500">
               地図の
-              {!routeAdvisory.floodKnown
-                ? "青の実線"
-                : routeAdvisory.recommended.flood.maxDepthM > 0
-                  ? "赤の破線（流れて見えます）"
-                  : "緑の実線"}
-              が経路（浸水域通過は破線・回避/判定不能は実線で色に頼らず区別）。出典: 東京都「浸水予想区域図」（CC BY 4.0）を粗いグリッドに集約。OSRMの代替経路から浸水曝露が最小のものを選択（経路自体の再計算は行いません）
+              {routeRisk === "danger"
+                ? "赤の破線（流れて見えます）"
+                : routeRisk === "caution"
+                  ? "橙の破線"
+                  : "青の実線"}
+              が経路（深い浸水想定は破線・それ以外は実線で、色に頼らず区別）。
+              経路は東京都「浸水予想区域図」（CC BY 4.0）を粗いグリッドに集約したデータで判定し、OSRMの代替経路のうち
+              <b>浸水曝露が最小のもの</b>を選んでいます（経路自体の再計算は行いません）。東京の低地では、どの経路を選んでも浸水想定域を通ることがあります。
             </p>
           </div>
         )}

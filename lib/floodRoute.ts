@@ -8,11 +8,33 @@ export interface FloodGrid {
   cells: Record<string, [number, number | null]>; // "iLat,iLon" -> [最大浸水深m, 地盤高m|null]
 }
 
+// 経路の警戒度(#110)。深さを見ずに「浸水深>0」で一律に警告すると、くるぶし程度の想定でも
+// 2m超の想定でも同じ真っ赤になり、警告として機能しない。
+// （実測: 江戸川区・江東区はもちろん、台地のはずの千代田区でも荒川氾濫想定で全区間が浸水域だった。
+//   浸水グリッド全体でも15%は0.3m未満で、そこまで赤にすると常時警告になる）
+// 目安として、成人でも 0.5m 前後で歩行が困難になり、0.3m 程度でも流れがあれば危険とされる。
+export const FLOOD_CAUTION_M = 0.3; // くるぶし〜膝下。流れがあると危険
+export const FLOOD_DANGER_M = 0.5; // 膝上。歩行が困難になる
+
+export type RouteRisk = "danger" | "caution" | "normal";
+
+/** 経路上の最大浸水深から警戒度を決める。判定不能(グリッド未読込・地震など)は normal 扱い */
+export function routeFloodRisk(maxDepthM: number, floodKnown: boolean): RouteRisk {
+  if (!floodKnown) return "normal";
+  if (maxDepthM >= FLOOD_DANGER_M) return "danger";
+  if (maxDepthM >= FLOOD_CAUTION_M) return "caution";
+  return "normal";
+}
+
 export interface RouteFloodStats {
   maxDepthM: number; // 経路上セルの最大浸水深(0=浸水域を通らない)
   floodedPoints: number; // 浸水域(深さ>0)に入ったサンプル点数
   totalPoints: number; // サンプル総点数
   floodedRatio: number; // 浸水域通過の割合(0..1)
+  // 歩行が困難になる深さ(FLOOD_DANGER_M以上)の区間が経路に占める割合(0..1)(#110)。
+  // 最大値だけでは「1点だけ深い」経路と「全区間が深い」経路が同じ表示になり、
+  // どれくらい覚悟が要るのか分からないため、広がりも併せて示す
+  deepRatio: number;
 }
 
 // 経路(座標列 [lng,lat][])の浸水曝露を集計。
@@ -21,6 +43,7 @@ export interface RouteFloodStats {
 export function analyzeRoute(coords: [number, number][], grid: FloodGrid): RouteFloodStats {
   let maxDepthM = 0;
   let floodedPoints = 0;
+  let deepPoints = 0;
   let prevIl: number | null = null;
   let prevIo: number | null = null;
   let prevDepth = 0;
@@ -39,6 +62,7 @@ export function analyzeRoute(coords: [number, number][], grid: FloodGrid): Route
     }
     if (d > 0) {
       floodedPoints += 1;
+      if (d >= FLOOD_DANGER_M) deepPoints += 1;
       if (d > maxDepthM) maxDepthM = d;
     }
   }
@@ -48,6 +72,7 @@ export function analyzeRoute(coords: [number, number][], grid: FloodGrid): Route
     floodedPoints,
     totalPoints,
     floodedRatio: totalPoints ? floodedPoints / totalPoints : 0,
+    deepRatio: totalPoints ? deepPoints / totalPoints : 0,
   };
 }
 
@@ -71,7 +96,7 @@ export function pickSafestRoute(routes: RouteInfo[], grid: FloodGrid | null): {
     ...r,
     flood: grid
       ? analyzeRoute(r.coordinates, grid)
-      : { maxDepthM: 0, floodedPoints: 0, totalPoints: r.coordinates.length, floodedRatio: 0 },
+      : { maxDepthM: 0, floodedPoints: 0, totalPoints: r.coordinates.length, floodedRatio: 0, deepRatio: 0 },
   }));
   const ranked = [...analyzed].sort((a, b) => {
     // まず浸水曝露(最大深さ→通過割合)、同等なら距離で比較
