@@ -87,6 +87,8 @@ interface Props {
   quakeRiskLayer?: QuakeRiskLayer | null; // 表示する危険度指標（null=非表示）
   quakeGrid?: QuakeGrid | null; // 想定震度・液状化の250mメッシュ
   quakeGridLayer?: QuakeGridLayer | null; // 表示する格子指標（null=非表示）
+  // 結果リストから選ばれた避難所へ寄せる(#107)。seq は同じ避難所を選び直したときも再実行させるための連番
+  focus?: { id: string; coordinates: [number, number]; seq: number } | null;
 }
 
 // 危険度ランク1〜5の色（黄→赤。ランク1は淡く、面が地図を覆いすぎないようにする）
@@ -162,6 +164,7 @@ export default function MapView({
   quakeRiskLayer = null,
   quakeGrid = null,
   quakeGridLayer = null,
+  focus = null,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -897,6 +900,24 @@ export default function MapView({
       map.easeTo({ pitch: buildings3d ? 55 : 0, duration: 700 });
     }
   }, [buildings3d, threeD, loaded]);
+
+  // 結果リストで選ばれた避難所へ寄せる(#107)。
+  // スマホでは一覧と地図を同時に見られないため、カードから位置を確かめる導線を用意する
+  const focusSeq = focus?.seq;
+  const focusLng = focus?.coordinates[0];
+  const focusLat = focus?.coordinates[1];
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded || focusLng == null || focusLat == null) return;
+    // essential は付けない。付けると視差の軽減(prefers-reduced-motion)を無視して飛んでしまう。
+    // 省略しておけば、その設定の端末では滑らかな移動ではなく即座に移動する
+    map.flyTo({
+      center: [focusLng, focusLat],
+      zoom: Math.max(map.getZoom(), 16),
+      duration: 700,
+    });
+    // seq を依存に含め、同じ避難所を選び直したときも寄せ直す
+  }, [focusSeq, focusLng, focusLat, loaded]);
 
   // 現在地マーカー（origin が null ならマーカーを除去）
   const originMarker = useRef<maplibregl.Marker | null>(null);
