@@ -132,6 +132,46 @@ const LIQ_COLOR: maplibregl.ExpressionSpecification = [
   30, "#4c1d95",
 ];
 
+// 避難経路の線幅(#110)。引きでも寄りでも追えるようズームに連動させる
+const ROUTE_WIDTH: maplibregl.ExpressionSpecification = [
+  "interpolate", ["linear"], ["zoom"],
+  10, 4,
+  14, 6,
+  17, 10,
+];
+// 縁取りは本線より一回り太くする
+const ROUTE_CASING_WIDTH: maplibregl.ExpressionSpecification = [
+  "interpolate", ["linear"], ["zoom"],
+  10, 7,
+  14, 10,
+  17, 15,
+];
+
+// 危険な経路の破線パターン。視差の軽減が有効な環境ではこの形のまま静止させる
+const DASH_STATIC: [number, number] = [2, 1.5];
+
+// 破線を少しずつずらして「流れる」ように見せる連番（marching ants）。
+// 点滅(フラッシュ)は採用しない: WCAG 2.3.1 の光過敏性発作リスクがあり、
+// 災害時に長く見続ける画面では疲労も大きい。流れる破線なら進行方向も示せる。
+const DASH_SEQUENCE: number[][] = [
+  [0, 4, 3],
+  [0.5, 4, 2.5],
+  [1, 4, 2],
+  [1.5, 4, 1.5],
+  [2, 4, 1],
+  [2.5, 4, 0.5],
+  [3, 4, 0],
+  [0, 0.5, 3, 3.5],
+  [0, 1, 3, 3],
+  [0, 1.5, 3, 2.5],
+  [0, 2, 3, 2],
+  [0, 2.5, 3, 1.5],
+  [0, 3, 3, 1],
+  [0, 3.5, 3, 0.5],
+];
+// 1コマの表示時間(ms)。滑らかに見えて描画負荷も低い程度に間引く
+const DASH_FRAME_MS = 70;
+
 function emptyFC(): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features: [] };
 }
@@ -171,6 +211,20 @@ export default function MapView({
   // load完了をstateで管理し、各反映effectの依存に含める
   // (loadより先にデータが届いても、loaded反転で確実に再反映される)
   const [loaded, setLoaded] = useState(false);
+  // 端末の「視差の軽減」設定。有効なら経路の破線アニメーションを止める(#110)
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduceMotion(mq.matches);
+    update();
+    // 旧Safari(addEventListener非対応)は addListener にフォールバック
+    if (mq.addEventListener) mq.addEventListener("change", update);
+    else mq.addListener(update);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", update);
+      else mq.removeListener(update);
+    };
+  }, []);
 
   // 初期化（マウント時に1回）＋アンマウントで破棄
   useEffect(() => {
@@ -551,11 +605,27 @@ export default function MapView({
         });
       }
 
-      // 推奨避難所への徒歩経路(#38)。全ポイントレイヤーより下(all-ptsの直下)に敷き、点を隠さない。
-      // a11y: 色だけに頼らず「浸水域通過=破線・琥珀 / 回避=実線・緑 / 判定不能=実線・灰」でパターンも併用。
-      // (line-dasharrayはデータ駆動不可のため、浸水通過だけ別レイヤーで破線描画する)
+      // 推奨避難所への徒歩経路(#38, #110)。全ポイントレイヤーより下(all-ptsの直下)に敷き、点を隠さない。
+      // a11y: 色だけに頼らず「危険=破線・赤 / 回避=実線・緑 / 判定不能=実線・青」でパターンも併用。
+      // (line-dasharrayはデータ駆動不可のため、危険な経路だけ別レイヤーで破線描画する)
       map.addSource("route", { type: "geojson", data: emptyFC() });
-      // 実線: 浸水を通らない(回避=緑) or 判定不能(灰)
+      // 白い縁取り。OSMの道路は黄〜橙系が多く、線を重ねただけでは背景に埋もれて追えない(#110)
+      map.addLayer(
+        {
+          id: "route-line-casing",
+          type: "line",
+          source: "route",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-width": ROUTE_CASING_WIDTH,
+            "line-color": "#ffffff",
+            "line-opacity": 0.95,
+          },
+        },
+        "all-pts"
+      );
+      // 実線: 危険を通らない(回避=緑) or 判定不能(青)。
+      // 判定不能に灰を使うと地図の道路色と同化するため、彩度のある青にする
       map.addLayer(
         {
           id: "route-line",
@@ -564,14 +634,14 @@ export default function MapView({
           filter: ["!=", ["get", "flooded"], true],
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
-            "line-width": 5,
-            "line-opacity": 0.85,
-            "line-color": ["case", ["==", ["get", "floodKnown"], false], "#6b7280", "#16a34a"],
+            "line-width": ROUTE_WIDTH,
+            "line-opacity": 0.95,
+            "line-color": ["case", ["==", ["get", "floodKnown"], false], "#1d4ed8", "#16a34a"],
           },
         },
         "all-pts"
       );
-      // 破線: 浸水域を通過(琥珀)。色覚に依存せずパターンで危険を区別
+      // 破線: 危険な区間を通過(赤)。琥珀は地図の幹線道路と同系色で埋もれるため警告色の赤にする
       map.addLayer(
         {
           id: "route-line-flood",
@@ -580,10 +650,10 @@ export default function MapView({
           filter: ["==", ["get", "flooded"], true],
           layout: { "line-cap": "butt", "line-join": "round" },
           paint: {
-            "line-width": 5,
-            "line-opacity": 0.9,
-            "line-color": "#f59e0b",
-            "line-dasharray": [2, 1.5],
+            "line-width": ROUTE_WIDTH,
+            "line-opacity": 1,
+            "line-color": "#dc2626",
+            "line-dasharray": DASH_STATIC,
           },
         },
         "all-pts"
@@ -900,6 +970,34 @@ export default function MapView({
       map.easeTo({ pitch: buildings3d ? 55 : 0, duration: 700 });
     }
   }, [buildings3d, threeD, loaded]);
+
+  // 危険な経路の破線を流して注意を引く(#110)。
+  // 危険な経路が表示されているときだけ動かし、それ以外では requestAnimationFrame を回さない。
+  const routeFlooded = routeLine?.flooded === true;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded || !map.getLayer("route-line-flood")) return;
+    if (!routeFlooded || reduceMotion) {
+      map.setPaintProperty("route-line-flood", "line-dasharray", DASH_STATIC);
+      return;
+    }
+    let raf = 0;
+    let step = 0;
+    let last = 0;
+    const tick = (t: number) => {
+      if (t - last >= DASH_FRAME_MS) {
+        step = (step + 1) % DASH_SEQUENCE.length;
+        // スタイル差し替え等でレイヤーが消えている場合に備えて都度確認する
+        if (map.getLayer("route-line-flood")) {
+          map.setPaintProperty("route-line-flood", "line-dasharray", DASH_SEQUENCE[step]);
+        }
+        last = t;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [routeFlooded, reduceMotion, loaded]);
 
   // 結果リストで選ばれた避難所へ寄せる(#107)。
   // スマホでは一覧と地図を同時に見られないため、カードから位置を確かめる導線を用意する

@@ -1162,9 +1162,9 @@ export default function Home() {
             <p className="mt-1 text-[10px] text-gray-500">
               地図の
               {!routeAdvisory.floodKnown
-                ? "灰の実線"
+                ? "青の実線"
                 : routeAdvisory.recommended.flood.maxDepthM > 0
-                  ? "琥珀の破線"
+                  ? "赤の破線（流れて見えます）"
                   : "緑の実線"}
               が経路（浸水域通過は破線・回避/判定不能は実線で色に頼らず区別）。出典: 東京都「浸水予想区域図」（CC BY 4.0）を粗いグリッドに集約。OSRMの代替経路から浸水曝露が最小のものを選択（経路自体の再計算は行いません）
             </p>
@@ -1200,7 +1200,7 @@ export default function Home() {
               </p>
             )}
             <p className="mt-1 text-[10px] text-gray-500">
-              地図の灰の実線が推奨避難所までの経路。経路上を約100m間隔でサンプリングし、通過する町丁目の地域危険度と250mメッシュの液状化想定を当てています。
+              地図の青い実線が推奨避難所までの経路。経路上を約100m間隔でサンプリングし、通過する町丁目の地域危険度と250mメッシュの液状化想定を当てています。
             </p>
           </div>
         )}
