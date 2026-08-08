@@ -3,13 +3,17 @@
 //  - 同一オリジンのみ扱う（外部タイル/ジオコーディング/LLM等は素通し＝オフライン時は自然に失敗）
 //  - アプリシェル(/)と避難所データ(/data/*)を precache し、圏外でも検索できるようにする
 //  - /api/* はサーバー必須のため network-only（キャッシュしない）
-const VERSION = "v1";
+const VERSION = "v2";
 const PREFIX = "hinan-navi-";
 const CACHE = `${PREFIX}${VERSION}`;
 const PRECACHE = [
   "/",
   "/data/evacuation.geojson",
   "/data/toilets.geojson",
+  // 地震データ(#106)。大地震の直後は通信が輻輳するため、危険度と想定被害こそ
+  // 手元に持っておく価値がある。圏外でも延焼リスクを避けた避難先を選べるようにする
+  "/data/quake_risk.geojson",
+  "/data/quake_grid.json",
   "/data/metadata.json",
   "/manifest.webmanifest",
   "/icon-192x192.png",

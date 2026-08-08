@@ -16,6 +16,7 @@ export interface FallbackAttrs {
   severe_care: boolean;
   night: boolean;
   bad_weather: boolean;
+  outside: boolean;
   location: string;
   hazard: FallbackHazard;
 }
@@ -52,6 +53,22 @@ export function fallbackExtract(text: string): FallbackAttrs {
     severe_care: has("寝たきり", "重度", "要介護", "大型ベッド", "着替え介助", "介護が必要", "車いす全介助"),
     night: has("夜", "夜間", "今夜", "未明", "暗い", "深夜"),
     bad_weather: has("雨", "大雨", "荒天", "台風", "嵐", "暴風", "雪", "悪天候"),
+    // 外出中＝地震では帰宅困難になり得る。自宅にいる前提と読める語は拾わない
+    outside: has(
+      "外出",
+      "職場",
+      "会社",
+      "勤務",
+      "学校",
+      "通勤",
+      "通学",
+      "出先",
+      "買い物中",
+      "電車",
+      "駅にい",
+      "帰宅困難",
+      "帰れな"
+    ),
     location: (text.match(/[^\s、。,（）()]{1,8}?(?:区|市|町|村)/) ||
       text.match(/[^\s、。,（）()]{1,12}?駅/) || [""])[0],
     hazard: detectHazard(text),

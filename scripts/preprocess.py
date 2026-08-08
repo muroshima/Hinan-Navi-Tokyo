@@ -538,6 +538,30 @@ SOURCES = [
         'attribution': '「都立の一時滞在施設」（東京都総務局）（CC BY 4.0）／ジオコーディング: 国土地理院 住所検索API',
     },
     {
+        # 生成は scripts/quake_data.py（地震データは元データの体系が別で処理も重いため分離）
+        'file': 'quake_risk.geojson',
+        'datasets': ['地震に関する地域危険度測定調査（第9回・令和4年9月公表）地域危険度一覧'],
+        'provider': '東京都（都市整備局）',
+        'license': 'CC BY 4.0',
+        'source_url': 'https://catalog.data.metro.tokyo.lg.jp/dataset/t000008d0000000012',
+        'retrieved': '2026-08',
+        'processing': 'SHP(平面直角座標系第9系・JGD2000)の町丁目ポリゴンを経緯度へ逆変換し、建物倒壊/火災/総合の危険度ランク(1〜5)を保持したGeoJSON化。配信量を抑えるため約15mの許容誤差で簡素化し座標を小数4桁に丸め',
+        'attribution': '「地震に関する地域危険度測定調査（第9回）」（東京都都市整備局）（CC BY 4.0）',
+    },
+    {
+        'file': 'quake_grid.json',
+        'datasets': [
+            '震度分布・液状化（令和4年度 首都直下地震等による東京の被害想定結果）計測震度50mメッシュ',
+            '同 液状化データ250mメッシュ',
+        ],
+        'provider': '東京都（総務局）',
+        'license': 'CC BY 4.0',
+        'source_url': 'https://catalog.data.metro.tokyo.lg.jp/dataset/t000003d2000000390',
+        'retrieved': '2026-08',
+        'processing': '都心南部直下地震（M7.3）のケースを採用。計測震度の50mメッシュ(約69万件)を250mメッシュへ集約(セル内最大=安全側)し、液状化(PL値・沈下量)と同一格子に統合',
+        'attribution': '「首都直下地震等による東京の被害想定（令和4年度）」（東京都総務局）（CC BY 4.0）',
+    },
+    {
         'file': '(高齢化率の付与に使用・町丁目粒度)',
         'datasets': [
             '令和2年国勢調査 小地域(町丁・字等)集計 第3表 年齢別人口(東京都)',
@@ -563,7 +587,21 @@ SOURCES = [
 ]
 
 
+def count_quake_outputs(counts):
+    """地震データ(scripts/quake_data.py の生成物)の件数を実ファイルから数える。
+    未生成なら record_count は None のままにする（このスクリプト単体でも失敗させない）"""
+    risk = os.path.join(OUT, 'quake_risk.geojson')
+    if os.path.exists(risk):
+        with open(risk, encoding='utf-8') as f:
+            counts['quake_risk.geojson'] = len(json.load(f).get('features', []))
+    grid = os.path.join(OUT, 'quake_grid.json')
+    if os.path.exists(grid):
+        with open(grid, encoding='utf-8') as f:
+            counts['quake_grid.json'] = len(json.load(f).get('cells', {}))
+
+
 def write_metadata(counts):
+    count_quake_outputs(counts)
     meta = {
         'generated_note': 'scripts/preprocess.py による自動生成。出典・ライセンスの詳細は docs/DATA.md を参照',
         'datasets': [],

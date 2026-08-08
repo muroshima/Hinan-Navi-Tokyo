@@ -18,6 +18,7 @@ const AttrsSchema = z.object({
   severe_care: z.boolean(),
   night: z.boolean(),
   bad_weather: z.boolean(),
+  outside: z.boolean(),
   location: z.string().default(""), // 常にstringに正規化（fallbackとレスポンス形を揃える）
   hazard: z.enum([
     "flood",
@@ -51,6 +52,10 @@ const GEMINI_SCHEMA = {
     severe_care: { type: Type.BOOLEAN, description: "寝たきり・重度障害・要介護である" },
     night: { type: Type.BOOLEAN, description: "夜間・暗い時間帯の避難である" },
     bad_weather: { type: Type.BOOLEAN, description: "雨・大雨・荒天・台風・雪など悪天候である" },
+    outside: {
+      type: Type.BOOLEAN,
+      description: "外出中である（職場・学校・買い物・移動中など自宅から離れている。帰宅困難になり得る）",
+    },
     location: { type: Type.STRING, description: "文中の地名・住所・駅名など出発地。無ければ空文字" },
     hazard: {
       type: Type.STRING,
@@ -80,6 +85,7 @@ const GEMINI_SCHEMA = {
     "severe_care",
     "night",
     "bad_weather",
+    "outside",
     "location",
     "hazard",
   ],
@@ -88,6 +94,7 @@ const GEMINI_SCHEMA = {
 const SYSTEM = `あなたは防災避難支援アシスタントです。利用者が自然文で伝える状況から、避難所選定に必要な属性を抽出します。
 本人だけでなく同行者（例: 車椅子の母と避難）の配慮要件も該当属性を true にします。
 オストメイト/人工肛門/ストーマ → ostomate、寝たきり/重度/要介護 → severe_care、夜間/暗い時間帯 → night、雨・大雨・台風・雪などの悪天候 → bad_weather を true にします。
+職場/会社/学校/外出中/買い物中/電車の中など、自宅から離れている状況が読み取れる場合は outside を true にします（地震では帰宅困難者になり得るため）。自宅にいる前提や言及がなければ false です。
 文中に地名・住所・駅名（例「江戸川区」「新宿駅」）があれば location に入れます（無ければ空文字）。
 hazardは: 水害/氾濫/洪水/浸水→flood、内水氾濫→inland_flood、土砂/崖崩れ→landslide、高潮→storm_surge、津波→tsunami、地震→earthquake、火災/火事→fire、火山/噴火→volcano。
 明示されていない属性は false、災害種別の言及がなければ hazard は none にしてください。推測しすぎないこと。`;
