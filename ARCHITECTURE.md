@@ -36,7 +36,7 @@
 **Terraform（GCS backend）** で Cloud Run / Vertex AI / Artifact Registry / Cloud Build / BigQuery を管理。Cloud Build でコンテナをビルド→Artifact Registry→**Cloud Run（min-instances=0）** にデプロイ。BigQuery は前処理(空間結合)のみに使用。詳細は [`infra/terraform/`](infra/terraform/)。
 
 ### 前提: どのアカウントで実行するか
-このプロジェクトは**個人アカウント**（`tagofan@gmail.com` / プロジェクト `hinan-navi-tokyo`）で動かしている。
+このプロジェクトは**個人の Google アカウント**（GCP プロジェクト `hinan-navi-tokyo`）で動かしている。
 Terraform の state は GCS backend にあり、認証は **ADC**（`gcloud auth application-default login` で入れた資格情報）を見る。
 業務アカウントの ADC が入っている環境では state の読み取りが `403 AccessDenied` で落ちる。
 
@@ -44,7 +44,7 @@ ADC を入れ替えると業務側の作業に影響するため、**個人ア�
 
 ```bash
 cd infra/terraform
-GOOGLE_OAUTH_ACCESS_TOKEN="$(gcloud auth print-access-token --account=tagofan@gmail.com)" \
+GOOGLE_OAUTH_ACCESS_TOKEN="$(gcloud auth print-access-token --account=<このプロジェクトの所有アカウント>)" \
   terraform apply -auto-approve -var 'run_image=...:TAG'
 ```
 
@@ -52,6 +52,7 @@ GOOGLE_OAUTH_ACCESS_TOKEN="$(gcloud auth print-access-token --account=tagofan@gm
 - 非対話（`!` 実行やスクリプト）では承認プロンプトに答えられないので `-auto-approve` が要る。
   **その前に必ず `plan` で `to destroy` が 0 であることを確かめる**（下の地雷対策も参照）。
 - `gcloud builds submit` 側は ADC ではなく gcloud の資格情報を使うので `--account`／`--project` の明示で足りる。
+- アカウント名はここに書かない。`gcloud auth list` で確認する。
 
 ### 運用: コスト停止・再開（提出後のコスト戦略）
 Cloud Run は **min-instances=0** でアイドル時は無課金だが、提出後にライブデモを止める/再開する手順を明記する（ハッカソン提出物・イメージ・データは残す）。

@@ -28,11 +28,18 @@ if (!heads.length) { console.error("セクションが見つかりません"); p
 // 字数の比で持ち時間を分け、5秒単位に丸める
 const sum = heads.reduce((a, h) => a + h.chars, 0);
 let alloc = heads.map((h) => Math.max(STEP, Math.round((h.chars / sum) * TOTAL / STEP) * STEP));
-// 丸めで生じた差は、いちばん長いセクションで吸収する
+// 丸めで生じた差は 5秒ずつ、長いセクションから順に配る。
+// 1か所へまとめて寄せると、そのセクションだけ割当と実測が大きくずれる
+// （地震パートに13秒乗って「237字/分」という緩すぎる配分になっていた）
 let diff = TOTAL - alloc.reduce((a, b) => a + b, 0);
-if (diff !== 0) {
-  const idx = alloc.indexOf(Math.max(...alloc));
-  alloc[idx] += diff;
+const order = alloc.map((_, i) => i).sort((x, y) => alloc[y] - alloc[x]);
+for (let k = 0; diff !== 0 && k < order.length * 20; k++) {
+  const i = order[k % order.length];
+  const d = diff > 0 ? STEP : -STEP;
+  if (alloc[i] + d >= STEP) {
+    alloc[i] += d;
+    diff -= d;
+  }
 }
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
