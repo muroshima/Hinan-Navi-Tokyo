@@ -154,10 +154,18 @@ export default function BottomSheet({
     [dragOffset, onSnapChange]
   );
 
-  // つまみのタップ／Enter で次の段階へ。full の次は peek へ戻る
+  // つまみのタップ／Enter で次の段階へ。full の次は peek へ戻る。
+  // 素早く2回叩かれても1段ずつ進むよう、次の値は ref で自前に進める。
+  // props の snap をそのまま見ると、再レンダリング前の2回目が同じ遷移を繰り返してしまう
+  const snapRef = useRef(snap);
+  useEffect(() => {
+    snapRef.current = snap;
+  }, [snap]);
   const cycle = useCallback(() => {
-    onSnapChange(ORDER[(ORDER.indexOf(snap) + 1) % ORDER.length]);
-  }, [snap, onSnapChange]);
+    const next = ORDER[(ORDER.indexOf(snapRef.current) + 1) % ORDER.length];
+    snapRef.current = next;
+    onSnapChange(next);
+  }, [onSnapChange]);
 
   const offset = dragOffset ?? offsetOf(snap);
 

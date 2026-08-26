@@ -57,9 +57,11 @@ test("つまみをドラッグした先にそのまま着地する", async ({ pa
   await page.getByRole("button", { name: "避難所をさがす" }).click();
   const handle = page.getByRole("button", { name: /情報パネルの高さを変える/ });
   await expect(handle).toBeVisible({ timeout: 15_000 });
-  // 検索直後は中段。畳んでから開き具合を確かめる
-  await handle.click(); // 中 → 大
-  await handle.click(); // 大 → 小
+  // 検索直後は中段。畳んでから開き具合を確かめる（各遷移を待ってから次を叩く）
+  await expect(handle).toHaveAccessibleName(/現在: 中/);
+  await handle.click();
+  await expect(handle).toHaveAccessibleName(/現在: 大/);
+  await handle.click();
   await expect(handle).toHaveAccessibleName(/現在: 小/);
 
   // つまみの中心を掴んで dy ピクセルだけ動かす（相対移動。閾値の判定と条件を揃える）
@@ -175,4 +177,21 @@ test.describe("配色", () => {
     expect(c.h1).toBeGreaterThan(4.5);
     expect(c.textarea).toBeGreaterThan(4.5);
   });
+});
+
+// 素早く2回叩いても1段ずつ進むこと（props の snap を直接見ていた頃は
+// 再レンダリング前の2回目が同じ遷移を繰り返し、1段しか進まなかった）
+test("つまみを続けて叩いても1段ずつ進む", async ({ page }) => {
+  await page.goto("/");
+  await page
+    .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
+    .fill("大地震で火事が広がっている。足の悪い祖母と逃げたい");
+  await page.getByRole("button", { name: "避難所をさがす" }).click();
+  const handle = page.getByRole("button", { name: /情報パネルの高さを変える/ });
+  await expect(handle).toHaveAccessibleName(/現在: 中/, { timeout: 15_000 });
+
+  // 待たずに2回続けて叩く: 中 → 大 → 小 と2段進むはず
+  await handle.click({ delay: 0 });
+  await handle.click({ delay: 0 });
+  await expect(handle).toHaveAccessibleName(/現在: 小/);
 });
