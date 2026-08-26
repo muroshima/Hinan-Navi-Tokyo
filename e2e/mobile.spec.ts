@@ -33,7 +33,7 @@ test("相談してから地図とシートが現れ、検索後は避難先が�
     timeout: 15_000,
   });
   await expect(input).toBeHidden();
-  await expect(page.getByText("他の候補")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 15_000 });
 
   // 畳んだ入力欄は開き直せる
   await page.getByRole("button", { name: "条件を変えて探し直す" }).click();
@@ -94,7 +94,7 @@ test("結果カードから地図の該当地点へ寄せられる", async ({ pa
     .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
     .fill("高齢の祖父と一緒。地震のとき逃げられる所を教えて");
   await page.getByRole("button", { name: "避難所をさがす" }).click();
-  await expect(page.getByText("他の候補")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 15_000 });
 
   // カードの「地図」ボタンでシートが畳まれ、地図が見える状態になる
   const mapButton = page.getByRole("button", { name: /を地図で見る$/ }).first();
@@ -103,20 +103,34 @@ test("結果カードから地図の該当地点へ寄せられる", async ({ pa
 });
 
 test("指で操作する画面では主要な操作要素が44px以上ある", async ({ page }) => {
+  // 手が震える状況でも押し間違えないだけの大きさがあること。
+  // レイヤのトグル類は検索後にしか描画されないので、相談中と検索後の両方で測る(#118)
+  const measure = () =>
+    page.evaluate(() => {
+      const targets = document.querySelectorAll(
+        "aside button, aside select, aside input, aside summary, aside [role=button]"
+      );
+      return [...targets]
+        .filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.height > 0 && r.height < 44;
+        })
+        .map((el) => `${el.tagName}: ${(el.textContent || "").trim().slice(0, 20)}`);
+    });
+
   await page.goto("/");
-  // 手が震える状況でも押し間違えないだけの大きさがあること
-  const tooSmall = await page.evaluate(() => {
-    const targets = document.querySelectorAll(
-      "aside button, aside select, aside input, aside [role=button]"
-    );
-    return [...targets]
-      .filter((el) => {
-        const r = el.getBoundingClientRect();
-        return r.height > 0 && r.height < 44;
-      })
-      .map((el) => `${el.tagName}: ${(el.textContent || "").trim().slice(0, 20)}`);
-  });
-  expect(tooSmall).toEqual([]);
+  expect(await measure()).toEqual([]);
+
+  await page
+    .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
+    .fill("大地震で火事が広がっている。足の悪い祖母と逃げたい");
+  await page.getByRole("button", { name: "避難所をさがす" }).click();
+  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 15_000 });
+  // シートを最大まで開いて、畳んでいた操作要素も対象に含める
+  const handle = page.getByRole("button", { name: /情報パネルの高さを変える/ });
+  await handle.click();
+  await expect(handle).toHaveAccessibleName(/現在: 大/);
+  expect(await measure()).toEqual([]);
 });
 
 // 結論だけ先に見せ、根拠と2位以下は畳んでおく(#118)。
@@ -152,27 +166,51 @@ test("根拠と2位以下は畳まれていて、開くと中身が出る", asyn
 test.describe("配色", () => {
   test.use({ colorScheme: "dark" });
   test("ダークモード設定でも文字が背景に埋もれない", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/", { waitUntil: "networkidle" });
+    // スタイル適用前に測ると地も文字も初期値になり、常に「同じ色」＝比率1で通ってしまう
+    await expect(page.locator("h1")).toBeVisible();
+    await page.waitForFunction(
+      () => getComputedStyle(document.body).backgroundColor === "rgb(248, 250, 252)"
+    );
     const c = await page.evaluate(() => {
-      const lum = (rgb: string) => {
-        const m = rgb.match(/\d+(\.\d+)?/g);
-        if (!m) return null;
-        const [r, g, b] = m.slice(0, 3).map(Number).map((v) => {
+      // Tailwind v4 の色は getComputedStyle が lab()/oklch() 表記で返すことがあり、
+      // 数値を素朴に取り出すと sRGB として誤読してしまう。
+      // canvas に塗って実際のピクセル値を読み、確実に RGB へ落とす
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 1;
+      const ctx = canvas.getContext("2d")!;
+      const toRgb = (css: string): [number, number, number] => {
+        ctx.clearRect(0, 0, 1, 1);
+        ctx.fillStyle = "#000";
+        ctx.fillStyle = css; // 解釈できない値なら直前の #000 が残る
+        ctx.fillRect(0, 0, 1, 1);
+        const d = ctx.getImageData(0, 0, 1, 1).data;
+        return [d[0], d[1], d[2]];
+      };
+      const lum = (css: string) => {
+        const [r, g, b] = toRgb(css).map((v) => {
           const s = v / 255;
           return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
         });
         return 0.2126 * r + 0.7152 * g + 0.0722 * b;
       };
-      const h1 = document.querySelector("h1")!;
-      const ta = document.querySelector("textarea")!;
-      const bodyBg = lum(getComputedStyle(document.body).backgroundColor)!;
+      const bodyBg = lum(getComputedStyle(document.body).backgroundColor);
       const ratio = (fg: number) =>
         (Math.max(fg, bodyBg) + 0.05) / (Math.min(fg, bodyBg) + 0.05);
+      const h1 = document.querySelector("h1")!;
+      const ta = document.querySelector("textarea")!;
       return {
-        h1: ratio(lum(getComputedStyle(h1).color)!),
-        textarea: ratio(lum(getComputedStyle(ta).color)!),
+        h1: ratio(lum(getComputedStyle(h1).color)),
+        textarea: ratio(lum(getComputedStyle(ta).color)),
+        // 計算が壊れていないことの自己点検（黒対白は 21:1）
+        sanity: ratio(lum("#ffffff")) > 0 ? (() => {
+          const wl = lum("#ffffff"), bl = lum("#000000");
+          return (Math.max(wl, bl) + 0.05) / (Math.min(wl, bl) + 0.05);
+        })() : 0,
       };
     });
+    // 計算自体が正しいことを先に確かめる（黒対白 = 21:1）
+    expect(c.sanity).toBeGreaterThan(20);
     // WCAG AA の本文相当（4.5:1）を満たすこと
     expect(c.h1).toBeGreaterThan(4.5);
     expect(c.textarea).toBeGreaterThan(4.5);

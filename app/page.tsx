@@ -168,9 +168,12 @@ function CardBreakdown({ r, defaultOpen }: { r: RankedEvac; defaultOpen: boolean
           touched.current = true; // 以降はユーザー操作を優先（defaultOpen追従を停止）
           setOpen((o) => !o);
         }}
-        className="cursor-pointer list-none text-xs font-semibold text-slate-500 hover:text-slate-700"
+        className="flex min-h-[44px] cursor-pointer list-none items-center text-xs font-semibold text-slate-600 hover:text-slate-900 [&::-webkit-details-marker]:hidden"
       >
-        {open ? "▾" : "▸"} なぜこの点数？（内訳を{open ? "表示中" : "見る"}）
+        <span aria-hidden="true" className="mr-1 text-slate-400">
+          {open ? "▾" : "▸"}
+        </span>
+        なぜこの点数？（内訳を{open ? "表示中" : "見る"}）
       </summary>
       <ScoreBreakdown r={r} />
     </details>
@@ -196,7 +199,7 @@ function Disclosure({
       className="group rounded-lg border border-slate-200 bg-white shadow-sm"
     >
       <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
-        <span className="text-slate-400 transition-transform group-open:rotate-90">▸</span>
+        <span aria-hidden="true" className="text-slate-400 transition-transform group-open:rotate-90">▸</span>
         {summary}
         {count != null && <span className="font-normal text-slate-500">（{count}件）</span>}
       </summary>
@@ -210,7 +213,7 @@ function Disclosure({
 function Source({ children }: { children: React.ReactNode }) {
   return (
     <details className="mt-2">
-      <summary className="cursor-pointer list-none text-xs text-slate-400 hover:text-slate-600">
+      <summary className="flex min-h-[44px] cursor-pointer list-none items-center text-xs text-slate-600 hover:text-slate-900 [&::-webkit-details-marker]:hidden">
         データの出典
       </summary>
       <p className="mt-1 text-xs leading-relaxed text-slate-500">{children}</p>
@@ -1304,7 +1307,8 @@ export default function Home() {
           <div
             className={`rounded-lg border p-3 text-sm ${
               !routeAdvisory.floodKnown
-                ? "border-slate-300 bg-slate-50 text-slate-700"
+                ? // 判定不能。安全(白地)と一目で区別できるよう枠を破線にする
+                  "border-dashed border-slate-400 bg-slate-50 text-slate-700"
                 : routeRisk === "danger"
                   ? "border-red-300 bg-red-50 text-red-900"
                   : routeRisk === "caution"
@@ -1555,8 +1559,8 @@ export default function Home() {
               ? "建物3D ON（高い建物＝垂直避難先・拡大で表示）"
               : "建物3Dで垂直避難先を見る（水害時・23区）"}
           </button>
-          <Source>建物: Project PLATEAU(国土交通省) CC BY 4.0。高いほど濃い緑＝上階避難に適す
-          </Source>
+          <p className="mt-1 text-xs text-slate-600">建物は<b>高いほど濃い緑</b>＝上階への避難に適します。</p>
+          <Source>建物: Project PLATEAU(国土交通省) CC BY 4.0</Source>
         </div>
 
         {/* 地震の危険度レイヤ（#106）。地震には重ねる浸水タイルが無いかわりに、
@@ -1629,8 +1633,12 @@ export default function Home() {
               <span className="ml-1">ランク1〜5</span>
             </div>
           )}
-          <Source>出典: 地震に関する地域危険度測定調査（第9回・東京都都市整備局）／首都直下地震等による東京の被害想定（令和4年度・東京都総務局）— CC BY
-            4.0。想定震度・液状化は{quakeGrid?.scenario ?? "都心南部直下地震"}のケース。液状化データは沖積低地など対象地域のみ
+          <p className="mt-1 text-xs text-slate-600">
+            想定震度・液状化は{quakeGrid?.scenario ?? "都心南部直下地震"}のケース。
+            <b>液状化データは沖積低地など対象地域のみ</b>で、色が付かない場所は「対象外」であり安全を意味しません。
+          </p>
+          <Source>
+            出典: 地震に関する地域危険度測定調査（第9回・東京都都市整備局）／首都直下地震等による東京の被害想定（令和4年度・東京都総務局）— CC BY 4.0
           </Source>
         </div>
 
@@ -1639,8 +1647,10 @@ export default function Home() {
           <div className="mb-1 text-xs font-semibold text-slate-700">生活継続レイヤー（避難後の備え）</div>
           <div className="flex flex-wrap gap-1">
             {([
-              { key: "water", label: "給水拠点", on: "border-blue-500 bg-blue-100 text-blue-800" },
-              { key: "wifi", label: "公衆Wi-Fi", on: "border-blue-500 bg-blue-100 text-blue-800" },
+              // dot は MapView の点レイヤの色。トグルの選択状態(青)とは別に、
+              // 「地図のどの色の点か」が分かるよう色見本を持たせる
+              { key: "water", label: "給水拠点", dot: "#0ea5e9", on: "border-blue-500 bg-blue-100 text-blue-800" },
+              { key: "wifi", label: "公衆Wi-Fi", dot: "#10b981", on: "border-blue-500 bg-blue-100 text-blue-800" },
             ] as const).map((it) => {
               const active = lifelineShow.includes(it.key);
               return (
@@ -1648,11 +1658,19 @@ export default function Home() {
                   key={it.key}
                   onClick={() => toggleLifeline(it.key)}
                   aria-pressed={active}
-                  className={`rounded-full border px-2 py-1 text-xs ${
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs ${
                     active ? it.on : "border-slate-300 text-slate-600 hover:bg-slate-100"
                   }`}
                 >
-                  {active ? "● " : "○ "}
+                  {/* 地図の点と同じ色。塗りが選択中／枠だけが未選択 */}
+                  <span
+                    aria-hidden="true"
+                    className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border"
+                    style={{
+                      backgroundColor: active ? it.dot : "transparent",
+                      borderColor: it.dot,
+                    }}
+                  />
                   {it.label}
                 </button>
               );
@@ -1666,7 +1684,12 @@ export default function Home() {
                   : "border-slate-300 text-slate-600 hover:bg-slate-100"
               }`}
             >
-              {showBusStops ? "● " : "○ "}
+              {/* 地図の点と同じ色。塗りが選択中／枠だけが未選択 */}
+              <span
+                aria-hidden="true"
+                className="mr-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full border align-middle"
+                style={{ backgroundColor: showBusStops ? "#a855f7" : "transparent", borderColor: "#a855f7" }}
+              />
               バス停
             </button>
             <button
@@ -1678,7 +1701,12 @@ export default function Home() {
                   : "border-slate-300 text-slate-600 hover:bg-slate-100"
               }`}
             >
-              {showAccessible ? "● " : "○ "}
+              {/* 地図の点と同じ色。塗りが選択中／枠だけが未選択 */}
+              <span
+                aria-hidden="true"
+                className="mr-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full border align-middle"
+                style={{ backgroundColor: showAccessible ? "#f59e0b" : "transparent", borderColor: "#f59e0b" }}
+              />
               バリアフリー施設
             </button>
             <button
@@ -1690,11 +1718,20 @@ export default function Home() {
                   : "border-slate-300 text-slate-600 hover:bg-slate-100"
               }`}
             >
-              {showTempStay ? "● " : "○ "}
+              {/* 地図の点と同じ色。塗りが選択中／枠だけが未選択 */}
+              <span
+                aria-hidden="true"
+                className="mr-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full border align-middle"
+                style={{ backgroundColor: showTempStay ? "#4f46e5" : "transparent", borderColor: "#4f46e5" }}
+              />
               一時滞在施設
             </button>
           </div>
-          <Source>出典: 東京都オープンデータ（災害時給水ステーション／FREE Wi-Fi & TOKYO／「だれでも東京」施設情報／都立の一時滞在施設）・都営バスGTFS（東京都交通局／ODPT）— CC BY 4.0。バス停は拡大で表示。バリアフリー施設は避難経路上で立ち寄れる休憩先。一時滞在施設は帰宅困難者の待機先（都立・住所を国土地理院APIでジオコーディング）
+          <p className="mt-1 text-xs text-slate-600">
+            <b>バス停は地図を拡大すると表示</b>されます。バリアフリー施設は避難経路上で立ち寄れる休憩先、一時滞在施設は帰宅困難者の待機先（都立）です。
+          </p>
+          <Source>
+            出典: 東京都オープンデータ（災害時給水ステーション／FREE Wi-Fi & TOKYO／「だれでも東京」施設情報／都立の一時滞在施設）・都営バスGTFS（東京都交通局／ODPT）— CC BY 4.0。一時滞在施設の座標は国土地理院APIでジオコーディング
           </Source>
         </div>
         </>
@@ -1769,11 +1806,11 @@ export default function Home() {
           onClick={handleMyLocation}
           disabled={geoLoading}
           aria-label="現在地を取得する"
-          className="absolute right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-white text-xl shadow-lg active:bg-slate-100 disabled:opacity-50 md:hidden"
+          className="absolute right-4 z-10 flex min-h-[44px] items-center justify-center rounded-full border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-700 shadow-lg active:bg-slate-100 disabled:opacity-50 md:hidden"
           // 畳んだシートのすぐ上に置く。高さは BottomSheet 側の定数を参照し、二重管理にしない
           style={{ bottom: `calc(${PEEK_VH}dvh + 0.75rem)` }}
         >
-          {geoLoading ? "…" : ""}
+          {geoLoading ? "取得中…" : "現在地"}
         </button>
       )}
       </>

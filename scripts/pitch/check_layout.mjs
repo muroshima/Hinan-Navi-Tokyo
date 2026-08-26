@@ -59,3 +59,5 @@ if (!findings.length) {
   }
 }
 await b.close();
+// 検出したら失敗で返す（提出前チェックやCIに組み込んだとき素通りしないように）
+if (findings.length) process.exit(1);

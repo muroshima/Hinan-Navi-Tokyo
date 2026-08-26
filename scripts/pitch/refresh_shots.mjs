@@ -41,6 +41,7 @@ async function panel(p, heading, file, maxHeight) {
     return;
   }
   const box = await el.boundingBox();
+  if (!box) throw new Error(`「${heading}」のパネルが見えないため撮影できません（折りたたみが開かなかった可能性）`);
   await p.screenshot({
     path: `${OUT}/${file}`, quality: 92, type: "jpeg",
     clip: { x: box.x, y: box.y, width: box.width, height: Math.min(box.height, maxHeight) },

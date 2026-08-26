@@ -20,8 +20,9 @@ test("自然文で検索すると配慮属性が抽出され避難所がラン�
   await expect(page.getByText("介助者あり", { exact: true })).toBeVisible();
 
   // ランキング結果（1位の根拠パネル）が表示される
-  // 1位は常に見せ、根拠と2位以下は畳む(#118)。検索成功は「他の候補」の出現で判定する
-  await expect(page.getByText("他の候補")).toBeVisible({ timeout: 15_000 });
+  // 検索成功は、畳みの外に常時出る1位カードのルートリンクで判定する。
+  // 「他の候補」は候補が2件以上のときだけ描画されるので判定には使わない(#118)
+  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 15_000 });
 });
 
 // 地震ユースケース(#106): 想定災害が地震のとき、地域危険度・想定震度が現在地に当たり、
