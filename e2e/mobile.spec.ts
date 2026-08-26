@@ -25,15 +25,15 @@ test("相談してから地図とシートが現れ、検索後は避難先が�
   await searchButton.click();
 
   // 検索後に地図とシートが現れる
-  await expect(page.locator("main")).toHaveCount(1, { timeout: 15_000 });
+  await expect(page.locator("main")).toHaveCount(1, { timeout: 30_000 });
   await expect(handle).toBeVisible();
 
   // 検索後は入力欄が畳まれ、結果が先頭に来る（狭い画面で避難先までスクロールさせない）
   await expect(page.getByRole("button", { name: "条件を変えて探し直す" })).toBeVisible({
-    timeout: 15_000,
+    timeout: 30_000,
   });
   await expect(input).toBeHidden();
-  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 30_000 });
 
   // 畳んだ入力欄は開き直せる
   await page.getByRole("button", { name: "条件を変えて探し直す" }).click();
@@ -55,14 +55,16 @@ test("つまみをドラッグした先にそのまま着地する", async ({ pa
     .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
     .fill("大地震で火事が広がっている。足の悪い祖母と逃げたい");
   await page.getByRole("button", { name: "避難所をさがす" }).click();
+  // 並列実行だと検索の応答が遅れることがある。段や中身を見る前に結果の到着を待つ
+  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 30_000 });
   const handle = page.getByRole("button", { name: /情報パネルの高さを変える/ });
-  await expect(handle).toBeVisible({ timeout: 15_000 });
-  // 検索直後は中段。畳んでから開き具合を確かめる（各遷移を待ってから次を叩く）
+  await expect(handle).toBeVisible({ timeout: 30_000 });
+  // 検索直後は中段。段は 最小 → 小 → 中 → 大 の順に巡回する（大の次は最小へ戻る）
   await expect(handle).toHaveAccessibleName(/現在: 中/);
   await handle.click();
   await expect(handle).toHaveAccessibleName(/現在: 大/);
   await handle.click();
-  await expect(handle).toHaveAccessibleName(/現在: 小/);
+  await expect(handle).toHaveAccessibleName(/現在: 最小/);
 
   // つまみの中心を掴んで dy ピクセルだけ動かす（相対移動。閾値の判定と条件を揃える）。
   // 各段のスナップと高さのアニメーション(240ms)が終わってから次を掴む
@@ -72,26 +74,31 @@ test("つまみをドラッグした先にそのまま着地する", async ({ pa
     const cy = box.y + box.height / 2;
     await page.mouse.move(cx, cy);
     await page.mouse.down();
-    await page.mouse.move(cx, cy + dy, { steps: 15 });
+    // 並列実行で処理が詰まると pointerdown の処理より先に move が届き、掴んだ位置が定まらない
+    // まま動かすことになる（ドラッグが丸ごと無視される）。掴めたことを見てから動かす
+    await expect(handle).toHaveAttribute("data-dragging", "true");
+    await page.mouse.move(cx, cy + dy / 2, { steps: 8 });
+    await page.mouse.move(cx, cy + dy, { steps: 8 });
+    await page.waitForTimeout(60);
     await page.mouse.up();
-    await page.waitForTimeout(350);
+    await page.waitForTimeout(400);
   };
 
-  // 段の境界（peek と half の中間 ≒ 39dvh）を確実に越え、かつ指が画面内に残る量。
+  // 端の段（最小/大）まで確実に届き、かつ指が画面内に残る量。
   // 画面外まで動かすと pointerup が届かず、ドラッグもタップも成立しない
-  const far = (await page.evaluate(() => window.innerHeight)) * 0.5;
+  const far = (await page.evaluate(() => window.innerHeight)) * 0.8;
 
   // 大きく上へ引き上げれば最大まで開く（1段戻ってはいけない）
   await dragBy(-far);
   await expect(handle).toHaveAccessibleName(/現在: 大/);
 
-  // 大きく下げれば畳まれる
+  // 大きく下げれば畳みきる（段は 最小 → 小 → 中 → 大 の4つ）
   await dragBy(far);
-  await expect(handle).toHaveAccessibleName(/現在: 小/);
+  await expect(handle).toHaveAccessibleName(/現在: 最小/);
 
-  // ほとんど動かさない操作はタップとして扱い、次の段階へ進む
+  // ほとんど動かさない操作はタップとして扱い、次の段階へ進む（最小 → 小）
   await dragBy(3);
-  await expect(handle).toHaveAccessibleName(/現在: 中/);
+  await expect(handle).toHaveAccessibleName(/現在: 小）/);
 });
 
 test("他の候補を選ぶと地図の避難先が入れ替わる", async ({ page }) => {
@@ -100,7 +107,7 @@ test("他の候補を選ぶと地図の避難先が入れ替わる", async ({ pa
     .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
     .fill("高齢の祖父と一緒。地震のとき逃げられる所を教えて");
   await page.getByRole("button", { name: "避難所をさがす" }).click();
-  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 30_000 });
 
   // 2位以下を開き、そのうち1件を選ぶ（1位には入れ替えボタンを出さない）
   const others = page.getByText("他の候補");
@@ -139,7 +146,7 @@ test("指で操作する画面では主要な操作要素が44px以上ある", a
     .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
     .fill("大地震で火事が広がっている。足の悪い祖母と逃げたい");
   await page.getByRole("button", { name: "避難所をさがす" }).click();
-  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 30_000 });
   // シートを最大まで開いて、畳んでいた操作要素も対象に含める
   const handle = page.getByRole("button", { name: /情報パネルの高さを変える/ });
   await handle.click();
@@ -155,10 +162,12 @@ test("根拠と2位以下は畳まれていて、開くと中身が出る", asyn
     .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
     .fill("大地震で火事が広がっている。足の悪い祖母と逃げたい");
   await page.getByRole("button", { name: "避難所をさがす" }).click();
+  // 並列実行だと検索の応答が遅れることがある。段や中身を見る前に結果の到着を待つ
+  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 30_000 });
 
   const reason = page.getByText("この順位になった理由");
   const others = page.getByText("他の候補");
-  await expect(reason).toBeVisible({ timeout: 15_000 });
+  await expect(reason).toBeVisible({ timeout: 30_000 });
   await expect(others).toBeVisible();
 
   // 既定では中身が畳まれている
@@ -242,13 +251,15 @@ test("つまみを続けて叩いても1段ずつ進む", async ({ page }) => {
     .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
     .fill("大地震で火事が広がっている。足の悪い祖母と逃げたい");
   await page.getByRole("button", { name: "避難所をさがす" }).click();
+  // 並列実行だと検索の応答が遅れることがある。段や中身を見る前に結果の到着を待つ
+  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 30_000 });
   const handle = page.getByRole("button", { name: /情報パネルの高さを変える/ });
-  await expect(handle).toHaveAccessibleName(/現在: 中/, { timeout: 15_000 });
+  await expect(handle).toHaveAccessibleName(/現在: 中/, { timeout: 30_000 });
 
-  // 待たずに2回続けて叩く: 中 → 大 → 小 と2段進むはず
+  // 待たずに2回続けて叩く: 中 → 大 → 最小 と2段進むはず
   await handle.click({ delay: 0 });
   await handle.click({ delay: 0 });
-  await expect(handle).toHaveAccessibleName(/現在: 小/);
+  await expect(handle).toHaveAccessibleName(/現在: 最小/);
 });
 
 // シートは高さ固定を translateY で下げる作りなので、スクロール領域を可視部分に
@@ -259,8 +270,10 @@ test("中段でもシートの中身を最後までスクロールして読め�
     .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
     .fill("大地震で火事が広がっている。足の悪い祖母と逃げたい");
   await page.getByRole("button", { name: "避難所をさがす" }).click();
+  // 並列実行だと検索の応答が遅れることがある。段や中身を見る前に結果の到着を待つ
+  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 30_000 });
   const handle = page.getByRole("button", { name: /情報パネルの高さを変える/ });
-  await expect(handle).toHaveAccessibleName(/現在: 中/, { timeout: 15_000 });
+  await expect(handle).toHaveAccessibleName(/現在: 中/, { timeout: 30_000 });
 
   // 一番下までスクロールしたとき、最後の要素が画面内に収まること
   const bottom = await page.evaluate(() => {
@@ -275,4 +288,46 @@ test("中段でもシートの中身を最後までスクロールして読め�
   expect(bottom).not.toBeNull();
   // 画面の下端より内側にあること（はみ出していれば読めない）
   expect(bottom!.bottom).toBeLessThanOrEqual(bottom!.viewport + 1);
+});
+
+// 地図だけを見たい場面のために、つまみだけ残して畳みきれること(#118)。
+// 併せて、現在地ボタンがどの段でもシートに隠れないこと
+test("シートを畳みきれて、現在地ボタンが隠れない", async ({ page }) => {
+  await page.goto("/");
+  await page
+    .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
+    .fill("大地震で火事が広がっている。足の悪い祖母と逃げたい");
+  await page.getByRole("button", { name: "避難所をさがす" }).click();
+  // 並列実行だと検索の応答が遅れることがある。段や中身を見る前に結果の到着を待つ
+  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 30_000 });
+  const handle = page.getByRole("button", { name: /情報パネルの高さを変える/ });
+  await expect(handle).toBeVisible({ timeout: 30_000 });
+
+  const current = async () =>
+    ((await handle.getAttribute("aria-label")) ?? "").match(/現在: ([^）]+)/)?.[1] ?? "";
+  // 「最小」と「小」は部分一致で取り違えるので完全一致で送る
+  const goTo = async (want: string) => {
+    for (let i = 0; i < 5; i++) {
+      if ((await current()) === want) return;
+      await handle.click();
+      await page.waitForTimeout(420);
+    }
+    throw new Error(`段 ${want} に到達できない`);
+  };
+
+  const fab = page.getByRole("button", { name: "現在地を取得する" });
+  for (const want of ["最小", "小", "中"]) {
+    await goTo(want);
+    await page.waitForTimeout(450);
+    const sheet = (await page.locator("aside").boundingBox())!;
+    const box = (await fab.boundingBox())!;
+    // 現在地ボタンの下端がシートの上端より上にあること
+    expect(box.y + box.height).toBeLessThanOrEqual(sheet.y + 2);
+  }
+
+  // 畳みきった段では地図がほぼ全面に出る
+  await goTo("最小");
+  const sheet = (await page.locator("aside").boundingBox())!;
+  const vh = await page.evaluate(() => window.innerHeight);
+  expect(sheet.y).toBeGreaterThan(vh * 0.6);
 });

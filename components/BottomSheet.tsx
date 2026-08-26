@@ -12,18 +12,22 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type Snap = "peek" | "half" | "full";
+export type Snap = "collapsed" | "peek" | "half" | "full";
 
 // シート全体の高さ（dvh）。iOS Safari のアドレスバー伸縮で跳ねないよう vh ではなく dvh を使う
 const SHEET_HEIGHT = 88;
-/** 畳んだ状態でシートが占める高さ（dvh）。この上に重ねるもの（FAB等）が位置合わせに使う */
-export const PEEK_VH = 36;
-// 各スナップで見せる高さ（dvh）。peek でも入力欄と検索ボタンが収まる高さにする
-const VISIBLE: Record<Snap, number> = { peek: PEEK_VH, half: 62, full: SHEET_HEIGHT };
+// 各スナップで見せる高さ（dvh）。peek でも入力欄と検索ボタンが収まる高さにする。
+// collapsed はつまみだけを残して地図を最大限見せる段
+const VISIBLE: Record<Snap, number> = { collapsed: 8, peek: 36, half: 62, full: SHEET_HEIGHT };
+
+/** その段でシートが画面下に占める高さ（dvh）。地図に重ねるボタンの位置合わせに使う */
+export function visibleVh(snap: Snap): number {
+  return VISIBLE[snap];
+}
 // この距離までの動きはタップとみなす（px）。指は静止しているつもりでも数px動く
 const TAP_THRESHOLD_PX = 8;
-const ORDER: Snap[] = ["peek", "half", "full"];
-const SNAP_LABEL: Record<Snap, string> = { peek: "小", half: "中", full: "大" };
+const ORDER: Snap[] = ["collapsed", "peek", "half", "full"];
+const SNAP_LABEL: Record<Snap, string> = { collapsed: "最小", peek: "小", half: "中", full: "大" };
 
 /**
  * consult = まだ検索していない状態。地図を出さず、相談欄だけを画面中央に置く。
@@ -92,7 +96,9 @@ export default function BottomSheet({
 
   // 畳んだら中身は先頭から読ませる（前回のスクロール位置に取り残さない）
   useEffect(() => {
-    if (snap === "peek" && scrollRef.current) scrollRef.current.scrollTop = 0;
+    if ((snap === "peek" || snap === "collapsed") && scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
+    }
   }, [snap]);
 
   // 検索し直したときなど、呼び出し側の指示で先頭へ戻す。
@@ -102,9 +108,24 @@ export default function BottomSheet({
     if (scrollTopSignal != null && scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [scrollTopSignal]);
 
+  // 掴んだ位置からの移動量を、シートの下端オフセット(dvh)に直す。
+  // 着地の判定は「指を離した位置」から直に計算する。React では pointermove が
+  // pointerup より低い優先度で処理されるため、負荷が高いと最後の move が後回しになり、
+  // 途中の値を着地点だと思い込んで段が変わらないことがあった（素早く弾くと再現した）
+  const offsetAt = (clientY: number, d: { startY: number; startOffset: number }) => {
+    const deltaVh = ((clientY - d.startY) / window.innerHeight) * 100;
+    // collapsed より下、full より上へは行かせない
+    return Math.min(offsetOf("collapsed"), Math.max(0, d.startOffset + deltaVh));
+  };
+
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (e.button !== 0) return; // マウスの右クリック等は無視
+      // 掴んだまま下へ動かすとブラウザがテキスト選択を始め、pointercancel でドラッグを
+      // 奪ってしまう（下方向のドラッグだけが効かない原因だった）。既定の動作を止める。
+      // 代わりにフォーカスは自分で移し、キーボード操作の起点は保つ
+      e.preventDefault();
+      (e.currentTarget as HTMLElement).focus();
       dragging.current = { startY: e.clientY, startOffset: offsetOf(snap), pointerId: e.pointerId };
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
       setDragOffset(offsetOf(snap));
@@ -115,10 +136,7 @@ export default function BottomSheet({
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     const d = dragging.current;
     if (!d || d.pointerId !== e.pointerId) return;
-    const deltaVh = ((e.clientY - d.startY) / window.innerHeight) * 100;
-    // peek より下、full より上へは行かせない
-    const next = Math.min(offsetOf("peek"), Math.max(0, d.startOffset + deltaVh));
-    setDragOffset(next);
+    setDragOffset(offsetAt(e.clientY, d));
   }, []);
 
   // ドラッグで着地させた直後は click を無視する。
@@ -130,29 +148,26 @@ export default function BottomSheet({
       const d = dragging.current;
       if (!d || d.pointerId !== e.pointerId) return;
       dragging.current = null;
-      const landed = dragOffset;
+      const landed = offsetAt(e.clientY, d);
       setDragOffset(null);
       // 指がほとんど動いていなければタップ。スナップは変えず、続けて起きる click に任せる
       // （click 経由にしておくと、支援技術からの操作でも同じ動きになる）
       if (Math.abs(e.clientY - d.startY) < TAP_THRESHOLD_PX) return;
       suppressClick.current = true;
-      if (landed != null) onSnapChange(nearestSnap(landed));
+      onSnapChange(nearestSnap(landed));
     },
-    [dragOffset, onSnapChange]
+    [onSnapChange]
   );
 
-  // ポインタが奪われた場合(pointercancel)は click が発火しないので、抑制フラグを残さない
-  const cancelDrag = useCallback(
-    (e: React.PointerEvent) => {
-      const d = dragging.current;
-      if (!d || d.pointerId !== e.pointerId) return;
-      dragging.current = null;
-      const landed = dragOffset;
-      setDragOffset(null);
-      if (landed != null) onSnapChange(nearestSnap(landed));
-    },
-    [dragOffset, onSnapChange]
-  );
+  // ポインタが奪われた場合(pointercancel)は操作そのものを無かったことにして元の段へ戻す。
+  // cancel の座標は実際に指があった位置ではない（0が入る）ので、着地の計算には使えない。
+  // click も発火しないため、抑制フラグも残さない
+  const cancelDrag = useCallback((e: React.PointerEvent) => {
+    const d = dragging.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    dragging.current = null;
+    setDragOffset(null);
+  }, []);
 
   // つまみのタップ／Enter で次の段階へ。full の次は peek へ戻る。
   // 素早く2回叩かれても1段ずつ進むよう、次の値は ref で自前に進める。
@@ -203,6 +218,8 @@ export default function BottomSheet({
         tabIndex={0}
         aria-label={`情報パネルの高さを変える（現在: ${SNAP_LABEL[snap]}）`}
         aria-expanded={snap === "full"}
+        // ドラッグ中であることを外から見えるようにする（e2e が掴めたことを待てるように）
+        data-dragging={dragOffset != null ? "true" : undefined}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
@@ -239,23 +256,27 @@ export default function BottomSheet({
         // 中身のスクロール領域を「画面に見えているぶん」に収める。
         // シートは高さ固定を translateY で下げているので、これを指定しないと
         // スクロール領域の下端が画面外に残り、最後まで読めなくなる(#118)
+        // 高さはCSS変数で渡す。インラインで max-height を直接指定すると
+        // デスクトップの md:max-h-none で打ち消せず、サイドバーの下半分が切れる
         style={
           mode === "result"
-            ? {
-                maxHeight: `calc(${VISIBLE[snap]}dvh - 44px)`,
+            ? ({
+                "--sheet-max-h": `calc(${VISIBLE[snap]}dvh - 44px)`,
                 // ドラッグ中はアニメーションしない。高さが動くとつまみの位置もずれて、
                 // 指の追従がぶれる（掴んだ場所と実際の位置が食い違う）
-                transition:
+                "--sheet-max-h-transition":
                   dragOffset != null || reduceMotion
                     ? "none"
                     : "max-height 240ms cubic-bezier(0.4,0,0.2,1)",
-              }
+              } as React.CSSProperties)
             : undefined
         }
         className={
           mode === "consult"
             ? "flex flex-col gap-4 px-5 py-8 pb-[max(2rem,env(safe-area-inset-bottom))]"
-            : "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:max-h-none md:p-4"
+            : "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] " +
+              // スマホは見えているぶんだけをスクロール領域にする。デスクトップは制限しない
+              "max-h-[var(--sheet-max-h)] [transition:var(--sheet-max-h-transition)] md:max-h-none md:[transition:none] md:p-4"
         }
       >
         {children}

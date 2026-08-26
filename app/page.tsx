@@ -29,7 +29,7 @@ import {
   RANK_LABEL,
 } from "@/lib/quakeRisk";
 import { QRCodeSVG } from "qrcode.react";
-import BottomSheet, { PEEK_VH, type Snap } from "@/components/BottomSheet";
+import BottomSheet, { visibleVh, type Snap } from "@/components/BottomSheet";
 import { tFor } from "@/lib/i18n";
 import { fallbackExtract, type FallbackAttrs } from "@/lib/triageFallback";
 import {
@@ -48,7 +48,6 @@ import {
   enrichQuakeRisk,
   describeOriginQuakeRisk,
   isQuakeContext,
-  activeAttrLabels,
   distanceKm as straightDistanceKm,
   HAZARD_LABEL,
   type ToiletIndex,
@@ -259,6 +258,8 @@ export default function Home() {
   const [quakeGridLayer, setQuakeGridLayer] = useState<QuakeGridLayer | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [originLabel, setOriginLabel] = useState("自動取得 / 東京駅");
+  // 現在地をどう決めたか。GPS で取っているときはボタンを選択状態にして一目で分かるようにする
+  const [originSource, setOriginSource] = useState<"auto" | "gps" | "place" | "shared">("auto");
   const [placeInput, setPlaceInput] = useState("");
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
@@ -471,6 +472,7 @@ export default function Home() {
         // 初回は町丁目データの読み込み前に走ることが多いので、地名は引かない
         setOrigin([pos.coords.longitude, pos.coords.latitude]);
         setOriginLabel("現在地（GPS）");
+        setOriginSource("gps");
       },
       () => {},
       { timeout: 5000 }
@@ -500,6 +502,7 @@ export default function Home() {
         // 読み込み済みの町丁目データ(#106)から引く（範囲外なら従来表記）
         const chome = lookupChome(point, quakeIndex);
         setOriginLabel(chome ? `現在地: ${chome.city}${chome.chome}` : "現在地（GPS）");
+        setOriginSource("gps");
         setGeoLoading(false);
       },
       () => {
@@ -525,6 +528,7 @@ export default function Home() {
       const d = await res.json();
       setOrigin([d.lng, d.lat]);
       setOriginLabel(d.label?.split(",").slice(0, 2).join("・") || q);
+      setOriginSource("place");
     } catch {
       setGeoError("通信に失敗しました");
     } finally {
@@ -705,9 +709,6 @@ export default function Home() {
   // 入力欄を畳むのはスマホで検索が終わったあとだけ。デスクトップのサイドバーは常に開いておく
   const controlsCollapsed = !isDesktop && submitted && !showControls;
 
-  // 複合ニーズ（同時最適している配慮要件）のラベル
-  const activeNeeds = useMemo(() => (submitted ? activeAttrLabels(attrs) : []), [submitted, attrs]);
-
   // マイ・タイムラインを生成（推奨1位・属性・想定災害をもとに）
   async function genTimeline() {
     const top = ranked[0];
@@ -809,6 +810,7 @@ export default function Home() {
             if (Number.isFinite(g.lng) && Number.isFinite(g.lat)) {
               setOrigin([g.lng, g.lat]);
               setOriginLabel(g.label?.split(",").slice(0, 2).join("・") || place);
+              setOriginSource("place");
             }
           } catch {
             /* 失敗時は現在地を変更しない */
@@ -888,6 +890,7 @@ export default function Home() {
       if (coords) {
         setOrigin(coords);
         setOriginLabel("共有された地点");
+        setOriginSource("shared");
       }
       if (q) {
         setText(q);
@@ -1113,8 +1116,14 @@ export default function Home() {
             <button
               onClick={handleMyLocation}
               disabled={geoLoading}
+              aria-pressed={originSource === "gps"}
               title="GPSで現在地を取得"
-              className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+              className={`shrink-0 rounded-md border px-2 py-1 text-xs disabled:opacity-40 ${
+                originSource === "gps"
+                  ? // 取得中の場所がGPS由来であることを塗りで示す
+                    "border-blue-600 bg-blue-600 text-white"
+                  : "border-slate-300 text-slate-600 hover:bg-slate-100"
+              }`}
             >
               {t("gps")}
             </button>
@@ -1175,14 +1184,6 @@ export default function Home() {
               </span>
             )}
             {source && <span className="text-slate-600">（{t("extracted")}: {source}）</span>}
-          </div>
-        )}
-
-        {/* 複合ニーズの同時最適を明示（既存サービスが扱えない強み） */}
-        {submitted && activeNeeds.length >= 2 && (
-          <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700 shadow-sm">
-            <b className="text-slate-900">複合ニーズを同時に最適化</b>: {activeNeeds.join(" × ")}
-            <span className="ml-1 text-slate-500">— {activeNeeds.length}条件を同時に考慮しています</span>
           </div>
         )}
 
@@ -1299,14 +1300,7 @@ export default function Home() {
               </p>
             )}
             <p className="mt-1 text-xs text-slate-500">
-              地図の
-              {routeRisk === "danger"
-                ? "赤の破線"
-                : routeRisk === "caution"
-                  ? "橙の破線"
-                  : "青の実線"}
-              が経路（深い浸水想定は破線・それ以外は実線で、色に頼らず区別）。
-              {/* 危険時の破線は流れて見えるが、端末の「視差を減らす」設定では静止するため断定しない */}
+              地図の<b>赤い線</b>が推奨避難所までの経路、<b>濃紺の丸</b>が避難先です。
               経路は東京都「浸水予想区域図」（CC BY 4.0）を粗いグリッドに集約したデータで判定し、OSRMの代替経路のうち
               <b>浸水曝露が最小のもの</b>を選んでいます（経路自体の再計算は行いません）。東京の低地では、どの経路を選んでも浸水想定域を通ることがあります。
             </p>
@@ -1342,7 +1336,7 @@ export default function Home() {
               </p>
             )}
             <p className="mt-1 text-xs text-slate-500">
-              地図の青い実線が推奨避難所までの経路。経路上を約100m間隔でサンプリングし、通過する町丁目の地域危険度と250mメッシュの液状化想定を当てています。
+              地図の<b>赤い線</b>が推奨避難所までの経路、<b>濃紺の丸</b>が避難先です。経路上を約100m間隔でサンプリングし、通過する町丁目の地域危険度と250mメッシュの液状化想定を当てています。
             </p>
           </div>
         )}
@@ -1518,10 +1512,22 @@ export default function Home() {
             <span className="max-w-[52vw] truncate rounded-full bg-white/95 px-3 py-1.5 text-xs text-slate-700 shadow-md md:max-w-none">
               {originLabel}
             </span>
+            {/* すぐ歩き出したい場面のために、地図の上からGoogleマップの徒歩ルートへ飛べるようにする(#118)。
+                施設カードまでスクロールさせない */}
+            {ranked[0] && (
+              <a
+                href={gmapsWalkingUrl(origin, ranked[0].feature.geometry.coordinates)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-h-[36px] shrink-0 items-center rounded-full bg-blue-600 px-3 text-xs font-semibold text-white shadow-md hover:bg-blue-700"
+              >
+                {t("openRoute")}
+              </a>
+            )}
             <button
               onClick={() => setLayersOpen((v) => !v)}
               aria-expanded={layersOpen}
-              className="flex min-h-[36px] items-center gap-1 rounded-full bg-white/95 px-3 text-xs font-semibold text-slate-700 shadow-md hover:bg-white"
+              className="flex min-h-[36px] shrink-0 items-center gap-1 rounded-full bg-white/95 px-3 text-xs font-semibold text-slate-700 shadow-md hover:bg-white"
             >
               <span aria-hidden="true" className={layersOpen ? "rotate-90" : ""}>
                 ▸
@@ -1764,15 +1770,24 @@ export default function Home() {
       </main>
 
 
-      {/* モバイル: 現在地取得のFAB。シートを畳んでいるときだけ出し、地図の操作を妨げない */}
-      {snap === "peek" && (
+      {/* モバイル: 現在地取得のFAB。シートの高さに追従させて隠れないようにする(#118)。
+          シートを最大まで開いているときは地図が見えないので出さない */}
+      {snap !== "full" && (
         <button
           onClick={handleMyLocation}
           disabled={geoLoading}
+          aria-pressed={originSource === "gps"}
           aria-label="現在地を取得する"
-          className="absolute right-4 z-10 flex min-h-[44px] items-center justify-center rounded-full border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-700 shadow-lg active:bg-slate-100 disabled:opacity-50 md:hidden"
-          // 畳んだシートのすぐ上に置く。高さは BottomSheet 側の定数を参照し、二重管理にしない
-          style={{ bottom: `calc(${PEEK_VH}dvh + 0.75rem)` }}
+          className={`absolute right-4 z-30 flex min-h-[44px] items-center justify-center rounded-full border px-4 text-xs font-semibold shadow-lg disabled:opacity-50 md:hidden ${
+            originSource === "gps"
+              ? "border-blue-600 bg-blue-600 text-white"
+              : "border-slate-300 bg-white text-slate-700 active:bg-slate-100"
+          }`}
+          // シートのすぐ上に置く。高さは BottomSheet 側の値を参照して二重管理にしない
+          style={{
+            bottom: `calc(${visibleVh(snap)}dvh + 0.75rem)`,
+            transition: "bottom 240ms cubic-bezier(0.4,0,0.2,1)",
+          }}
         >
           {geoLoading ? t("gpsLoading") : t("currentLocation")}
         </button>

@@ -9,7 +9,11 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  // 逐次で走らせる。地図(MapLibre)の描画と 2MB のハザードデータ読み込みが重く、
+  // 並列にすると CPU を奪い合って検索の応答やドラッグの反映が間に合わず、
+  // 毎回ちがう1件がランダムに落ちる。実測でも逐次の方が速く(約35秒)、安定する
+  workers: 1,
+  retries: 1,
   reporter: process.env.CI ? "line" : "list",
   use: {
     baseURL,
