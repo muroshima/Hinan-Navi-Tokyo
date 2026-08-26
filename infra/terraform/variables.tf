@@ -28,7 +28,7 @@ variable "run_image" {
   #      初回applyのchicken-egg回避が要るためプロトタイプでは既定値+運用ルールを採用)
   description = "Artifact Registryのフルイメージパス。既定=現行稼働イメージ。空文字を明示するとCloud Runを作成しない(初回土台apply用)"
   type        = string
-  default     = "asia-northeast1-docker.pkg.dev/hinan-navi-tokyo/app/hinan-navi:v6"
+  default     = "asia-northeast1-docker.pkg.dev/hinan-navi-tokyo/app/hinan-navi:v7"
 }
 
 variable "gemini_location" {
