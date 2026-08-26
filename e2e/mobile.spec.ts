@@ -24,14 +24,14 @@ test("ボトムシートが3段階で開閉し、検索後は避難先が先に�
   await searchButton.click();
 
   // 検索後は入力欄が畳まれ、結果が先頭に来る（狭い画面で避難先までスクロールさせない）
-  await expect(page.getByRole("button", { name: "🔍 条件を変えて探し直す" })).toBeVisible({
+  await expect(page.getByRole("button", { name: "条件を変えて探し直す" })).toBeVisible({
     timeout: 15_000,
   });
   await expect(input).toBeHidden();
   await expect(page.getByText("が1位？")).toBeVisible({ timeout: 15_000 });
 
   // 畳んだ入力欄は開き直せる
-  await page.getByRole("button", { name: "🔍 条件を変えて探し直す" }).click();
+  await page.getByRole("button", { name: "条件を変えて探し直す" }).click();
   await expect(input).toBeVisible();
 
   // 検索が終わるとシートは自動で中段まで上がっている（畳んだままだと結果に気づけない）

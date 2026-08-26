@@ -170,7 +170,7 @@ export default function BottomSheet({
       className={
         // モバイル: 画面下に貼り付くシート
         "fixed inset-x-0 bottom-0 z-20 flex h-[88dvh] translate-y-[var(--sheet-y)] flex-col " +
-        "rounded-t-2xl border-t border-gray-200 bg-white shadow-[0_-4px_24px_rgba(0,0,0,0.18)] " +
+        "rounded-t-2xl border-t border-slate-200 bg-slate-50 shadow-[0_-4px_24px_rgba(0,0,0,0.18)] " +
         "[transition:var(--sheet-transition)] " +
         // デスクトップ: 従来どおり左カラム
         "md:static md:z-auto md:h-[100dvh] md:w-[var(--sidebar-w,400px)] md:shrink-0 md:translate-y-0 " +
@@ -209,8 +209,8 @@ export default function BottomSheet({
         // 縦ドラッグをブラウザのスクロールに取られないようにする
         className="flex min-h-[44px] shrink-0 cursor-grab touch-none flex-col items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 md:hidden"
       >
-        <span className="h-1.5 w-12 rounded-full bg-gray-300" />
-        {handleLabel && <span className="mt-1 text-[11px] text-gray-500">{handleLabel}</span>}
+        <span className="h-1.5 w-12 rounded-full bg-slate-300" />
+        {handleLabel && <span className="mt-1 text-xs text-slate-500">{handleLabel}</span>}
       </div>
 
       {/* 中身。シート内のスクロールが背後へ連鎖しないよう overscroll を止める */}

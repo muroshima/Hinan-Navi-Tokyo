@@ -74,22 +74,21 @@ const ATTR_LABELS: { key: keyof UserAttrs; label: string }[] = [
   { key: "has_caregiver", label: "介助者あり" },
   { key: "ostomate", label: "オストメイト" },
   { key: "severe_care", label: "重度・要介護" },
-  { key: "night", label: "🌙 夜間" },
-  { key: "bad_weather", label: "☂ 雨・荒天" },
-  { key: "outside", label: "🚶 外出中" },
+  { key: "night", label: "夜間" },
+  { key: "bad_weather", label: "雨・荒天" },
+  { key: "outside", label: "外出中" },
 ];
 
 const EMPTY_TOILET_IDX: ToiletIndex = { baby: [], ostomate: [], largeBed: [], call: [] };
 
 // 地域・災害を限定しない例文を主に（最後に代表ケースの江戸川区水害）
-const SAMPLES = [
-  "雨の日、車椅子の母と避難したい。介助は私がします",
-  "ベビーカーと0歳の子ども連れです。近くて入りやすい場所は？",
-  "高齢の祖父と一緒。地震のとき逃げられる所を教えて",
-  "夜に、目の不自由な父と逃げたい",
-  "大地震で火事が広がっている。足の悪い祖母と逃げたい",
-  "職場にいるときに地震が起きたら。電車が止まって帰れない",
-  "江戸川区で水害が心配。車椅子の母と避難したい",
+// 例文はラベルと本文を分ける。以前は本文を14文字で切って並べていたが、
+// 途中で切れた文が7つ縦に並ぶだけで意味が読めず、画面の大半を占めていた
+const SAMPLES: { label: string; text: string }[] = [
+  { label: "地震・延焼", text: "大地震で火事が広がっている。足の悪い祖母と逃げたい" },
+  { label: "帰宅困難", text: "職場にいるときに地震が起きた。電車が止まって帰れない" },
+  { label: "水害・車椅子", text: "雨の日、車椅子の母と避難したい。介助は私がします" },
+  { label: "夜間・視覚障害", text: "夜に、目の不自由な父と逃げたい" },
 ];
 
 // 共有URLの座標を検証して [lng, lat] で返す（両方が数値かつ範囲内のときのみ）
@@ -120,26 +119,26 @@ function ScoreBreakdown({ r }: { r: RankedEvac }) {
   const maxAbs = Math.max(1, ...shown.map((s) => Math.abs(s.d)));
   const total = shown.reduce((s, x) => s + x.d, 0);
   return (
-    <div className="mt-1 rounded-md bg-gray-50 p-2">
-      <div className="mb-1 flex items-center justify-between text-[11px] font-bold text-gray-600">
+    <div className="mt-1 rounded-md bg-slate-50 p-2">
+      <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-600">
         <span>点数内訳</span>
         <span className="tabular-nums">合計 {total}点</span>
       </div>
       <div className="flex flex-col gap-0.5">
         {shown.map(({ f, d }) => (
-          <div key={`${f.category}-${f.label}`} className="flex items-center gap-1 text-[11px]">
-            <span className="w-32 shrink-0 truncate text-gray-600" title={f.label}>
+          <div key={`${f.category}-${f.label}`} className="flex items-center gap-1 text-xs">
+            <span className="w-32 shrink-0 truncate text-slate-600" title={f.label}>
               {f.label}
             </span>
-            <div className="relative h-2.5 flex-1 rounded bg-gray-100">
+            <div className="relative h-2.5 flex-1 rounded bg-slate-100">
               <div
-                className={`absolute top-0 h-2.5 rounded ${d >= 0 ? "bg-green-400" : "bg-red-400"}`}
+                className={`absolute top-0 h-2.5 rounded ${d >= 0 ? "bg-blue-400" : "bg-red-400"}`}
                 style={{ width: `${(Math.abs(d) / maxAbs) * 100}%` }}
               />
             </div>
             <span
               className={`w-9 shrink-0 text-right tabular-nums ${
-                d >= 0 ? "text-green-700" : "text-red-600"
+                d >= 0 ? "text-blue-700" : "text-red-600"
               }`}
             >
               {d >= 0 ? "+" : ""}
@@ -169,11 +168,24 @@ function CardBreakdown({ r, defaultOpen }: { r: RankedEvac; defaultOpen: boolean
           touched.current = true; // 以降はユーザー操作を優先（defaultOpen追従を停止）
           setOpen((o) => !o);
         }}
-        className="cursor-pointer list-none text-[11px] font-bold text-gray-500 hover:text-gray-700"
+        className="cursor-pointer list-none text-xs font-semibold text-slate-500 hover:text-slate-700"
       >
         {open ? "▾" : "▸"} なぜこの点数？（内訳を{open ? "表示中" : "見る"}）
       </summary>
       <ScoreBreakdown r={r} />
+    </details>
+  );
+}
+
+// データの出典。常時表示すると各パネルの末尾に長文が並んで肝心の避難情報が埋もれるため、
+// 既定では畳んでおく（出典表示はCC BYの条件なので消さずに残す）
+function Source({ children }: { children: React.ReactNode }) {
+  return (
+    <details className="mt-2">
+      <summary className="cursor-pointer list-none text-xs text-slate-400 hover:text-slate-600">
+        データの出典
+      </summary>
+      <p className="mt-1 text-xs leading-relaxed text-slate-500">{children}</p>
     </details>
   );
 }
@@ -908,8 +920,8 @@ export default function Home() {
       >
         {/* 検索後のスマホでは見出しを畳む。画面が縦に短く、避難先までスクロールさせたくない */}
         <header className={controlsCollapsed ? "hidden" : undefined}>
-          <h1 className="text-xl font-bold text-gray-900">だれでも避難ナビ TOKYO</h1>
-          <p className="text-sm text-gray-600">
+          <h1 className="text-lg font-semibold tracking-tight text-slate-900">だれでも避難ナビ TOKYO</h1>
+          <p className="mt-0.5 text-xs text-slate-500">
             ことばで状況を伝えると、あなたが行ける避難所を探します
           </p>
         </header>
@@ -918,7 +930,7 @@ export default function Home() {
             畳んだ状態でも必ず出す（ここは省略してよい情報ではない）。スマホでは要点だけに縮める */}
         <div
           role="note"
-          className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+          className="rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-900"
         >
           <span className="md:hidden">
             ⚠️ <b>参考情報</b>です。避難の最終判断は<b>自治体の公式情報・指示</b>に従ってください。
@@ -933,9 +945,9 @@ export default function Home() {
         {controlsCollapsed && (
           <button
             onClick={() => setShowControls(true)}
-            className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-800 active:bg-blue-100"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm active:bg-slate-50"
           >
-            🔍 条件を変えて探し直す
+            条件を変えて探し直す
           </button>
         )}
 
@@ -943,7 +955,7 @@ export default function Home() {
         <div className={controlsCollapsed ? "hidden" : "flex flex-col gap-3"}>
         {/* 出力言語（やさしい日本語・多言語）＋ 音声入力 */}
         <div className="flex items-center gap-2">
-          <label htmlFor="lang" className="text-xs font-bold text-gray-700">
+          <label htmlFor="lang" className="text-xs font-semibold text-slate-700">
             言語
           </label>
           <select
@@ -961,7 +973,7 @@ export default function Home() {
               setShareUrl(null);
               stopSpeaking();
             }}
-            className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-800 focus:border-blue-500 focus:outline-none"
+            className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-800 focus:border-blue-500 focus:outline-none"
           >
             {LANGS.map((l) => (
               <option key={l.code} value={l.code}>
@@ -976,20 +988,20 @@ export default function Home() {
               className={`ml-auto rounded-md border px-2 py-1 text-xs ${
                 listening
                   ? "border-red-500 bg-red-50 text-red-700"
-                  : "border-gray-300 text-gray-600 hover:bg-gray-100"
+                  : "border-slate-300 text-slate-600 hover:bg-slate-100"
               }`}
             >
-              {listening ? "● 録音中…停止" : "🎤 音声入力"}
+              {listening ? "● 録音中…停止" : "音声入力"}
             </button>
           )}
         </div>
 
         {/* 現在地（手動入力 or GPS） */}
-        <div className="rounded-lg border border-gray-200 p-2">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-bold text-gray-700">現在地</span>
-            <span className="max-w-[230px] truncate text-[11px] text-gray-500" title={originLabel}>
-              📍 {originLabel}
+            <span className="text-xs font-semibold text-slate-700">現在地</span>
+            <span className="max-w-[230px] truncate text-xs text-slate-500" title={originLabel}>
+              {originLabel}
             </span>
           </div>
           <div className="flex gap-1">
@@ -998,12 +1010,12 @@ export default function Home() {
               onChange={(e) => setPlaceInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && geocodePlace()}
               placeholder="住所・地名（例: 千代田区神田、新宿駅）"
-              className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+              className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
             />
             <button
               onClick={geocodePlace}
               disabled={geoLoading || !placeInput.trim()}
-              className="shrink-0 rounded-md bg-gray-700 px-2 py-1 text-xs text-white hover:bg-gray-800 disabled:opacity-40"
+              className="shrink-0 rounded-md bg-slate-700 px-2 py-1 text-xs text-white hover:bg-slate-800 disabled:opacity-40"
             >
               設定
             </button>
@@ -1011,13 +1023,13 @@ export default function Home() {
               onClick={handleMyLocation}
               disabled={geoLoading}
               title="GPSで現在地を取得"
-              className="shrink-0 rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 disabled:opacity-40"
+              className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40"
             >
-              📍GPS
+              GPS
             </button>
           </div>
-          {geoError && <p className="mt-1 text-[11px] text-red-600">{geoError}</p>}
-          <p className="mt-1 text-[10px] text-gray-600">
+          {geoError && <p className="mt-1 text-xs text-red-600">{geoError}</p>}
+          <p className="mt-1 text-xs text-slate-600">
             ※ 現在地・住所は経路/地名検索のため外部サービス（OSRM・Nominatim）に送信されます
           </p>
         </div>
@@ -1026,16 +1038,17 @@ export default function Home() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="例）雨の日、車椅子の母と避難したい"
-          className="min-h-[80px] rounded-lg border border-gray-300 p-3 text-base text-gray-900 focus:border-blue-500 focus:outline-none"
+          className="min-h-[80px] rounded-lg border border-slate-300 p-3 text-base text-slate-900 focus:border-blue-500 focus:outline-none"
         />
-        <div className="flex flex-wrap gap-1">
-          {SAMPLES.map((s) => (
+        <div className="flex flex-wrap gap-1.5">
+          {SAMPLES.map((sample) => (
             <button
-              key={s}
-              onClick={() => setText(s)}
-              className="rounded-full border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100"
+              key={sample.label}
+              onClick={() => setText(sample.text)}
+              title={sample.text}
+              className="rounded-full border border-slate-300 px-3 py-1.5 text-xs text-slate-600 transition hover:border-slate-400 hover:bg-slate-50"
             >
-              {s.slice(0, 14)}…
+              {sample.label}
             </button>
           ))}
         </div>
@@ -1052,53 +1065,53 @@ export default function Home() {
         {submitted && (
           <div className="flex flex-wrap gap-1 text-xs">
             {ATTR_LABELS.filter((a) => attrs[a.key]).map((a) => (
-              <span key={a.key} className="rounded bg-blue-100 px-2 py-1 text-blue-800">
+              <span key={a.key} className="rounded bg-slate-100 px-2 py-1 text-slate-700">
                 {a.label}
               </span>
             ))}
             {attrs.hazard && (
-              <span className="rounded bg-orange-100 px-2 py-1 text-orange-800">
+              <span className="rounded bg-slate-100 px-2 py-1 text-slate-700">
                 災害: {HAZARD_LABEL[attrs.hazard]}
               </span>
             )}
-            {source && <span className="text-gray-600">（抽出: {source}）</span>}
+            {source && <span className="text-slate-600">（抽出: {source}）</span>}
           </div>
         )}
 
         {/* 複合ニーズの同時最適を明示（既存サービスが扱えない強み） */}
         {submitted && activeNeeds.length >= 2 && (
-          <div className="rounded-lg border border-violet-300 bg-violet-50 p-2 text-xs text-violet-900">
-            🎯 <b>複合ニーズを同時に最適化</b>: {activeNeeds.join(" × ")}
-            <span className="ml-1 text-violet-500">— {activeNeeds.length}条件を同時に考慮しています</span>
+          <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700 shadow-sm">
+            <b className="text-slate-900">複合ニーズを同時に最適化</b>: {activeNeeds.join(" × ")}
+            <span className="ml-1 text-slate-500">— {activeNeeds.length}条件を同時に考慮しています</span>
           </div>
         )}
 
         {/* 帰宅困難者モード（#106）: 地震 × 外出中。
             指定避難所は自宅を失った人の受け皿。帰宅できないだけなら一時滞在施設で待つのが原則 */}
         {stranded.length > 0 && (
-          <div className="rounded-lg border border-indigo-300 bg-indigo-50 p-3">
-            <div className="text-xs font-bold text-indigo-800">🏢 外出中に地震が起きたら</div>
-            <p className="mt-1 text-sm text-indigo-900">
+          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="text-xs font-semibold text-blue-800">外出中に地震が起きたら</div>
+            <p className="mt-1 text-sm text-blue-900">
               <b>むやみに歩いて帰らないでください。</b>
               一斉徒歩帰宅は救助活動の妨げになり、余震での落下物・沿道火災に晒されます。まず近くの
               <b>一時滞在施設</b>で待機し、鉄道の再開と安否確認を優先してください。
             </p>
             <ul className="mt-2 flex flex-col gap-1">
               {stranded.map((s) => (
-                <li key={s.feature.properties.id} className="text-xs text-gray-800">
+                <li key={s.feature.properties.id} className="text-xs text-slate-800">
                   <a
                     href={gmapsWalkingUrl(origin, s.feature.geometry.coordinates as [number, number])}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-bold text-indigo-700 underline decoration-dotted underline-offset-2"
+                    className="font-semibold text-blue-700 underline decoration-dotted underline-offset-2"
                   >
                     {s.feature.properties.name}
                   </a>
-                  <span className="ml-1 text-gray-600">直線{s.km.toFixed(1)}km</span>
+                  <span className="ml-1 text-slate-600">直線{s.km.toFixed(1)}km</span>
                 </li>
               ))}
             </ul>
-            <p className="mt-1 text-[10px] text-indigo-700">
+            <p className="mt-1 text-xs text-blue-700">
               出典: 都立の一時滞在施設（東京都総務局）。区市町村・民間の施設は含みません。開設状況は必ず現地・公式情報で確認してください
             </p>
           </div>
@@ -1106,8 +1119,8 @@ export default function Home() {
 
         {/* 現在地の地震リスク（#106） */}
         {originQuakeLines.length > 0 && (
-          <div className="rounded-lg border border-orange-300 bg-orange-50 p-3">
-            <div className="text-xs font-bold text-orange-800">🌐 いまいる場所の地震リスク</div>
+          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="text-xs font-semibold text-orange-800">いまいる場所の地震リスク</div>
             <ul className="mt-1 flex flex-col gap-0.5 text-sm text-orange-900">
               {originQuakeLines.map((line) => (
                 <li key={line}>・{line}</li>
@@ -1120,16 +1133,16 @@ export default function Home() {
         {decision && (
           <div className="flex flex-col gap-2">
             {ranked[0] && (
-              <div className="rounded-lg border border-red-300 bg-red-50 p-3">
-                <div className="text-xs font-bold text-red-700">
+              <div className="rounded-lg border border-slate-200 border-l-4 border-l-blue-600 bg-white p-3 shadow-sm">
+                <div className="text-xs font-semibold text-blue-700">
                   なぜ「{ranked[0].feature.properties.name}」が1位？
                 </div>
-                <p className="mt-1 text-sm text-gray-800">{decision.summary}</p>
+                <p className="mt-1 text-sm text-slate-800">{decision.summary}</p>
               </div>
             )}
             {decision.nearerRejected && (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                💡 より近い「{decision.nearerRejected.name}」（
+              <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700 shadow-sm">
+                より近い「{decision.nearerRejected.name}」（
                 {decision.nearerRejected.distanceKm.toFixed(1)}km）もありますが、
                 <b>{decision.nearerRejected.reason}</b>
                 のため、上記を推奨します。
@@ -1144,15 +1157,15 @@ export default function Home() {
           <div
             className={`rounded-lg border p-3 text-sm ${
               !routeAdvisory.floodKnown
-                ? "border-gray-300 bg-gray-50 text-gray-700"
+                ? "border-slate-300 bg-slate-50 text-slate-700"
                 : routeRisk === "danger"
                   ? "border-red-300 bg-red-50 text-red-900"
                   : routeRisk === "caution"
                     ? "border-orange-300 bg-orange-50 text-orange-900"
-                    : "border-blue-300 bg-blue-50 text-blue-900"
+                    : "border-slate-200 bg-white text-slate-700"
             }`}
           >
-            <div className="text-xs font-bold">🧭 避難経路の浸水チェック（推奨避難所まで）</div>
+            <div className="text-xs font-bold">避難経路の浸水チェック（推奨避難所まで）</div>
             {!routeAdvisory.floodKnown ? (
               <p className="mt-1">
                 浸水想定データを読み込めなかったため、<b>浸水判定はできません</b>（経路のみ地図に表示）。
@@ -1179,11 +1192,11 @@ export default function Home() {
             )}
             {routeAdvisory.floodKnown && routeAdvisory.avoidedFlood && (
               <p className="mt-1 text-[12px]">
-                ✅ 最短経路（最大浸水深 約{routeAdvisory.shortest.flood.maxDepthM}m）より
+                最短経路（最大浸水深 約{routeAdvisory.shortest.flood.maxDepthM}m）より
                 <b>浸水の浅い経路</b>を地図に表示しています。
               </p>
             )}
-            <p className="mt-1 text-[10px] text-gray-500">
+            <p className="mt-1 text-xs text-slate-500">
               地図の
               {routeRisk === "danger"
                 ? "赤の破線"
@@ -1204,10 +1217,10 @@ export default function Home() {
             className={`rounded-lg border p-3 text-sm ${
               (quakeRouteAdvisory.maxFireRank ?? 0) >= 4
                 ? "border-red-300 bg-red-50 text-red-900"
-                : "border-green-300 bg-green-50 text-green-900"
+                : "border-slate-200 bg-white text-slate-700"
             }`}
           >
-            <div className="text-xs font-bold">🔥 避難経路の延焼・液状化チェック</div>
+            <div className="text-xs font-bold">避難経路の延焼・液状化チェック</div>
             {(quakeRouteAdvisory.maxFireRank ?? 0) >= 4 ? (
               <p className="mt-1">
                 この経路は<b>延焼の危険が高い地域</b>を通ります
@@ -1226,7 +1239,7 @@ export default function Home() {
                 {quakeRouteAdvisory.maxPL.toFixed(0)}）。段差・噴砂で車椅子やベビーカーが進めなくなる想定です。
               </p>
             )}
-            <p className="mt-1 text-[10px] text-gray-500">
+            <p className="mt-1 text-xs text-slate-500">
               地図の青い実線が推奨避難所までの経路。経路上を約100m間隔でサンプリングし、通過する町丁目の地域危険度と250mメッシュの液状化想定を当てています。
             </p>
           </div>
@@ -1234,30 +1247,30 @@ export default function Home() {
 
         {/* マイ・タイムライン（属性×災害×推奨避難先 → 時系列の避難行動） */}
         {submitted && ranked.length > 0 && (
-          <div className="rounded-lg border border-sky-300 bg-sky-50 p-3">
+          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
             <div className="flex items-center justify-between gap-1">
-              <span className="text-xs font-bold text-sky-800">📋 あなたのマイ・タイムライン</span>
+              <span className="text-xs font-semibold text-blue-800">あなたのマイ・タイムライン</span>
               <div className="flex gap-1">
                 {timeline && voiceOut && (
                   <button
                     onClick={speakTimeline}
                     title="タイムラインを読み上げる"
-                    className="rounded-md border border-sky-400 px-2 py-1 text-xs text-sky-700 hover:bg-sky-100"
+                    className="rounded-md border border-blue-400 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100"
                   >
-                    🔊 読み上げ
+                    読み上げ
                   </button>
                 )}
                 <button
                   onClick={genTimeline}
                   disabled={timelineLoading}
-                  className="rounded-md bg-sky-600 px-2 py-1 text-xs text-white hover:bg-sky-700 disabled:opacity-40"
+                  className="rounded-md bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-40"
                 >
                   {timelineLoading ? "作成中…" : timeline ? "作り直す" : "行動計画をつくる"}
                 </button>
               </div>
             </div>
             {!timeline && !timelineLoading && (
-              <p className="mt-1 text-[11px] text-sky-700">
+              <p className="mt-1 text-xs text-blue-700">
                 あなたの状況と推奨避難先「{ranked[0].feature.properties.name}」に合わせ、
                 {isQuakeContext(attrs)
                   ? "発災直後からの行動の手順を作成します（地震に警戒レベルはありません）"
@@ -1268,10 +1281,10 @@ export default function Home() {
               <div className="mt-2 flex flex-col gap-2">
                 {timeline.map((ph, pi) => (
                   <div key={`${ph.phase}-${pi}`} className="relative pl-4">
-                    <span className="absolute left-0 top-1.5 h-2 w-2 rounded-full bg-sky-500" />
-                    <div className="text-xs font-bold text-sky-900">{ph.phase}</div>
-                    <div className="text-[10px] text-sky-600">{ph.level}</div>
-                    <ul className="mt-0.5 list-disc pl-4 text-xs text-gray-700">
+                    <span className="absolute left-0 top-1.5 h-2 w-2 rounded-full bg-blue-500" />
+                    <div className="text-xs font-semibold text-blue-900">{ph.phase}</div>
+                    <div className="text-xs text-blue-600">{ph.level}</div>
+                    <ul className="mt-0.5 list-disc pl-4 text-xs text-slate-700">
                       {ph.actions.map((a, ai) => (
                         <li key={ai}>{a}</li>
                       ))}
@@ -1279,7 +1292,7 @@ export default function Home() {
                   </div>
                 ))}
                 {timelineSource && (
-                  <span className="text-[10px] text-gray-600">
+                  <span className="text-xs text-slate-600">
                     （生成: {timelineSource === "gemini" ? "AI" : "簡易ルール"}・参考情報です。最終判断は自治体の情報に従ってください）
                   </span>
                 )}
@@ -1290,20 +1303,20 @@ export default function Home() {
 
         {/* 家族・支援者への共有（URL/QR） */}
         {submitted && ranked.length > 0 && (
-          <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3">
+          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
             <div className="flex items-center justify-between gap-1">
-              <span className="text-xs font-bold text-emerald-800">🔗 家族・支援者に共有</span>
+              <span className="text-xs font-semibold text-blue-800">家族・支援者に共有</span>
               <button
                 onClick={openShare}
-                className="rounded-md bg-emerald-600 px-2 py-1 text-xs text-white hover:bg-emerald-700"
+                className="rounded-md bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700"
               >
                 {shareUrl ? "更新" : "共有リンク/QRを作る"}
               </button>
             </div>
             {!shareUrl && (
-              <p className="mt-1 text-[11px] text-emerald-700">
+              <p className="mt-1 text-xs text-blue-700">
                 今の状況・現在地・言語をリンク/QRにします。受け取った人が開くと同じ避難先が表示されます。
-                <span className="text-emerald-600">
+                <span className="text-blue-600">
                   （プライバシー配慮のため位置は約100m粒度。共有先の取り扱いにご注意ください）
                 </span>
               </p>
@@ -1319,11 +1332,11 @@ export default function Home() {
                     value={shareUrl}
                     aria-label="避難先を共有するURL（選択してコピーできます）"
                     onFocus={(e) => e.currentTarget.select()}
-                    className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1 text-[11px] text-gray-700"
+                    className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700"
                   />
                   <button
                     onClick={copyShare}
-                    className="shrink-0 rounded-md border border-emerald-400 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-100"
+                    className="shrink-0 rounded-md border border-blue-400 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100"
                   >
                     {copied ? "✓ コピー" : "コピー"}
                   </button>
@@ -1339,7 +1352,9 @@ export default function Home() {
             <div
               key={r.feature.properties.id}
               className={`rounded-lg border p-3 ${
-                i === 0 ? "border-red-400 bg-red-50" : "border-gray-200"
+                i === 0
+                  ? "border-slate-200 border-l-4 border-l-blue-600 bg-white shadow-sm"
+                  : "border-slate-200 bg-white"
               }`}
             >
               <div className="flex items-baseline justify-between">
@@ -1348,12 +1363,12 @@ export default function Home() {
                   target="_blank"
                   rel="noopener noreferrer"
                   title="Googleマップで徒歩ルートを開く"
-                  className="font-bold text-blue-700 underline decoration-dotted underline-offset-2 hover:text-blue-900"
+                  className="font-semibold text-blue-700 underline decoration-dotted underline-offset-2 hover:text-blue-900"
                 >
                   {i === 0 ? "★ " : `${i + 1}. `}
                   {r.feature.properties.name}
                 </a>
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-slate-500">
                   {routeInfo[r.feature.properties.id]
                     ? `徒歩約${routeInfo[r.feature.properties.id].min}分・${(
                         routeInfo[r.feature.properties.id].m / 1000
@@ -1361,26 +1376,26 @@ export default function Home() {
                     : `直線${r.distanceKm.toFixed(1)}km`}
                 </span>
               </div>
-              <div className="flex items-center justify-between text-xs text-gray-600">
+              <div className="flex items-center justify-between text-xs text-slate-600">
                 <span>
                   {r.feature.properties.city}・
                   {r.feature.properties.kind === "center" ? "指定避難所" : "避難場所"}
                   {routeInfo[r.feature.properties.id] && (
-                    <span className="ml-1 text-gray-600">(道路距離)</span>
+                    <span className="ml-1 text-slate-600">(道路距離)</span>
                   )}
                   {r.feature.properties.agingRate != null && (
-                    <span className="ml-1 text-gray-600">
-                      🧓 高齢化率{r.feature.properties.agingRate}%
+                    <span className="ml-1 text-slate-600">
+                      高齢化率{r.feature.properties.agingRate}%
                       {r.feature.properties.agingLevel === "chome" ? "(町丁目)" : ""}
                     </span>
                   )}
                   {/* 地震のときは、その避難先が建つ町丁目の延焼リスクを一目で分かるようにする */}
                   {r.quake?.fireRank != null && (
                     <span
-                      className={`ml-1 ${r.quake.fireRank >= 4 ? "text-red-700" : "text-gray-600"}`}
+                      className={`ml-1 ${r.quake.fireRank >= 4 ? "text-red-700" : "text-slate-600"}`}
                       title="地震に関する地域危険度測定調査（第9回）の火災危険度ランク"
                     >
-                      🔥 延焼{RANK_LABEL[r.quake.fireRank]}
+                      延焼{RANK_LABEL[r.quake.fireRank]}
                     </span>
                   )}
                 </span>
@@ -1396,9 +1411,9 @@ export default function Home() {
                       setSnap("peek"); // 地図を広く見せる
                     }}
                     aria-label={`${r.feature.properties.name}を地図で見る`}
-                    className="inline-flex min-h-[44px] items-center rounded border border-gray-300 px-2 text-gray-700 active:bg-gray-100 md:hidden"
+                    className="inline-flex min-h-[44px] items-center rounded border border-slate-300 px-2 text-slate-700 active:bg-slate-100 md:hidden"
                   >
-                    📍 地図
+                    地図
                   </button>
                   <a
                     href={gmapsWalkingUrl(origin, r.feature.geometry.coordinates)}
@@ -1406,17 +1421,17 @@ export default function Home() {
                     rel="noopener noreferrer"
                     className="inline-flex min-h-[44px] items-center rounded border border-blue-300 px-2 text-blue-700 hover:bg-blue-50"
                   >
-                    🗺 ルート
+                    ルート
                   </a>
                 </span>
               </div>
               {r.reasons.slice(0, 3).map((reason) => (
-                <div key={reason} className="text-xs text-green-700">
+                <div key={reason} className="text-xs text-blue-700">
                   ✓ {reason}
                 </div>
               ))}
               {r.cautions.slice(0, 2).map((c) => (
-                <div key={c} className="text-xs text-amber-700">
+                <div key={c} className="text-xs text-orange-700">
                   ⚠ {c}
                 </div>
               ))}
@@ -1428,8 +1443,8 @@ export default function Home() {
         {/* 重ねて見るレイヤー群。検索結果より下に置く。
             スマホでは画面が縦に短く、設定を先に並べると肝心の避難先までスクロールが要るため */}
         {/* ハザードレイヤ トグル */}
-        <div className="rounded-lg border border-gray-200 p-2">
-          <div className="mb-1 text-xs font-bold text-gray-700">ハザード重ね表示</div>
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="mb-1 text-xs font-semibold text-slate-700">ハザード重ね表示</div>
           <div className="flex flex-wrap gap-1">
             {HAZARD_LAYERS.map((h) => {
               const on = hazards.includes(h.key);
@@ -1440,7 +1455,7 @@ export default function Home() {
                   className={`rounded-full border px-2 py-1 text-xs ${
                     on
                       ? "border-orange-500 bg-orange-100 text-orange-800"
-                      : "border-gray-300 text-gray-600 hover:bg-gray-100"
+                      : "border-slate-300 text-slate-600 hover:bg-slate-100"
                   }`}
                 >
                   {on ? "● " : "○ "}
@@ -1449,40 +1464,39 @@ export default function Home() {
               );
             })}
           </div>
-          <p className="mt-1 text-[10px] text-gray-600">出典: ハザードマップポータルサイト(国土交通省)</p>
+          <Source>出典: ハザードマップポータルサイト(国土交通省)</Source>
           <button
             onClick={() => setThreeD((v) => !v)}
             aria-pressed={threeD}
             className={`mt-2 w-full rounded-md border px-2 py-1 text-xs ${
               threeD
-                ? "border-emerald-500 bg-emerald-100 text-emerald-800"
-                : "border-gray-300 text-gray-600 hover:bg-gray-100"
+                ? "border-blue-500 bg-blue-100 text-blue-800"
+                : "border-slate-300 text-slate-600 hover:bg-slate-100"
             }`}
           >
-            {threeD ? "⛰ 3D地形 ON（坂・起伏を表示）" : "⛰ 3D地形で坂・起伏を見る"}
+            {threeD ? "3D地形 ON（坂・起伏を表示）" : "3D地形で坂・起伏を見る"}
           </button>
           <button
             onClick={() => setBuildings3d((v) => !v)}
             aria-pressed={buildings3d}
             className={`mt-1 w-full rounded-md border px-2 py-1 text-xs ${
               buildings3d
-                ? "border-green-600 bg-green-100 text-green-800"
-                : "border-gray-300 text-gray-600 hover:bg-gray-100"
+                ? "border-blue-600 bg-blue-100 text-blue-800"
+                : "border-slate-300 text-slate-600 hover:bg-slate-100"
             }`}
           >
             {buildings3d
-              ? "🏢 建物3D ON（高い建物＝垂直避難先・拡大で表示）"
-              : "🏢 建物3Dで垂直避難先を見る（水害時・23区）"}
+              ? "建物3D ON（高い建物＝垂直避難先・拡大で表示）"
+              : "建物3Dで垂直避難先を見る（水害時・23区）"}
           </button>
-          <p className="mt-1 text-[10px] text-gray-600">
-            建物: Project PLATEAU(国土交通省) CC BY 4.0。高いほど濃い緑＝上階避難に適す
-          </p>
+          <Source>建物: Project PLATEAU(国土交通省) CC BY 4.0。高いほど濃い緑＝上階避難に適す
+          </Source>
         </div>
 
         {/* 地震の危険度レイヤ（#106）。地震には重ねる浸水タイルが無いかわりに、
             町丁目の地域危険度と想定震度・液状化を面で見せる */}
-        <div className="rounded-lg border border-gray-200 p-2">
-          <div className="mb-1 text-xs font-bold text-gray-700">地震の危険度（町丁目）</div>
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="mb-1 text-xs font-semibold text-slate-700">地震の危険度（町丁目）</div>
           <div className="flex flex-wrap gap-1">
             {(
               [
@@ -1500,7 +1514,7 @@ export default function Home() {
                   className={`rounded-full border px-2 py-1 text-xs ${
                     on
                       ? "border-red-500 bg-red-100 text-red-800"
-                      : "border-gray-300 text-gray-600 hover:bg-gray-100"
+                      : "border-slate-300 text-slate-600 hover:bg-slate-100"
                   }`}
                 >
                   {on ? "● " : "○ "}
@@ -1512,8 +1526,8 @@ export default function Home() {
           <div className="mt-1 flex flex-wrap gap-1">
             {(
               [
-                { key: "shindo", label: "🌐 想定震度" },
-                { key: "liquefaction", label: "💧 液状化" },
+                { key: "shindo", label: "想定震度" },
+                { key: "liquefaction", label: "液状化" },
               ] as const
             ).map((it) => {
               const on = quakeGridLayer === it.key;
@@ -1524,8 +1538,8 @@ export default function Home() {
                   aria-pressed={on}
                   className={`rounded-full border px-2 py-1 text-xs ${
                     on
-                      ? "border-violet-500 bg-violet-100 text-violet-800"
-                      : "border-gray-300 text-gray-600 hover:bg-gray-100"
+                      ? "border-blue-500 bg-blue-100 text-blue-800"
+                      : "border-slate-300 text-slate-600 hover:bg-slate-100"
                   }`}
                 >
                   {on ? "● " : "○ "}
@@ -1535,7 +1549,7 @@ export default function Home() {
             })}
           </div>
           {quakeRiskLayer && (
-            <div className="mt-1 flex items-center gap-1 text-[10px] text-gray-600">
+            <div className="mt-1 flex items-center gap-1 text-xs text-slate-600">
               <span>低</span>
               {["#fef9c3", "#fde68a", "#fb923c", "#ef4444", "#991b1b"].map((c, i) => (
                 <span
@@ -1549,19 +1563,18 @@ export default function Home() {
               <span className="ml-1">ランク1〜5</span>
             </div>
           )}
-          <p className="mt-1 text-[10px] text-gray-600">
-            出典: 地震に関する地域危険度測定調査（第9回・東京都都市整備局）／首都直下地震等による東京の被害想定（令和4年度・東京都総務局）— CC BY
+          <Source>出典: 地震に関する地域危険度測定調査（第9回・東京都都市整備局）／首都直下地震等による東京の被害想定（令和4年度・東京都総務局）— CC BY
             4.0。想定震度・液状化は{quakeGrid?.scenario ?? "都心南部直下地震"}のケース。液状化データは沖積低地など対象地域のみ
-          </p>
+          </Source>
         </div>
 
         {/* 生活継続レイヤー（給水拠点・公衆Wi-Fi） */}
-        <div className="rounded-lg border border-gray-200 p-2">
-          <div className="mb-1 text-xs font-bold text-gray-700">生活継続レイヤー（避難後の備え）</div>
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="mb-1 text-xs font-semibold text-slate-700">生活継続レイヤー（避難後の備え）</div>
           <div className="flex flex-wrap gap-1">
             {([
-              { key: "water", label: "💧 給水拠点", on: "border-sky-500 bg-sky-100 text-sky-800" },
-              { key: "wifi", label: "📶 公衆Wi-Fi", on: "border-emerald-500 bg-emerald-100 text-emerald-800" },
+              { key: "water", label: "給水拠点", on: "border-blue-500 bg-blue-100 text-blue-800" },
+              { key: "wifi", label: "公衆Wi-Fi", on: "border-blue-500 bg-blue-100 text-blue-800" },
             ] as const).map((it) => {
               const active = lifelineShow.includes(it.key);
               return (
@@ -1570,7 +1583,7 @@ export default function Home() {
                   onClick={() => toggleLifeline(it.key)}
                   aria-pressed={active}
                   className={`rounded-full border px-2 py-1 text-xs ${
-                    active ? it.on : "border-gray-300 text-gray-600 hover:bg-gray-100"
+                    active ? it.on : "border-slate-300 text-slate-600 hover:bg-slate-100"
                   }`}
                 >
                   {active ? "● " : "○ "}
@@ -1583,41 +1596,40 @@ export default function Home() {
               aria-pressed={showBusStops}
               className={`rounded-full border px-2 py-1 text-xs ${
                 showBusStops
-                  ? "border-purple-500 bg-purple-100 text-purple-800"
-                  : "border-gray-300 text-gray-600 hover:bg-gray-100"
+                  ? "border-blue-500 bg-blue-100 text-blue-800"
+                  : "border-slate-300 text-slate-600 hover:bg-slate-100"
               }`}
             >
               {showBusStops ? "● " : "○ "}
-              🚌 バス停
+              バス停
             </button>
             <button
               onClick={() => setShowAccessible((v) => !v)}
               aria-pressed={showAccessible}
               className={`rounded-full border px-2 py-1 text-xs ${
                 showAccessible
-                  ? "border-amber-500 bg-amber-100 text-amber-800"
-                  : "border-gray-300 text-gray-600 hover:bg-gray-100"
+                  ? "border-orange-500 bg-orange-100 text-orange-800"
+                  : "border-slate-300 text-slate-600 hover:bg-slate-100"
               }`}
             >
               {showAccessible ? "● " : "○ "}
-              ♿ バリアフリー施設
+              バリアフリー施設
             </button>
             <button
               onClick={() => setShowTempStay((v) => !v)}
               aria-pressed={showTempStay}
               className={`rounded-full border px-2 py-1 text-xs ${
                 showTempStay
-                  ? "border-indigo-500 bg-indigo-100 text-indigo-800"
-                  : "border-gray-300 text-gray-600 hover:bg-gray-100"
+                  ? "border-blue-500 bg-blue-100 text-blue-800"
+                  : "border-slate-300 text-slate-600 hover:bg-slate-100"
               }`}
             >
               {showTempStay ? "● " : "○ "}
-              🏢 一時滞在施設
+              一時滞在施設
             </button>
           </div>
-          <p className="mt-1 text-[10px] text-gray-600">
-            出典: 東京都オープンデータ（災害時給水ステーション／FREE Wi-Fi & TOKYO／「だれでも東京」施設情報／都立の一時滞在施設）・都営バスGTFS（東京都交通局／ODPT）— CC BY 4.0。バス停は拡大で表示。バリアフリー施設は避難経路上で立ち寄れる休憩先。一時滞在施設は帰宅困難者の待機先（都立・住所を国土地理院APIでジオコーディング）
-          </p>
+          <Source>出典: 東京都オープンデータ（災害時給水ステーション／FREE Wi-Fi & TOKYO／「だれでも東京」施設情報／都立の一時滞在施設）・都営バスGTFS（東京都交通局／ODPT）— CC BY 4.0。バス停は拡大で表示。バリアフリー施設は避難経路上で立ち寄れる休憩先。一時滞在施設は帰宅困難者の待機先（都立・住所を国土地理院APIでジオコーディング）
+          </Source>
         </div>
 
       </BottomSheet>
@@ -1642,7 +1654,7 @@ export default function Home() {
           }
         }}
         title="ドラッグ／左右キーで幅を調整"
-        className="hidden w-1 shrink-0 cursor-col-resize bg-gray-200 hover:bg-blue-400 focus:bg-blue-500 focus:outline-none md:block"
+        className="hidden w-1 shrink-0 cursor-col-resize bg-slate-200 hover:bg-blue-400 focus:bg-blue-500 focus:outline-none md:block"
       />
 
       {/* 地図。モバイルは全画面の背面（シートが上に重なる）、デスクトップは右カラム */}
@@ -1676,8 +1688,8 @@ export default function Home() {
       <div
         className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center p-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:hidden"
       >
-        <span className="pointer-events-auto max-w-[92%] truncate rounded-full bg-white/95 px-3 py-1.5 text-xs text-gray-700 shadow-md">
-          📍 {originLabel}
+        <span className="pointer-events-auto max-w-[92%] truncate rounded-full bg-white/95 px-3 py-1.5 text-xs text-slate-700 shadow-md">
+          {originLabel}
         </span>
       </div>
 
@@ -1687,11 +1699,11 @@ export default function Home() {
           onClick={handleMyLocation}
           disabled={geoLoading}
           aria-label="現在地を取得する"
-          className="absolute right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-white text-xl shadow-lg active:bg-gray-100 disabled:opacity-50 md:hidden"
+          className="absolute right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-white text-xl shadow-lg active:bg-slate-100 disabled:opacity-50 md:hidden"
           // 畳んだシートのすぐ上に置く。高さは BottomSheet 側の定数を参照し、二重管理にしない
           style={{ bottom: `calc(${PEEK_VH}dvh + 0.75rem)` }}
         >
-          {geoLoading ? "…" : "📍"}
+          {geoLoading ? "…" : ""}
         </button>
       )}
     </div>

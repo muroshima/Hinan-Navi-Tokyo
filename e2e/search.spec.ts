@@ -35,7 +35,7 @@ test("地震×外出中で帰宅困難者モードと地震リスクが表示さ
   await page.getByRole("button", { name: "避難所をさがす" }).click();
 
   // 外出中の属性チップが立つ
-  await expect(page.getByText("🚶 外出中", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("外出中", { exact: true })).toBeVisible({ timeout: 15_000 });
 
   // 帰宅困難者モード: 一時滞在施設の案内が出る
   await expect(page.getByText("外出中に地震が起きたら")).toBeVisible({ timeout: 15_000 });
