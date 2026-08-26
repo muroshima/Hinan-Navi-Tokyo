@@ -401,3 +401,114 @@ test("素早く弾くと勢いのぶんだけ余計に閉じる", async ({ page 
     `素早く弾いた時=${fast} / ゆっくり動かした時=${slow}`
   ).toBeLessThan(ORDER.indexOf(slow));
 });
+
+// 地図を広く見ようとして畳みきった人が、探し直したときに結果へ気づけないと困る。
+// 段を4つにしたとき、引き上げの条件が「小」のままだったため最小から上がらなかった
+test("畳みきった状態から探し直しても、結果でシートが引き上がる", async ({ page }) => {
+  await page.goto("/");
+  await page
+    .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
+    .fill("雨の日、車椅子の母と避難したい");
+  await page.getByRole("button", { name: "避難所をさがす" }).click();
+  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 30_000 });
+
+  const handle = page.getByRole("button", { name: /情報パネルの高さを変える/ });
+  const snapName = async () =>
+    (await handle.getAttribute("aria-label"))!.match(/現在: (.+)）/)![1];
+  // 最小まで畳む
+  for (let i = 0; i < 6 && (await snapName()) !== "最小"; i++) {
+    await handle.click();
+    await page.waitForTimeout(400);
+  }
+  await expect(handle).toHaveAccessibleName(/現在: 最小/);
+
+  // 入力欄を開いて探し直す
+  await page.getByRole("button", { name: "条件を変えて探し直す" }).click();
+  await page
+    .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
+    .fill("大地震で火事が広がっている。足の悪い祖母と逃げたい");
+  await page.getByRole("button", { name: "避難所をさがす" }).click();
+
+  // 畳んだままではなく中段まで戻る
+  await expect(handle).toHaveAccessibleName(/現在: 中/, { timeout: 30_000 });
+});
+
+// 素早く動かしたあと、狙った位置で止めてから離す操作。
+// 勢いを拾う実装では、止めても最後のフリックの速度が残り、行き過ぎることがある
+// （避難先を読もうとして高さを合わせた直後に閉じきってしまう）
+test("動かす手を止めてから離せば、その位置に着地する", async ({ page }) => {
+  await page.goto("/");
+  await page
+    .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
+    .fill("大地震で火事が広がっている。足の悪い祖母と逃げたい");
+  await page.getByRole("button", { name: "避難所をさがす" }).click();
+  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 30_000 });
+
+  const handle = page.getByRole("button", { name: /情報パネルの高さを変える/ });
+  const snapName = async () =>
+    (await handle.getAttribute("aria-label"))!.match(/現在: (.+)）/)![1];
+  for (let i = 0; i < 6 && (await snapName()) !== "中"; i++) {
+    await handle.click();
+    await page.waitForTimeout(400);
+  }
+
+  const box = (await handle.boundingBox())!;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  const dy = (await page.evaluate(() => window.innerHeight)) * 0.12;
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await expect(handle).toHaveAttribute("data-dragging", "true");
+  // 素早く動かして…
+  await page.mouse.move(cx, cy + dy, { steps: 3 });
+  // …そこで手を止める
+  await page.waitForTimeout(500);
+  await page.mouse.up();
+  await page.waitForTimeout(600);
+
+  // 止めた位置（中段から0.12画面ぶん下）に素直に着く。勢いが残っていると最小まで飛ぶ
+  expect(await snapName(), "止めてから離したのに勢いが残っている").not.toBe("最小");
+});
+
+// 指でドラッグしたあとの1タップ。タッチでは click が合成されないことがあり、
+// ドラッグ直後の click を抑える仕組みが解除されないと、次の1タップが必ず死ぬ。
+// page.mouse では click が来るので、この経路はタッチで叩かないと踏めない
+test("指でドラッグした直後でも、次のタップが効く", async ({ page }) => {
+  await page.goto("/");
+  await page
+    .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
+    .fill("大地震で火事が広がっている。足の悪い祖母と逃げたい");
+  await page.getByRole("button", { name: "避難所をさがす" }).click();
+  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 30_000 });
+
+  const handle = page.getByRole("button", { name: /情報パネルの高さを変える/ });
+  const snapName = async () =>
+    (await handle.getAttribute("aria-label"))!.match(/現在: (.+)）/)![1];
+  const cdp = await page.context().newCDPSession(page);
+  const touch = async (type: "touchStart" | "touchMove" | "touchEnd", x?: number, y?: number) =>
+    cdp.send("Input.dispatchTouchEvent", {
+      type,
+      touchPoints: type === "touchEnd" ? [] : [{ x: x!, y: y! }],
+    });
+
+  const box = (await handle.boundingBox())!;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  const dy = (await page.evaluate(() => window.innerHeight)) * 0.2;
+
+  // 指でドラッグして段を変える
+  await touch("touchStart", cx, cy);
+  await touch("touchMove", cx, cy + dy / 2);
+  await touch("touchMove", cx, cy + dy);
+  await touch("touchEnd");
+  await page.waitForTimeout(700);
+  const afterDrag = await snapName();
+
+  // 続けて指でタップする（掴み直す位置はドラッグ後のつまみ）
+  const box2 = (await handle.boundingBox())!;
+  await touch("touchStart", box2.x + box2.width / 2, box2.y + box2.height / 2);
+  await touch("touchEnd");
+  await page.waitForTimeout(700);
+
+  expect(await snapName(), "ドラッグ直後のタップが無視されている").not.toBe(afterDrag);
+});

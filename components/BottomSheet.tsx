@@ -69,6 +69,10 @@ function nearestSnap(offset: number): Snap {
 // 境界を越えた分の抵抗。越えるほど動かなくなる。
 // ぴたりと止めると「固まった」と感じるが、抵抗が続けば「ここで終わり」と伝わる
 const RUBBER_MAX_VH = 4;
+// 指が止まったと見なす間隔。これを超えて静止してから離したら勢いは無いものとする
+const STOP_MS = 50;
+// ドラッグ直後の click を無視する時間。click が来ないタッチ操作でも必ず解除する
+const SUPPRESS_CLICK_MS = 350;
 function rubberband(overshootVh: number) {
   const k = 0.55;
   const d = 24; // 抵抗が効き始める幅(dvh)
@@ -194,8 +198,22 @@ export default function BottomSheet({
   }, []);
 
   // ドラッグで着地させた直後は click を無視する。
-  // pointerup のあとに click も発火するため、両方でスナップを変えると必ず1段ずれてしまう
+  // pointerup のあとに click も発火するため、両方でスナップを変えると必ず1段ずれてしまう。
+  // ただしタッチ操作では click が合成されないことがあり、降ろす機会が来ないまま
+  // フラグが残ると「ドラッグの次の1タップが必ず死ぬ」。時間で必ず降ろす
   const suppressClick = useRef(false);
+  const suppressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdSuppressClick = useCallback(() => {
+    suppressClick.current = true;
+    if (suppressTimer.current) clearTimeout(suppressTimer.current);
+    suppressTimer.current = setTimeout(() => {
+      suppressClick.current = false;
+      suppressTimer.current = null;
+    }, SUPPRESS_CLICK_MS);
+  }, []);
+  useEffect(() => () => {
+    if (suppressTimer.current) clearTimeout(suppressTimer.current);
+  }, []);
 
   const endDrag = useCallback(
     (e: React.PointerEvent) => {
@@ -207,12 +225,17 @@ export default function BottomSheet({
       // 指がほとんど動いていなければタップ。スナップは変えず、続けて起きる click に任せる
       // （click 経由にしておくと、支援技術からの操作でも同じ動きになる）
       if (Math.abs(e.clientY - d.startY) < TAP_THRESHOLD_PX) return;
-      suppressClick.current = true;
+      holdSuppressClick();
+      // 動きが止まってから離したら、勢いは無いものとして扱う。
+      // pointermove は指が動いたときしか来ないので、素早く動かして途中で止めると
+      // 速度が最後のフリックの値のまま残り、狙った位置に置いたはずが行き過ぎる
+      const restedMs = e.timeStamp - d.lastT;
+      const velocity = restedMs > STOP_MS ? 0 : d.velocity;
       // 離した位置ではなく、勢いのまま滑った先でスナップ先を決める。
       // 弱く動かせば隣の段、強く弾けば端まで飛ぶ
-      onSnapChange(nearestSnap(landed + projectVh(d.velocity)));
+      onSnapChange(nearestSnap(landed + projectVh(velocity)));
     },
-    [onSnapChange]
+    [onSnapChange, holdSuppressClick]
   );
 
   // ポインタが奪われた場合(pointercancel)は操作そのものを無かったことにして元の段へ戻す。

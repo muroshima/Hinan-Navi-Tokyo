@@ -786,8 +786,10 @@ export default function Home() {
       setSource(source);
       setSubmitted(true);
       setPickedId(null); // 新しい検索では選択を解除して1位に戻す
-      // 結果が出たらシートを引き上げ、入力欄は畳んで避難先を先頭に見せる
-      setSnap((s) => (s === "peek" ? "half" : s));
+      // 結果が出たらシートを引き上げ、入力欄は畳んで避難先を先頭に見せる。
+      // 畳みきった状態（最小）からの再検索でも引き上げる。ここを peek だけにしていると、
+      // 地図を広く見ようとして畳んだ人が、検索しても結果に気づけない
+      setSnap((s) => (s === "peek" || s === "collapsed" ? "half" : s));
       setShowControls(false);
       setSheetScrollSignal((n) => n + 1);
       setSubmittedText(q); // 共有URLは画面に反映された入力文を使う（編集中textとのズレ防止）

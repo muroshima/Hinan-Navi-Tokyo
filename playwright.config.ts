@@ -8,7 +8,16 @@ import { defineConfig, devices } from "@playwright/test";
 // ⚠️ reuseExistingServer は「そのポートで何か応答すれば」再利用する。自分で立てた
 //    サーバが残っていると、ビルドし直しても古い内容のまま走る（実際に検証が
 //    11分かかって1件しか通らない状態になった）。ビルドを変えたら立て直す
-const PORT = Number(process.env.E2E_PORT ?? 3000);
+const PORT = (() => {
+  const raw = process.env.E2E_PORT ?? "3000";
+  const n = Number(raw);
+  // 非数値だと baseURL が http://localhost:NaN になり、全テストが理由の分からない
+  // 失敗をする。ここで落として原因を明示する
+  if (!Number.isInteger(n) || n <= 0 || n > 65535) {
+    throw new Error(`E2E_PORT が不正です: ${JSON.stringify(raw)}（1〜65535 の整数を指定してください）`);
+  }
+  return n;
+})();
 const baseURL = `http://localhost:${PORT}`;
 
 export default defineConfig({

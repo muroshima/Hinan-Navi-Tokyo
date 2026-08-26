@@ -5,7 +5,6 @@
 import fs from "fs";
 
 const PATH = process.argv[2] ?? "docs/talk_script.md";
-const CPM = Number(process.env.CPM ?? 275);
 const TOTAL = Number(process.env.TOTAL_SEC ?? 600); // 持ち時間(秒)
 const STEP = 5; // 5秒単位に丸める（1秒刻みの割当は読み手が使えない）
 
@@ -51,4 +50,6 @@ heads.forEach((h, k) => {
   console.log(`  ${h.title.padEnd(34)} ${fmt(from)}-${fmt(to)}  (${alloc[k]}s / ${h.chars}字)`);
 });
 fs.writeFileSync(PATH, lines.join("\n"));
-console.log(`\n合計 ${fmt(TOTAL)} に振り直しました（話速 ${CPM}字/分・${STEP}秒単位）`);
+// 配分は字数の比だけで決める。話速は配分に効かないので出さない
+// （実際に何字/分になるかは count_script.mjs が出す）
+console.log(`\n合計 ${fmt(TOTAL)} に振り直しました（字数の比で配分・${STEP}秒単位）`);
