@@ -672,8 +672,9 @@ export default function Home() {
   }, [rawRoutes, floodGrid]);
 
   // 地図へ渡す経路線。identityを安定させ、実データが変わった時だけMapViewが再描画するようにする
-  // 地震を想定しているときは浸水の色分けを使わない（洪水想定の破線が地震の文脈では誤解を招く）。
-  // 経路そのものは中立色の実線で出し、危険の説明は延焼・液状化チェックのパネルが担う
+  // 地震を想定しているときは浸水の色分けを使わない（洪水想定の色分けが地震の文脈では誤解を招く）。
+  // 経路は災害によらず赤い破線1本に統一してあり、危険の説明は
+  // 延焼・液状化チェックのパネルが担う
   const routeLine = useMemo(() => {
     if (!routeAdvisory) return null;
     const coordinates = routeAdvisory.recommended.coordinates;
@@ -1358,7 +1359,7 @@ export default function Home() {
               </p>
             )}
             <p className="mt-1 text-xs text-slate-500">
-              地図の<b>赤い線</b>が推奨避難所までの経路、<b>濃紺の丸</b>が避難先です。経路上を約100m間隔でサンプリングし、通過する町丁目の地域危険度と250mメッシュの液状化想定を当てています。
+              地図の<b>赤い線</b>が推奨避難所までの経路、<b>濃紺の丸</b>が避難先です。経路上の点を約100m間隔で拾い、通過する町丁目の地域危険度と250mメッシュの液状化想定を当てています。
             </p>
           </div>
         )}
