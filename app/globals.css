@@ -1,8 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* 配色は light に固定する。
+     パネルや文字色は Tailwind の bg-white / text-slate-900 で直接指定しているため、
+     OSのダークモードだけ変数を切り替えると「濃紺の地に黒い文字」になって読めなくなる
+     （相談モードの見出しと入力欄が実際にそうなっていた）。
+     地図・ハザードの配色も light 前提で作っているので、ここは light を宣言して揃える */
+  color-scheme: light;
+  --background: #f8fafc; /* slate-50 */
+  --foreground: #1e293b; /* slate-800 */
 }
 
 @theme inline {
@@ -12,20 +18,28 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
+  /* 面(パネル)を白で浮かせるため、地の色はわずかに沈ませる（slate-50相当） */
   background: var(--background);
   color: var(--foreground);
   /* layout.tsx で設定した Geist(--font-sans) を実際に使う。日本語等は sans-serif にフォールバック */
   font-family: var(--font-sans), sans-serif;
   /* 地図とボトムシートで完結する画面なので、ページ自体の引っぱり（iOSのバウンス）は止める */
   overscroll-behavior: none;
+}
+
+/* 押した手応え。押した瞬間に少し沈むと「反応した」と伝わる（#118）。
+   押し込みは離すより速く戻すのではなく、どちらも短く。100ms 前後が目安。
+   動きを控える設定では拡大縮小をやめる（色や背景の変化は各要素側に残る）。
+   つまみ(div role=button)は対象外。ドラッグ中に縮むと掴んだ位置とずれる */
+button {
+  transition: transform 100ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  button:active:not(:disabled) {
+    transform: scale(0.97);
+  }
 }
 
 /* スマホ向けの操作性（#107）。

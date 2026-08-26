@@ -60,16 +60,19 @@ blockquote {
 .cols img { border: 1px solid var(--line); border-radius: 8px; }
 
 /* 3ステップ */
-.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin: 24px 0; }
+/* 3列に並べると1列あたりの内容幅が140px程度しかない。
+   見出しが2行に折り返して読みにくかったため、余白を詰めて文字を少し下げ、
+   見出しが1行に収まるようにした（意図して分けたい所だけ <br> で改行する） */
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 24px 0; }
 .step {
   background: var(--navy);
   color: #fff;
   border-radius: 12px;
-  padding: 20px 18px;
-  font-size: 19px;
+  padding: 18px 10px;
+  font-size: 16px;
   line-height: 1.5;
 }
-.step b { color: #fde68a; font-size: 21px; }
+.step b { color: #fde68a; font-size: 17px; }
 
 /* 表紙 */
 section.title {
