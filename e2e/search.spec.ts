@@ -68,8 +68,8 @@ test("例文を押すだけで結果まで出る", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "水害・車椅子" }).click();
   await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 20_000 });
-  // 入力欄にも本文が入っている（押した内容が確認できる）
-  await page.getByRole("button", { name: "条件を変えて探し直す" }).click();
+  // 押した本文が入力欄にも入っている（何で検索したのか後から確認できる）。
+  // このファイルはデスクトップで走るので入力欄は畳まれない（畳むのはスマホのみ）
   await expect(page.getByPlaceholder("例）雨の日、車椅子の母と避難したい")).toHaveValue(
     /車椅子の母と避難したい/
   );
