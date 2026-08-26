@@ -8,13 +8,14 @@ import { test, expect, devices } from "@playwright/test";
 const { defaultBrowserType, ...iPhone } = devices["iPhone 13"];
 test.use(iPhone);
 
-test("ボトムシートが3段階で開閉し、検索後は避難先が先に見える", async ({ page }) => {
+test("相談してから地図とシートが現れ、検索後は避難先が先に見える", async ({ page }) => {
   await page.goto("/");
 
+  // 相談モード: 地図もシートのつまみも出さず、現在地と相談欄だけ(#118)
   const handle = page.getByRole("button", { name: /情報パネルの高さを変える/ });
-  await expect(handle).toBeVisible();
+  await expect(handle).toBeHidden();
+  await expect(page.locator("main")).toHaveCount(0);
 
-  // 畳んだ状態(peek)でも、入力欄と検索ボタンには手が届く
   const input = page.getByPlaceholder("例）雨の日、車椅子の母と避難したい");
   const searchButton = page.getByRole("button", { name: "避難所をさがす" });
   await expect(input).toBeVisible();
@@ -23,12 +24,16 @@ test("ボトムシートが3段階で開閉し、検索後は避難先が先に�
   await input.fill("大地震で火事が広がっている。足の悪い祖母と逃げたい");
   await searchButton.click();
 
+  // 検索後に地図とシートが現れる
+  await expect(page.locator("main")).toHaveCount(1, { timeout: 15_000 });
+  await expect(handle).toBeVisible();
+
   // 検索後は入力欄が畳まれ、結果が先頭に来る（狭い画面で避難先までスクロールさせない）
   await expect(page.getByRole("button", { name: "条件を変えて探し直す" })).toBeVisible({
     timeout: 15_000,
   });
   await expect(input).toBeHidden();
-  await expect(page.getByText("が1位？")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("他の候補")).toBeVisible({ timeout: 15_000 });
 
   // 畳んだ入力欄は開き直せる
   await page.getByRole("button", { name: "条件を変えて探し直す" }).click();
@@ -45,7 +50,16 @@ test("ボトムシートが3段階で開閉し、検索後は避難先が先に�
 // ドラッグした先にそのまま着地することを固定する（Copilot 指摘で見つかった不具合の回帰防止）
 test("つまみをドラッグした先にそのまま着地する", async ({ page }) => {
   await page.goto("/");
+  // シートは検索後に現れるので、まず検索する(#118)
+  await page
+    .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
+    .fill("大地震で火事が広がっている。足の悪い祖母と逃げたい");
+  await page.getByRole("button", { name: "避難所をさがす" }).click();
   const handle = page.getByRole("button", { name: /情報パネルの高さを変える/ });
+  await expect(handle).toBeVisible({ timeout: 15_000 });
+  // 検索直後は中段。畳んでから開き具合を確かめる
+  await handle.click(); // 中 → 大
+  await handle.click(); // 大 → 小
   await expect(handle).toHaveAccessibleName(/現在: 小/);
 
   // つまみの中心を掴んで dy ピクセルだけ動かす（相対移動。閾値の判定と条件を揃える）
@@ -78,7 +92,7 @@ test("結果カードから地図の該当地点へ寄せられる", async ({ pa
     .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
     .fill("高齢の祖父と一緒。地震のとき逃げられる所を教えて");
   await page.getByRole("button", { name: "避難所をさがす" }).click();
-  await expect(page.getByText("が1位？")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("他の候補")).toBeVisible({ timeout: 15_000 });
 
   // カードの「地図」ボタンでシートが畳まれ、地図が見える状態になる
   const mapButton = page.getByRole("button", { name: /を地図で見る$/ }).first();
@@ -101,4 +115,31 @@ test("指で操作する画面では主要な操作要素が44px以上ある", a
       .map((el) => `${el.tagName}: ${(el.textContent || "").trim().slice(0, 20)}`);
   });
   expect(tooSmall).toEqual([]);
+});
+
+// 結論だけ先に見せ、根拠と2位以下は畳んでおく(#118)。
+// 認知負荷を下げる意図なので、既定で開いてしまう回帰を防ぐ
+test("根拠と2位以下は畳まれていて、開くと中身が出る", async ({ page }) => {
+  await page.goto("/");
+  await page
+    .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
+    .fill("大地震で火事が広がっている。足の悪い祖母と逃げたい");
+  await page.getByRole("button", { name: "避難所をさがす" }).click();
+
+  const reason = page.getByText("この順位になった理由");
+  const others = page.getByText("他の候補");
+  await expect(reason).toBeVisible({ timeout: 15_000 });
+  await expect(others).toBeVisible();
+
+  // 既定では中身が畳まれている
+  await expect(page.getByText("が1位？")).toBeHidden();
+
+  // 開けば根拠が読める
+  await reason.click();
+  await expect(page.getByText("が1位？")).toBeVisible();
+
+  // 2位以下も開けば出る（1位のカードは畳みの外にあるので常に見えている）
+  await others.click();
+  const mapButtons = page.getByRole("button", { name: /を地図で見る$/ });
+  expect(await mapButtons.count()).toBeGreaterThan(1);
 });

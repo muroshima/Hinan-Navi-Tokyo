@@ -25,7 +25,14 @@ const TAP_THRESHOLD_PX = 8;
 const ORDER: Snap[] = ["peek", "half", "full"];
 const SNAP_LABEL: Record<Snap, string> = { peek: "小", half: "中", full: "大" };
 
+/**
+ * consult = まだ検索していない状態。地図を出さず、相談欄だけを画面中央に置く。
+ * result  = 検索後。モバイルはボトムシート、デスクトップは左サイドバーとして振る舞う。
+ */
+export type PanelMode = "consult" | "result";
+
 interface Props {
+  mode?: PanelMode;
   snap: Snap;
   onSnapChange: (snap: Snap) => void;
   /** デスクトップでのサイドバー幅(px)。モバイルでは無視する */
@@ -56,6 +63,7 @@ function nearestSnap(offset: number): Snap {
 }
 
 export default function BottomSheet({
+  mode = "result",
   snap,
   onSnapChange,
   desktopWidth,
@@ -168,13 +176,17 @@ export default function BottomSheet({
         } as React.CSSProperties
       }
       className={
-        // モバイル: 画面下に貼り付くシート
-        "fixed inset-x-0 bottom-0 z-20 flex h-[88dvh] translate-y-[var(--sheet-y)] flex-col " +
-        "rounded-t-2xl border-t border-slate-200 bg-slate-50 shadow-[0_-4px_24px_rgba(0,0,0,0.18)] " +
-        "[transition:var(--sheet-transition)] " +
-        // デスクトップ: 従来どおり左カラム
-        "md:static md:z-auto md:h-[100dvh] md:w-[var(--sidebar-w,400px)] md:shrink-0 md:translate-y-0 " +
-        "md:rounded-none md:border-t-0 md:border-r md:shadow-none md:[transition:none]"
+        mode === "consult"
+          ? // 相談中: 地図を出さず、画面中央の1カラムに寄せる（読む幅を絞る）
+            "mx-auto flex min-h-[100dvh] w-full max-w-2xl flex-col justify-center " +
+            "bg-transparent md:h-auto md:w-full md:max-w-2xl"
+          : // 結果表示中（モバイル）: 画面下に貼り付くシート
+            "fixed inset-x-0 bottom-0 z-20 flex h-[88dvh] translate-y-[var(--sheet-y)] flex-col " +
+            "rounded-t-2xl border-t border-slate-200 bg-slate-50 shadow-[0_-4px_24px_rgba(0,0,0,0.18)] " +
+            "[transition:var(--sheet-transition)] " +
+            // 結果表示中（デスクトップ）: 従来どおり左カラム
+            "md:static md:z-auto md:h-[100dvh] md:w-[var(--sidebar-w,400px)] md:shrink-0 md:translate-y-0 " +
+            "md:rounded-none md:border-t-0 md:border-r md:shadow-none md:[transition:none]"
       }
     >
       {/* つまみ（モバイルのみ）。ドラッグはここでだけ受ける */}
@@ -207,7 +219,7 @@ export default function BottomSheet({
           }
         }}
         // 縦ドラッグをブラウザのスクロールに取られないようにする
-        className="flex min-h-[44px] shrink-0 cursor-grab touch-none flex-col items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 md:hidden"
+        className={`${mode === "consult" ? "hidden" : "flex"} min-h-[44px] shrink-0 cursor-grab touch-none flex-col items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 md:hidden`}
       >
         <span className="h-1.5 w-12 rounded-full bg-slate-300" />
         {handleLabel && <span className="mt-1 text-xs text-slate-500">{handleLabel}</span>}
@@ -216,7 +228,11 @@ export default function BottomSheet({
       {/* 中身。シート内のスクロールが背後へ連鎖しないよう overscroll を止める */}
       <div
         ref={scrollRef}
-        className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:p-4"
+        className={
+          mode === "consult"
+            ? "flex flex-col gap-4 px-5 py-8 pb-[max(2rem,env(safe-area-inset-bottom))]"
+            : "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:p-4"
+        }
       >
         {children}
       </div>

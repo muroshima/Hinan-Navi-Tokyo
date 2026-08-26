@@ -3,6 +3,7 @@
 import { chromium, devices } from "@playwright/test";
 const OUT = "docs"; // リポジトリルートから実行する
 const U = "http://localhost:3000";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const { defaultBrowserType, ...iPhone } = devices["iPhone 13"];
 const HIDE = "nextjs-portal{display:none!important}";
 const b = await chromium.launch();

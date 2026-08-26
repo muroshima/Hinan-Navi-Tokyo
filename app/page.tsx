@@ -177,6 +177,34 @@ function CardBreakdown({ r, defaultOpen }: { r: RankedEvac; defaultOpen: boolean
   );
 }
 
+// 見出し付きの折りたたみ。結論だけ先に見せ、根拠や候補一覧は畳んでおく(#118)。
+// details/summary を使うのでJSの状態管理は要らず、キーボードでも開閉できる
+function Disclosure({
+  summary,
+  count,
+  children,
+  defaultOpen = false,
+}: {
+  summary: string;
+  count?: number;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <details
+      open={defaultOpen}
+      className="group rounded-lg border border-slate-200 bg-white shadow-sm"
+    >
+      <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+        <span className="text-slate-400 transition-transform group-open:rotate-90">▸</span>
+        {summary}
+        {count != null && <span className="font-normal text-slate-500">（{count}件）</span>}
+      </summary>
+      <div className="border-t border-slate-100 px-3 py-3">{children}</div>
+    </details>
+  );
+}
+
 // データの出典。常時表示すると各パネルの末尾に長文が並んで肝心の避難情報が埋もれるため、
 // 既定では畳んでおく（出典表示はCC BYの条件なので消さずに残す）
 function Source({ children }: { children: React.ReactNode }) {
@@ -708,6 +736,10 @@ export default function Home() {
     [submitted, originQuakeRisk]
   );
 
+  // 検索するまでは「相談モード」。地図もレイヤ操作も出さず、ことばで伝えることに集中させる(#118)。
+  // 地図を初期表示しないぶん、最初のロードで地図タイルや建物データを取りに行かずに済む
+  const consulting = !submitted;
+
   // 入力欄を畳むのはスマホで検索が終わったあとだけ。デスクトップのサイドバーは常に開いておく
   const controlsCollapsed = !isDesktop && submitted && !showControls;
 
@@ -902,10 +934,111 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 結果カード1枚。1位と「他の候補」で同じ見た目を使い回す
+  const renderCard = (r: RankedEvac, i: number) => (
+            <div
+              key={r.feature.properties.id}
+              className={`rounded-lg border p-3 ${
+                i === 0
+                  ? "border-slate-200 border-l-4 border-l-blue-600 bg-white shadow-sm"
+                  : "border-slate-200 bg-white"
+              }`}
+            >
+              <div className="flex items-baseline justify-between">
+                <a
+                  href={gmapsWalkingUrl(origin, r.feature.geometry.coordinates)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Googleマップで徒歩ルートを開く"
+                  className="font-semibold text-blue-700 underline decoration-dotted underline-offset-2 hover:text-blue-900"
+                >
+                  {i === 0 ? "★ " : `${i + 1}. `}
+                  {r.feature.properties.name}
+                </a>
+                <span className="text-xs text-slate-500">
+                  {routeInfo[r.feature.properties.id]
+                    ? `徒歩約${routeInfo[r.feature.properties.id].min}分・${(
+                        routeInfo[r.feature.properties.id].m / 1000
+                      ).toFixed(1)}km`
+                    : `直線${r.distanceKm.toFixed(1)}km`}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-slate-600">
+                <span>
+                  {r.feature.properties.city}・
+                  {r.feature.properties.kind === "center" ? "指定避難所" : "避難場所"}
+                  {routeInfo[r.feature.properties.id] && (
+                    <span className="ml-1 text-slate-600">(道路距離)</span>
+                  )}
+                  {r.feature.properties.agingRate != null && (
+                    <span className="ml-1 text-slate-600">
+                      高齢化率{r.feature.properties.agingRate}%
+                      {r.feature.properties.agingLevel === "chome" ? "(町丁目)" : ""}
+                    </span>
+                  )}
+                  {/* 地震のときは、その避難先が建つ町丁目の延焼リスクを一目で分かるようにする */}
+                  {r.quake?.fireRank != null && (
+                    <span
+                      className={`ml-1 ${r.quake.fireRank >= 4 ? "text-red-700" : "text-slate-600"}`}
+                      title="地震に関する地域危険度測定調査（第9回）の火災危険度ランク"
+                    >
+                      延焼{RANK_LABEL[r.quake.fireRank]}
+                    </span>
+                  )}
+                </span>
+                <span className="flex shrink-0 items-center gap-1">
+                  {/* スマホでは一覧と地図を同時に見られないので、カードから位置を確かめられるようにする */}
+                  <button
+                    onClick={() => {
+                      setFocus({
+                        id: r.feature.properties.id,
+                        coordinates: r.feature.geometry.coordinates,
+                        seq: focusSeq.current++,
+                      });
+                      setSnap("peek"); // 地図を広く見せる
+                    }}
+                    aria-label={`${r.feature.properties.name}を地図で見る`}
+                    className="inline-flex min-h-[44px] items-center rounded border border-slate-300 px-2 text-slate-700 active:bg-slate-100 md:hidden"
+                  >
+                    地図
+                  </button>
+                  <a
+                    href={gmapsWalkingUrl(origin, r.feature.geometry.coordinates)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-[44px] items-center rounded border border-blue-300 px-2 text-blue-700 hover:bg-blue-50"
+                  >
+                    ルート
+                  </a>
+                </span>
+              </div>
+              {r.reasons.slice(0, 3).map((reason) => (
+                <div key={reason} className="text-xs text-blue-700">
+                  ✓ {reason}
+                </div>
+              ))}
+              {r.cautions.slice(0, 2).map((c) => (
+                <div key={c} className="text-xs text-orange-700">
+                  ⚠ {c}
+                </div>
+              ))}
+              {/* 点数内訳（説明可能性）。1位は自動展開、他はトグル */}
+              <CardBreakdown r={r} defaultOpen={i === 0} />
+            </div>
+  );
+
   return (
-    <div className="relative flex h-[100dvh] w-screen flex-col md:flex-row">
-      {/* 操作パネル: モバイルはドラッグできるボトムシート、デスクトップは可変幅の左カラム(#107) */}
+    <div
+      className={
+        consulting
+          ? // 相談中は地図を出さない。まず「ことばで伝える」ことに集中させる(#118)
+            "min-h-[100dvh] w-screen overflow-y-auto"
+          : "relative flex h-[100dvh] w-screen flex-col md:flex-row"
+      }
+    >
+      {/* 操作パネル: 相談中は中央の1カラム、結果表示後はモバイル=ボトムシート/デスクトップ=左カラム */}
       <BottomSheet
+        mode={consulting ? "consult" : "result"}
         snap={snap}
         onSnapChange={setSnap}
         desktopWidth={isDesktop ? sidebarWidth : undefined}
@@ -919,9 +1052,17 @@ export default function Home() {
         scrollTopSignal={sheetScrollSignal}
       >
         {/* 検索後のスマホでは見出しを畳む。画面が縦に短く、避難先までスクロールさせたくない */}
-        <header className={controlsCollapsed ? "hidden" : undefined}>
-          <h1 className="text-lg font-semibold tracking-tight text-slate-900">だれでも避難ナビ TOKYO</h1>
-          <p className="mt-0.5 text-xs text-slate-500">
+        <header className={controlsCollapsed ? "hidden" : consulting ? "text-center" : undefined}>
+          <h1
+            className={
+              consulting
+                ? "text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl"
+                : "text-lg font-semibold tracking-tight text-slate-900"
+            }
+          >
+            だれでも避難ナビ TOKYO
+          </h1>
+          <p className={consulting ? "mt-2 text-sm text-slate-600" : "mt-0.5 text-xs text-slate-500"}>
             ことばで状況を伝えると、あなたが行ける避難所を探します
           </p>
         </header>
@@ -1038,9 +1179,14 @@ export default function Home() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="例）雨の日、車椅子の母と避難したい"
-          className="min-h-[80px] rounded-lg border border-slate-300 p-3 text-base text-slate-900 focus:border-blue-500 focus:outline-none"
+          className={`rounded-lg border border-slate-300 p-3 text-base text-slate-900 focus:border-blue-500 focus:outline-none ${
+            consulting ? "min-h-[120px]" : "min-h-[80px]"
+          }`}
         />
-        <div className="flex flex-wrap gap-1.5">
+        {consulting && (
+          <p className="text-xs text-slate-500">書きにくいときは、近い例を選んでください</p>
+        )}
+        <div className={`flex flex-wrap gap-1.5 ${consulting ? "justify-center" : ""}`}>
           {SAMPLES.map((sample) => (
             <button
               key={sample.label}
@@ -1117,38 +1263,39 @@ export default function Home() {
           </div>
         )}
 
-        {/* 現在地の地震リスク（#106） */}
+        {/* 現在地の地震リスク（#106）。背景情報なので畳んでおく */}
         {originQuakeLines.length > 0 && (
-          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-            <div className="text-xs font-semibold text-orange-800">いまいる場所の地震リスク</div>
-            <ul className="mt-1 flex flex-col gap-0.5 text-sm text-orange-900">
+          <Disclosure summary="いまいる場所の地震リスク">
+            <ul className="flex flex-col gap-0.5 text-sm text-slate-700">
               {originQuakeLines.map((line) => (
                 <li key={line}>・{line}</li>
               ))}
             </ul>
-          </div>
+          </Disclosure>
         )}
 
-        {/* 1位の根拠 ＋ 行けない理由（意思決定支援） */}
+        {/* この順位になった理由。結論(1位)は下のカードで見せ、根拠は畳んでおく(#118) */}
         {decision && (
-          <div className="flex flex-col gap-2">
-            {ranked[0] && (
-              <div className="rounded-lg border border-slate-200 border-l-4 border-l-blue-600 bg-white p-3 shadow-sm">
-                <div className="text-xs font-semibold text-blue-700">
-                  なぜ「{ranked[0].feature.properties.name}」が1位？
+          <Disclosure summary="この順位になった理由">
+            <div className="flex flex-col gap-2">
+              {ranked[0] && (
+                <div>
+                  <div className="text-xs font-semibold text-blue-700">
+                    なぜ「{ranked[0].feature.properties.name}」が1位？
+                  </div>
+                  <p className="mt-1 text-sm text-slate-800">{decision.summary}</p>
                 </div>
-                <p className="mt-1 text-sm text-slate-800">{decision.summary}</p>
-              </div>
-            )}
-            {decision.nearerRejected && (
-              <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700 shadow-sm">
-                より近い「{decision.nearerRejected.name}」（
-                {decision.nearerRejected.distanceKm.toFixed(1)}km）もありますが、
-                <b>{decision.nearerRejected.reason}</b>
-                のため、上記を推奨します。
-              </div>
-            )}
-          </div>
+              )}
+              {decision.nearerRejected && (
+                <p className="border-t border-slate-100 pt-2 text-sm text-slate-700">
+                  より近い「{decision.nearerRejected.name}」（
+                  {decision.nearerRejected.distanceKm.toFixed(1)}km）もありますが、
+                  <b>{decision.nearerRejected.reason}</b>
+                  のため、上記を推奨します。
+                </p>
+              )}
+            </div>
+          </Disclosure>
         )}
 
         {/* 浸水回避ルーティング(#38): 推奨避難所への経路の浸水曝露アドバイザリ。
@@ -1346,101 +1493,20 @@ export default function Home() {
           </div>
         )}
 
-        {/* 結果リスト */}
+        {/* 結果リスト。1位だけ常に見せ、2位以下は畳む（認知負荷を下げる・#118） */}
         <div className="flex flex-col gap-2">
-          {ranked.slice(0, 8).map((r, i) => (
-            <div
-              key={r.feature.properties.id}
-              className={`rounded-lg border p-3 ${
-                i === 0
-                  ? "border-slate-200 border-l-4 border-l-blue-600 bg-white shadow-sm"
-                  : "border-slate-200 bg-white"
-              }`}
-            >
-              <div className="flex items-baseline justify-between">
-                <a
-                  href={gmapsWalkingUrl(origin, r.feature.geometry.coordinates)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Googleマップで徒歩ルートを開く"
-                  className="font-semibold text-blue-700 underline decoration-dotted underline-offset-2 hover:text-blue-900"
-                >
-                  {i === 0 ? "★ " : `${i + 1}. `}
-                  {r.feature.properties.name}
-                </a>
-                <span className="text-xs text-slate-500">
-                  {routeInfo[r.feature.properties.id]
-                    ? `徒歩約${routeInfo[r.feature.properties.id].min}分・${(
-                        routeInfo[r.feature.properties.id].m / 1000
-                      ).toFixed(1)}km`
-                    : `直線${r.distanceKm.toFixed(1)}km`}
-                </span>
+          {ranked[0] && renderCard(ranked[0], 0)}
+          {ranked.length > 1 && (
+            <Disclosure summary="他の候補" count={Math.min(ranked.length, 8) - 1}>
+              <div className="flex flex-col gap-2">
+                {ranked.slice(1, 8).map((r, i) => renderCard(r, i + 1))}
               </div>
-              <div className="flex items-center justify-between text-xs text-slate-600">
-                <span>
-                  {r.feature.properties.city}・
-                  {r.feature.properties.kind === "center" ? "指定避難所" : "避難場所"}
-                  {routeInfo[r.feature.properties.id] && (
-                    <span className="ml-1 text-slate-600">(道路距離)</span>
-                  )}
-                  {r.feature.properties.agingRate != null && (
-                    <span className="ml-1 text-slate-600">
-                      高齢化率{r.feature.properties.agingRate}%
-                      {r.feature.properties.agingLevel === "chome" ? "(町丁目)" : ""}
-                    </span>
-                  )}
-                  {/* 地震のときは、その避難先が建つ町丁目の延焼リスクを一目で分かるようにする */}
-                  {r.quake?.fireRank != null && (
-                    <span
-                      className={`ml-1 ${r.quake.fireRank >= 4 ? "text-red-700" : "text-slate-600"}`}
-                      title="地震に関する地域危険度測定調査（第9回）の火災危険度ランク"
-                    >
-                      延焼{RANK_LABEL[r.quake.fireRank]}
-                    </span>
-                  )}
-                </span>
-                <span className="flex shrink-0 items-center gap-1">
-                  {/* スマホでは一覧と地図を同時に見られないので、カードから位置を確かめられるようにする */}
-                  <button
-                    onClick={() => {
-                      setFocus({
-                        id: r.feature.properties.id,
-                        coordinates: r.feature.geometry.coordinates,
-                        seq: focusSeq.current++,
-                      });
-                      setSnap("peek"); // 地図を広く見せる
-                    }}
-                    aria-label={`${r.feature.properties.name}を地図で見る`}
-                    className="inline-flex min-h-[44px] items-center rounded border border-slate-300 px-2 text-slate-700 active:bg-slate-100 md:hidden"
-                  >
-                    地図
-                  </button>
-                  <a
-                    href={gmapsWalkingUrl(origin, r.feature.geometry.coordinates)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex min-h-[44px] items-center rounded border border-blue-300 px-2 text-blue-700 hover:bg-blue-50"
-                  >
-                    ルート
-                  </a>
-                </span>
-              </div>
-              {r.reasons.slice(0, 3).map((reason) => (
-                <div key={reason} className="text-xs text-blue-700">
-                  ✓ {reason}
-                </div>
-              ))}
-              {r.cautions.slice(0, 2).map((c) => (
-                <div key={c} className="text-xs text-orange-700">
-                  ⚠ {c}
-                </div>
-              ))}
-              {/* 点数内訳（説明可能性）。1位は自動展開、他はトグル */}
-              <CardBreakdown r={r} defaultOpen={i === 0} />
-            </div>
-          ))}
+            </Disclosure>
+          )}
         </div>
-        {/* 重ねて見るレイヤー群。検索結果より下に置く。
+        {submitted && (
+        <>
+        {/* 重ねて見るレイヤー群。検索後だけ出す。相談中は何に重ねるのか分からないため(#118)。
             スマホでは画面が縦に短く、設定を先に並べると肝心の避難先までスクロールが要るため */}
         {/* ハザードレイヤ トグル */}
         <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
@@ -1631,9 +1697,13 @@ export default function Home() {
           <Source>出典: 東京都オープンデータ（災害時給水ステーション／FREE Wi-Fi & TOKYO／「だれでも東京」施設情報／都立の一時滞在施設）・都営バスGTFS（東京都交通局／ODPT）— CC BY 4.0。バス停は拡大で表示。バリアフリー施設は避難経路上で立ち寄れる休憩先。一時滞在施設は帰宅困難者の待機先（都立・住所を国土地理院APIでジオコーディング）
           </Source>
         </div>
-
+        </>
+        )}
       </BottomSheet>
 
+      {/* 以下は結果表示中のみ。相談中は地図もレイヤ操作も出さない(#118) */}
+      {!consulting && (
+      <>
       {/* リサイズハンドル（デスクトップのみ・キーボード操作対応） */}
       <div
         role="separator"
@@ -1705,6 +1775,8 @@ export default function Home() {
         >
           {geoLoading ? "…" : ""}
         </button>
+      )}
+      </>
       )}
     </div>
   );
