@@ -765,7 +765,15 @@ export default function MapView({
       const b = new maplibregl.LngLatBounds();
       ranked.slice(0, 8).forEach((r) => b.extend(r.feature.geometry.coordinates));
       if (origin) b.extend(origin);
-      map.fitBounds(b, { padding: 80, maxZoom: 15, duration: 600 });
+      // 地図を検索後に出す構成(#118)では、マウント直後のコンテナ寸法が未確定のまま
+      // fitBounds が走り、初期ズーム(11=関東全域)のまま残ることがあった。
+      // 寸法を取り込んでから合わせ、次フレームでもう一度当てて取りこぼしを防ぐ
+      const fit = () => {
+        map.resize();
+        map.fitBounds(b, { padding: 48, maxZoom: 16, duration: 500 });
+      };
+      fit();
+      requestAnimationFrame(fit);
     }
   }, [ranked, origin, loaded]);
 

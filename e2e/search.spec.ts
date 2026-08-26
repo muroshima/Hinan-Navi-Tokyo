@@ -46,3 +46,31 @@ test("地震×外出中で帰宅困難者モードと地震リスクが表示さ
   // 現在地の地震リスク（同梱の地域危険度・想定震度から算出。既定の現在地=東京駅で必ず値が引ける）
   await expect(page.getByText("いまいる場所の地震リスク")).toBeVisible({ timeout: 15_000 });
 });
+
+// 言語セレクタは以前タイムラインの生成言語にしか効かず、選んでも画面が変わらなかった(#118)。
+// 最初に触る画面のことばが切り替わることを固定する
+test("言語を切り替えると画面のことばが変わる", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "避難所をさがす" })).toBeVisible();
+
+  await page.selectOption("#lang", "en");
+  await expect(page.getByRole("button", { name: "Find shelters" })).toBeVisible();
+
+  await page.selectOption("#lang", "zh");
+  await expect(page.getByRole("button", { name: "寻找避难所" })).toBeVisible();
+
+  await page.selectOption("#lang", "ja-easy");
+  await expect(page.getByRole("button", { name: "ひなんじょを さがす" })).toBeVisible();
+});
+
+// 例文はワンタップでそのまま検索まで走る（押しても入力されるだけでは、もう一手かかる）
+test("例文を押すだけで結果まで出る", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "水害・車椅子" }).click();
+  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 20_000 });
+  // 入力欄にも本文が入っている（押した内容が確認できる）
+  await page.getByRole("button", { name: "条件を変えて探し直す" }).click();
+  await expect(page.getByPlaceholder("例）雨の日、車椅子の母と避難したい")).toHaveValue(
+    /車椅子の母と避難したい/
+  );
+});

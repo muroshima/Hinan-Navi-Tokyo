@@ -24,11 +24,13 @@ import { DEFAULT_ATTRS, LANGS, LANG_CODES } from "@/lib/types";
 import {
   buildQuakeRiskIndex,
   lookupQuakeRisk,
+  lookupChome,
   analyzeQuakeRoute,
   RANK_LABEL,
 } from "@/lib/quakeRisk";
 import { QRCodeSVG } from "qrcode.react";
 import BottomSheet, { PEEK_VH, type Snap } from "@/components/BottomSheet";
+import { tFor } from "@/lib/i18n";
 import { fallbackExtract, type FallbackAttrs } from "@/lib/triageFallback";
 import {
   pickSafestRoute,
@@ -84,11 +86,11 @@ const EMPTY_TOILET_IDX: ToiletIndex = { baby: [], ostomate: [], largeBed: [], ca
 // 地域・災害を限定しない例文を主に（最後に代表ケースの江戸川区水害）
 // 例文はラベルと本文を分ける。以前は本文を14文字で切って並べていたが、
 // 途中で切れた文が7つ縦に並ぶだけで意味が読めず、画面の大半を占めていた
-const SAMPLES: { label: string; text: string }[] = [
-  { label: "地震・延焼", text: "大地震で火事が広がっている。足の悪い祖母と逃げたい" },
-  { label: "帰宅困難", text: "職場にいるときに地震が起きた。電車が止まって帰れない" },
-  { label: "水害・車椅子", text: "雨の日、車椅子の母と避難したい。介助は私がします" },
-  { label: "夜間・視覚障害", text: "夜に、目の不自由な父と逃げたい" },
+const SAMPLES: { key: "sampleQuake" | "sampleStranded" | "sampleFlood" | "sampleNight"; text: string }[] = [
+  { key: "sampleQuake", text: "大地震で火事が広がっている。足の悪い祖母と逃げたい" },
+  { key: "sampleStranded", text: "職場にいるときに地震が起きた。電車が止まって帰れない" },
+  { key: "sampleFlood", text: "雨の日、車椅子の母と避難したい。介助は私がします" },
+  { key: "sampleNight", text: "夜に、目の不自由な父と逃げたい" },
 ];
 
 // 共有URLの座標を検証して [lng, lat] で返す（両方が数値かつ範囲内のときのみ）
@@ -154,7 +156,7 @@ function ScoreBreakdown({ r }: { r: RankedEvac }) {
 // スコア内訳の開閉カード。openはstateで完全制御し、
 // ユーザー未操作の間はdefaultOpenの変化(新1位など)に追従して自動展開する。
 // summaryのonClickでユーザー操作のみを捕捉する(onToggleだとプログラム変更も発火し誤検知するため)
-function CardBreakdown({ r, defaultOpen }: { r: RankedEvac; defaultOpen: boolean }) {
+function CardBreakdown({ r, defaultOpen, label = "なぜこの点数？" }: { r: RankedEvac; defaultOpen: boolean; label?: string }) {
   const [open, setOpen] = useState(defaultOpen);
   const touched = useRef(false);
   useEffect(() => {
@@ -173,7 +175,7 @@ function CardBreakdown({ r, defaultOpen }: { r: RankedEvac; defaultOpen: boolean
         <span aria-hidden="true" className="mr-1 text-slate-400">
           {open ? "▾" : "▸"}
         </span>
-        なぜこの点数？（内訳を{open ? "表示中" : "見る"}）
+        {label}
       </summary>
       <ScoreBreakdown r={r} />
     </details>
@@ -210,11 +212,11 @@ function Disclosure({
 
 // データの出典。常時表示すると各パネルの末尾に長文が並んで肝心の避難情報が埋もれるため、
 // 既定では畳んでおく（出典表示はCC BYの条件なので消さずに残す）
-function Source({ children }: { children: React.ReactNode }) {
+function Source({ children, label = "データの出典" }: { children: React.ReactNode; label?: string }) {
   return (
     <details className="mt-2">
       <summary className="flex min-h-[44px] cursor-pointer list-none items-center text-xs text-slate-600 hover:text-slate-900 [&::-webkit-details-marker]:hidden">
-        データの出典
+        {label}
       </summary>
       <p className="mt-1 text-xs leading-relaxed text-slate-500">{children}</p>
     </details>
@@ -527,6 +529,7 @@ export default function Home() {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        // 初回は町丁目データの読み込み前に走ることが多いので、地名は引かない
         setOrigin([pos.coords.longitude, pos.coords.latitude]);
         setOriginLabel("現在地（GPS）");
       },
@@ -535,8 +538,15 @@ export default function Home() {
     );
   }, []);
 
-  // GPSで現在地を取得
-  function handleMyLocation() {
+  // 町丁目ポリゴンは5,192件。検索のたびに総当たりしないよう bbox 索引を1度だけ組む
+  const quakeIndex = useMemo(
+    () => (quakeRisk.length ? buildQuakeRiskIndex(quakeRisk) : null),
+    [quakeRisk]
+  );
+
+  // GPSで現在地を取得。quakeIndex を参照するため useCallback で依存を明示する
+  // （関数宣言のままだと React Compiler が quakeIndex のメモ化を保持できない）
+  const handleMyLocation = useCallback(() => {
     if (!navigator.geolocation) {
       setGeoError("この端末では位置情報が使えません");
       return;
@@ -545,8 +555,12 @@ export default function Home() {
     setGeoError(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setOrigin([pos.coords.longitude, pos.coords.latitude]);
-        setOriginLabel("現在地（GPS）");
+        const point: [number, number] = [pos.coords.longitude, pos.coords.latitude];
+        setOrigin(point);
+        // どこを取れたのか分かるように地名を出す。外部APIは増やさず、
+        // 読み込み済みの町丁目データ(#106)から引く（範囲外なら従来表記）
+        const chome = lookupChome(point, quakeIndex);
+        setOriginLabel(chome ? `現在地: ${chome.city}${chome.chome}` : "現在地（GPS）");
         setGeoLoading(false);
       },
       () => {
@@ -555,7 +569,7 @@ export default function Home() {
       },
       { timeout: 8000 }
     );
-  }
+  }, [quakeIndex]);
 
   // 住所・地名から現在地を設定
   async function geocodePlace() {
@@ -578,12 +592,6 @@ export default function Home() {
       setGeoLoading(false);
     }
   }
-
-  // 町丁目ポリゴンは5,192件。検索のたびに総当たりしないよう bbox 索引を1度だけ組む
-  const quakeIndex = useMemo(
-    () => (quakeRisk.length ? buildQuakeRiskIndex(quakeRisk) : null),
-    [quakeRisk]
-  );
 
   // 現在地の地震リスク（想定災害が地震・火災のときだけ引く）
   const originQuakeRisk = useMemo(() => {
@@ -738,6 +746,9 @@ export default function Home() {
     () => (submitted ? describeOriginQuakeRisk(originQuakeRisk) : []),
     [submitted, originQuakeRisk]
   );
+
+  // 画面の文言。言語セレクタが画面にも効くようにする(#118)
+  const t = tFor(lang);
 
   // 検索するまでは「相談モード」。地図もレイヤ操作も出さず、ことばで伝えることに集中させる(#118)。
   // 地図を初期表示しないぶん、最初のロードで地図タイルや建物データを取りに行かずに済む
@@ -1003,7 +1014,7 @@ export default function Home() {
                     aria-label={`${r.feature.properties.name}を地図で見る`}
                     className="inline-flex min-h-[44px] items-center rounded border border-slate-300 px-2 text-slate-700 active:bg-slate-100 md:hidden"
                   >
-                    地図
+                    {t("showOnMap")}
                   </button>
                   <a
                     href={gmapsWalkingUrl(origin, r.feature.geometry.coordinates)}
@@ -1011,7 +1022,7 @@ export default function Home() {
                     rel="noopener noreferrer"
                     className="inline-flex min-h-[44px] items-center rounded border border-blue-300 px-2 text-blue-700 hover:bg-blue-50"
                   >
-                    ルート
+                    {t("route")}
                   </a>
                 </span>
               </div>
@@ -1026,7 +1037,7 @@ export default function Home() {
                 </div>
               ))}
               {/* 点数内訳（説明可能性）。1位は自動展開、他はトグル */}
-              <CardBreakdown r={r} defaultOpen={i === 0} />
+              <CardBreakdown r={r} defaultOpen={i === 0} label={t("scoreBreakdown")} />
             </div>
   );
 
@@ -1063,10 +1074,10 @@ export default function Home() {
                 : "text-lg font-semibold tracking-tight text-slate-900"
             }
           >
-            だれでも避難ナビ TOKYO
+            {t("appName")}
           </h1>
           <p className={consulting ? "mt-2 text-sm text-slate-600" : "mt-0.5 text-xs text-slate-500"}>
-            ことばで状況を伝えると、あなたが行ける避難所を探します
+            {t("tagline")}
           </p>
         </header>
 
@@ -1076,9 +1087,7 @@ export default function Home() {
           role="note"
           className="rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-900"
         >
-          <span className="md:hidden">
-            ⚠️ <b>参考情報</b>です。避難の最終判断は<b>自治体の公式情報・指示</b>に従ってください。
-          </span>
+          <span className="md:hidden">⚠️ {t("disclaimerShort")}</span>
           <span className="hidden md:inline">
             ⚠️ 本サービスは<b>参考情報</b>です（ハッカソン用プロトタイプ）。掲載データは時点情報で実態と異なる場合があります。
             <b>避難の最終判断は必ず自治体の公式情報・指示に従ってください。</b>
@@ -1091,7 +1100,7 @@ export default function Home() {
             onClick={() => setShowControls(true)}
             className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm active:bg-slate-50"
           >
-            条件を変えて探し直す
+            {t("researchAgain")}
           </button>
         )}
 
@@ -1100,7 +1109,7 @@ export default function Home() {
         {/* 出力言語（やさしい日本語・多言語）＋ 音声入力 */}
         <div className="flex items-center gap-2">
           <label htmlFor="lang" className="text-xs font-semibold text-slate-700">
-            言語
+            {t("language")}
           </label>
           <select
             id="lang"
@@ -1135,7 +1144,7 @@ export default function Home() {
                   : "border-slate-300 text-slate-600 hover:bg-slate-100"
               }`}
             >
-              {listening ? "● 録音中…停止" : "音声入力"}
+              {listening ? `● ${t("voiceStop")}` : t("voiceInput")}
             </button>
           )}
         </div>
@@ -1143,7 +1152,7 @@ export default function Home() {
         {/* 現在地（手動入力 or GPS） */}
         <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-700">現在地</span>
+            <span className="text-xs font-semibold text-slate-700">{t("currentLocation")}</span>
             <span className="max-w-[230px] truncate text-xs text-slate-500" title={originLabel}>
               {originLabel}
             </span>
@@ -1153,7 +1162,7 @@ export default function Home() {
               value={placeInput}
               onChange={(e) => setPlaceInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && geocodePlace()}
-              placeholder="住所・地名（例: 千代田区神田、新宿駅）"
+              placeholder={t("placeHint")}
               className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
             />
             <button
@@ -1161,7 +1170,7 @@ export default function Home() {
               disabled={geoLoading || !placeInput.trim()}
               className="shrink-0 rounded-md bg-slate-700 px-2 py-1 text-xs text-white hover:bg-slate-800 disabled:opacity-40"
             >
-              設定
+              {t("set")}
             </button>
             <button
               onClick={handleMyLocation}
@@ -1169,7 +1178,7 @@ export default function Home() {
               title="GPSで現在地を取得"
               className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40"
             >
-              GPS
+              {t("gps")}
             </button>
           </div>
           {geoError && <p className="mt-1 text-xs text-red-600">{geoError}</p>}
@@ -1181,23 +1190,27 @@ export default function Home() {
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="例）雨の日、車椅子の母と避難したい"
+          placeholder={t("consultPlaceholder")}
           className={`rounded-lg border border-slate-300 p-3 text-base text-slate-900 focus:border-blue-500 focus:outline-none ${
             consulting ? "min-h-[120px]" : "min-h-[80px]"
           }`}
         />
         {consulting && (
-          <p className="text-xs text-slate-500">書きにくいときは、近い例を選んでください</p>
+          <p className="text-xs text-slate-500">{t("sampleHint")}</p>
         )}
         <div className={`flex flex-wrap gap-1.5 ${consulting ? "justify-center" : ""}`}>
           {SAMPLES.map((sample) => (
             <button
-              key={sample.label}
-              onClick={() => setText(sample.text)}
+              key={sample.key}
+              onClick={() => {
+                // 押したらそのまま検索まで走らせる。デモでも当事者でも一手で結果に着く
+                setText(sample.text);
+                void handleSubmit({ overrideText: sample.text });
+              }}
               title={sample.text}
               className="rounded-full border border-slate-300 px-3 py-1.5 text-xs text-slate-600 transition hover:border-slate-400 hover:bg-slate-50"
             >
-              {sample.label}
+              {t(sample.key)}
             </button>
           ))}
         </div>
@@ -1206,7 +1219,7 @@ export default function Home() {
           disabled={loading || !text.trim()}
           className="rounded-lg bg-blue-600 px-4 py-3 text-base font-bold text-white hover:bg-blue-700 disabled:opacity-40"
         >
-          {loading ? "考えています…" : "避難所をさがす"}
+          {loading ? t("searching") : t("search")}
         </button>
         </div>
         {submitError && <p className="text-xs text-red-600">{submitError}</p>}
@@ -1223,7 +1236,7 @@ export default function Home() {
                 災害: {HAZARD_LABEL[attrs.hazard]}
               </span>
             )}
-            {source && <span className="text-slate-600">（抽出: {source}）</span>}
+            {source && <span className="text-slate-600">（{t("extracted")}: {source}）</span>}
           </div>
         )}
 
@@ -1268,7 +1281,7 @@ export default function Home() {
 
         {/* 現在地の地震リスク（#106）。背景情報なので畳んでおく */}
         {originQuakeLines.length > 0 && (
-          <Disclosure summary="いまいる場所の地震リスク">
+          <Disclosure summary={t("quakeRiskHere")}>
             <ul className="flex flex-col gap-0.5 text-sm text-slate-700">
               {originQuakeLines.map((line) => (
                 <li key={line}>・{line}</li>
@@ -1279,7 +1292,7 @@ export default function Home() {
 
         {/* この順位になった理由。結論(1位)は下のカードで見せ、根拠は畳んでおく(#118) */}
         {decision && (
-          <Disclosure summary="この順位になった理由">
+          <Disclosure summary={t("reasonForRank")}>
             <div className="flex flex-col gap-2">
               {ranked[0] && (
                 <div>
@@ -1501,7 +1514,7 @@ export default function Home() {
         <div className="flex flex-col gap-2">
           {ranked[0] && renderCard(ranked[0], 0)}
           {ranked.length > 1 && (
-            <Disclosure summary="他の候補" count={Math.min(ranked.length, 8) - 1}>
+            <Disclosure summary={t("otherCandidates")} count={Math.min(ranked.length, 8) - 1}>
               <div className="flex flex-col gap-2">
                 {ranked.slice(1, 8).map((r, i) => renderCard(r, i + 1))}
               </div>
@@ -1534,7 +1547,7 @@ export default function Home() {
               );
             })}
           </div>
-          <Source>出典: ハザードマップポータルサイト(国土交通省)</Source>
+          <Source label={t("dataSource")}>出典: ハザードマップポータルサイト(国土交通省)</Source>
           <button
             onClick={() => setThreeD((v) => !v)}
             aria-pressed={threeD}
@@ -1560,7 +1573,7 @@ export default function Home() {
               : "建物3Dで垂直避難先を見る（水害時・23区）"}
           </button>
           <p className="mt-1 text-xs text-slate-600">建物は<b>高いほど濃い緑</b>＝上階への避難に適します。</p>
-          <Source>建物: Project PLATEAU(国土交通省) CC BY 4.0</Source>
+          <Source label={t("dataSource")}>建物: Project PLATEAU(国土交通省) CC BY 4.0</Source>
         </div>
 
         {/* 地震の危険度レイヤ（#106）。地震には重ねる浸水タイルが無いかわりに、
@@ -1637,7 +1650,7 @@ export default function Home() {
             想定震度・液状化は{quakeGrid?.scenario ?? "都心南部直下地震"}のケース。
             <b>液状化データは沖積低地など対象地域のみ</b>で、色が付かない場所は「対象外」であり安全を意味しません。
           </p>
-          <Source>
+          <Source label={t("dataSource")}>
             出典: 地震に関する地域危険度測定調査（第9回・東京都都市整備局）／首都直下地震等による東京の被害想定（令和4年度・東京都総務局）— CC BY 4.0
           </Source>
         </div>
@@ -1730,7 +1743,7 @@ export default function Home() {
           <p className="mt-1 text-xs text-slate-600">
             <b>バス停は地図を拡大すると表示</b>されます。バリアフリー施設は避難経路上で立ち寄れる休憩先、一時滞在施設は帰宅困難者の待機先（都立）です。
           </p>
-          <Source>
+          <Source label={t("dataSource")}>
             出典: 東京都オープンデータ（災害時給水ステーション／FREE Wi-Fi & TOKYO／「だれでも東京」施設情報／都立の一時滞在施設）・都営バスGTFS（東京都交通局／ODPT）— CC BY 4.0。一時滞在施設の座標は国土地理院APIでジオコーディング
           </Source>
         </div>
@@ -1810,7 +1823,7 @@ export default function Home() {
           // 畳んだシートのすぐ上に置く。高さは BottomSheet 側の定数を参照し、二重管理にしない
           style={{ bottom: `calc(${PEEK_VH}dvh + 0.75rem)` }}
         >
-          {geoLoading ? "取得中…" : "現在地"}
+          {geoLoading ? t("gpsLoading") : t("currentLocation")}
         </button>
       )}
       </>
