@@ -2,7 +2,10 @@ import { defineConfig, devices } from "@playwright/test";
 
 // e2e は本番相当の `next start` に対して実行する（要事前 `npm run build`）。
 // CI では build → playwright test の順で走らせる（.github/workflows/ci.yml）。
-const PORT = 3000;
+// ローカルで開発サーバ(3000)を立てたままでも、本番相当のビルドに対して検査できるように
+// ポートを切り替えられる。既定は 3000（開発サーバが居ればそれを再利用する）。
+// `next start` に対して確かめたい時は E2E_PORT=3100 のように別ポートを渡す
+const PORT = Number(process.env.E2E_PORT ?? 3000);
 const baseURL = `http://localhost:${PORT}`;
 
 export default defineConfig({

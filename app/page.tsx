@@ -148,18 +148,16 @@ function ScoreBreakdown({ r }: { r: RankedEvac }) {
 // スコア内訳の開閉カード。openはstateで完全制御し、
 // ユーザー未操作の間はdefaultOpenの変化(新1位など)に追従して自動展開する。
 // summaryのonClickでユーザー操作のみを捕捉する(onToggleだとプログラム変更も発火し誤検知するため)
-function CardBreakdown({ r, defaultOpen, label = "なぜこの点数？" }: { r: RankedEvac; defaultOpen: boolean; label?: string }) {
-  const [open, setOpen] = useState(defaultOpen);
-  const touched = useRef(false);
-  useEffect(() => {
-    if (!touched.current) setOpen(defaultOpen);
-  }, [defaultOpen]);
+// この順位になった理由（満たした条件と点数内訳）をまとめて畳む。
+// 条件を常時カードに並べると、避難先の名前と距離という肝心な情報が埋もれるため、
+// 見たい人だけが開く場所へ寄せる(#118)
+function CardBreakdown({ r, label = "なぜこの点数？" }: { r: RankedEvac; label?: string }) {
+  const [open, setOpen] = useState(false);
   return (
     <details open={open} className="mt-1.5">
       <summary
         onClick={(e) => {
           e.preventDefault(); // ネイティブtoggleを止めてstateで制御
-          touched.current = true; // 以降はユーザー操作を優先（defaultOpen追従を停止）
           setOpen((o) => !o);
         }}
         className="flex min-h-[44px] cursor-pointer list-none items-center text-xs font-semibold text-slate-600 hover:text-slate-900 [&::-webkit-details-marker]:hidden"
@@ -169,6 +167,11 @@ function CardBreakdown({ r, defaultOpen, label = "なぜこの点数？" }: { r:
         </span>
         {label}
       </summary>
+      {r.reasons.slice(0, 3).map((reason) => (
+        <div key={reason} className="text-xs text-blue-700">
+          ✓ {reason}
+        </div>
+      ))}
       <ScoreBreakdown r={r} />
     </details>
   );
@@ -982,18 +985,14 @@ export default function Home() {
                   </a>
                 </span>
               </div>
-              {r.reasons.slice(0, 3).map((reason) => (
-                <div key={reason} className="text-xs text-blue-700">
-                  ✓ {reason}
-                </div>
-              ))}
+              {/* 注意は畳まない。危険の告知を隠すと見落とされる */}
               {r.cautions.slice(0, 2).map((c) => (
                 <div key={c} className="text-xs text-orange-700">
                   ⚠ {c}
                 </div>
               ))}
-              {/* 点数内訳（説明可能性）。1位は自動展開、他はトグル */}
-              <CardBreakdown r={r} defaultOpen={i === 0} label={t("scoreBreakdown")} />
+              {/* 満たした条件と点数内訳（説明可能性）。既定は畳む */}
+              <CardBreakdown r={r} label={t("scoreBreakdown")} />
             </div>
   );
 
@@ -1142,25 +1141,30 @@ export default function Home() {
             consulting ? "min-h-[120px]" : "min-h-[80px]"
           }`}
         />
+        {/* 例文は最初の相談画面だけに置く。
+            検索後のサイドバーでは見出しが入らず、ただ短い言葉が並んでいるだけになって
+            何のボタンか分からない。探し直したい人は入力欄に書ける */}
         {consulting && (
-          <p className="text-xs text-slate-500">{t("sampleHint")}</p>
+          <>
+            <p className="text-xs text-slate-500">{t("sampleHint")}</p>
+            <div className="flex flex-wrap justify-center gap-1.5">
+              {SAMPLES.map((sample) => (
+                <button
+                  key={sample.key}
+                  onClick={() => {
+                    // 押したらそのまま検索まで走らせる。デモでも当事者でも一手で結果に着く
+                    setText(sample.text);
+                    void handleSubmit({ overrideText: sample.text });
+                  }}
+                  title={sample.text}
+                  className="rounded-full border border-slate-300 px-3 py-1.5 text-xs text-slate-600 transition hover:border-slate-400 hover:bg-slate-50"
+                >
+                  {t(sample.key)}
+                </button>
+              ))}
+            </div>
+          </>
         )}
-        <div className={`flex flex-wrap gap-1.5 ${consulting ? "justify-center" : ""}`}>
-          {SAMPLES.map((sample) => (
-            <button
-              key={sample.key}
-              onClick={() => {
-                // 押したらそのまま検索まで走らせる。デモでも当事者でも一手で結果に着く
-                setText(sample.text);
-                void handleSubmit({ overrideText: sample.text });
-              }}
-              title={sample.text}
-              className="rounded-full border border-slate-300 px-3 py-1.5 text-xs text-slate-600 transition hover:border-slate-400 hover:bg-slate-50"
-            >
-              {t(sample.key)}
-            </button>
-          ))}
-        </div>
         <button
           onClick={() => handleSubmit()}
           disabled={loading || !text.trim()}
