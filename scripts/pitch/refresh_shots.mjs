@@ -2,7 +2,10 @@
 // 画面全体だけでなく「見せたいパネル」を単体でも撮る。
 import { chromium, devices } from "@playwright/test";
 const OUT = "docs"; // リポジトリルートから実行する
-const U = "http://localhost:3000";
+// 既定は開発サーバ。本番相当のビルドで撮りたいときは
+// SHOT_URL=http://localhost:3100 のように渡す（開発サーバのままだと
+// 本番と描画が変わりうるし、DevTools のバッジも写り込む）
+const U = process.env.SHOT_URL ?? "http://localhost:3000";
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const { defaultBrowserType, ...iPhone } = devices["iPhone 13"];
 const HIDE = "nextjs-portal{display:none!important}";
