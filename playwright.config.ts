@@ -20,6 +20,9 @@ export default defineConfig({
   // 毎回ちがう1件がランダムに落ちる。実測でも逐次の方が速く(約35秒)、安定する
   workers: 1,
   retries: 1,
+  // ドラッグ系は段送りのアニメーション(260ms)と待ちが積み上がる。
+  // CI の runner は遅く、既定の30秒では 1テストが最後まで走りきらない
+  timeout: 60_000,
   reporter: process.env.CI ? "line" : "list",
   use: {
     baseURL,
