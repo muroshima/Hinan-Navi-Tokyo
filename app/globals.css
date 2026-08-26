@@ -1,6 +1,12 @@
 @import "tailwindcss";
 
 :root {
+  /* 配色は light に固定する。
+     パネルや文字色は Tailwind の bg-white / text-slate-900 で直接指定しているため、
+     OSのダークモードだけ変数を切り替えると「濃紺の地に黒い文字」になって読めなくなる
+     （相談モードの見出しと入力欄が実際にそうなっていた）。
+     地図・ハザードの配色も light 前提で作っているので、ここは light を宣言して揃える */
+  color-scheme: light;
   --background: #f8fafc; /* slate-50 */
   --foreground: #1e293b; /* slate-800 */
 }
@@ -10,13 +16,6 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0f172a;
-    --foreground: #e2e8f0;
-  }
 }
 
 body {

@@ -143,3 +143,36 @@ test("根拠と2位以下は畳まれていて、開くと中身が出る", asyn
   const mapButtons = page.getByRole("button", { name: /を地図で見る$/ });
   expect(await mapButtons.count()).toBeGreaterThan(1);
 });
+
+// OSがダークモードでも配色が崩れないこと。
+// 変数だけ dark で切り替えていた頃は、相談モードの見出しと入力欄が
+// 「濃紺の地に黒い文字」になって読めなかった（light 固定で解消）
+test.describe("配色", () => {
+  test.use({ colorScheme: "dark" });
+  test("ダークモード設定でも文字が背景に埋もれない", async ({ page }) => {
+    await page.goto("/");
+    const c = await page.evaluate(() => {
+      const lum = (rgb: string) => {
+        const m = rgb.match(/\d+(\.\d+)?/g);
+        if (!m) return null;
+        const [r, g, b] = m.slice(0, 3).map(Number).map((v) => {
+          const s = v / 255;
+          return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+      const h1 = document.querySelector("h1")!;
+      const ta = document.querySelector("textarea")!;
+      const bodyBg = lum(getComputedStyle(document.body).backgroundColor)!;
+      const ratio = (fg: number) =>
+        (Math.max(fg, bodyBg) + 0.05) / (Math.min(fg, bodyBg) + 0.05);
+      return {
+        h1: ratio(lum(getComputedStyle(h1).color)!),
+        textarea: ratio(lum(getComputedStyle(ta).color)!),
+      };
+    });
+    // WCAG AA の本文相当（4.5:1）を満たすこと
+    expect(c.h1).toBeGreaterThan(4.5);
+    expect(c.textarea).toBeGreaterThan(4.5);
+  });
+});
