@@ -13,15 +13,27 @@ async function search(p, text, coords) {
   await p.addStyleTag({ content: HIDE }).catch(() => {});
   await p.getByPlaceholder("例）雨の日、車椅子の母と避難したい").fill(text);
   await p.getByRole("button", { name: "避難所をさがす" }).click();
-  await p.getByText("が1位？").waitFor({ timeout: 40000 });
+  await p.getByText("他の候補").waitFor({ timeout: 40000 });
   await p.waitForTimeout(6000);
   await p.addStyleTag({ content: HIDE }).catch(() => {});
 }
 // パネル単位で撮る（見出しを含む最小の角丸ブロック）
 // maxHeight を渡すと上端からその高さだけを切り出す。
-// 縦長のパネルをそのまま貼るとスライドの本文領域(約480px)を超えてフッターに重なる
+// 縦長のパネルをそのまま貼るとスライドの本文領域(約480px)を超えてフッターに重なる。
+// 折りたたみ(#118)の中にあるものは開いてから撮る。
 async function panel(p, heading, file, maxHeight) {
-  const el = p.locator("aside div.rounded-lg").filter({ hasText: heading }).last();
+  const details = p.locator("aside details").filter({ hasText: heading });
+  let el;
+  if (await details.count()) {
+    el = details.first();
+    // 閉じていれば開く
+    if (!(await el.evaluate((d) => d.open))) {
+      await el.locator("summary").first().click();
+      await p.waitForTimeout(300);
+    }
+  } else {
+    el = p.locator("aside div.rounded-lg").filter({ hasText: heading }).last();
+  }
   await el.scrollIntoViewIfNeeded();
   await p.waitForTimeout(400);
   if (!maxHeight) {
@@ -36,6 +48,12 @@ async function panel(p, heading, file, maxHeight) {
 }
 
 const pc = await (await b.newContext({ viewport: { width: 1440, height: 810 }, deviceScaleFactor: 2 })).newPage();
+
+// ⓪ 相談モード（検索前）: 地図を出さず、現在地と相談欄だけ(#118)
+await pc.goto(U, { waitUntil: "networkidle" });
+await pc.addStyleTag({ content: HIDE }).catch(() => {});
+await pc.waitForTimeout(1200);
+await pc.screenshot({ path: `${OUT}/shot-consult.jpg`, quality: 92, type: "jpeg" });
 
 // ① 水害・車椅子: 画面全体（自然文→属性→行ける順→地図）
 await search(pc, "雨の日、車椅子の母と避難したい。介助は私がします", [139.8683, 35.7068]);
