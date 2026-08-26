@@ -64,7 +64,8 @@ test("つまみをドラッグした先にそのまま着地する", async ({ pa
   await handle.click();
   await expect(handle).toHaveAccessibleName(/現在: 小/);
 
-  // つまみの中心を掴んで dy ピクセルだけ動かす（相対移動。閾値の判定と条件を揃える）
+  // つまみの中心を掴んで dy ピクセルだけ動かす（相対移動。閾値の判定と条件を揃える）。
+  // 各段のスナップと高さのアニメーション(240ms)が終わってから次を掴む
   const dragBy = async (dy: number) => {
     const box = (await handle.boundingBox())!;
     const cx = box.x + box.width / 2;
@@ -73,14 +74,19 @@ test("つまみをドラッグした先にそのまま着地する", async ({ pa
     await page.mouse.down();
     await page.mouse.move(cx, cy + dy, { steps: 15 });
     await page.mouse.up();
+    await page.waitForTimeout(350);
   };
 
+  // 段の境界（peek と half の中間 ≒ 39dvh）を確実に越え、かつ指が画面内に残る量。
+  // 画面外まで動かすと pointerup が届かず、ドラッグもタップも成立しない
+  const far = (await page.evaluate(() => window.innerHeight)) * 0.5;
+
   // 大きく上へ引き上げれば最大まで開く（1段戻ってはいけない）
-  await dragBy(-420);
+  await dragBy(-far);
   await expect(handle).toHaveAccessibleName(/現在: 大/);
 
   // 大きく下げれば畳まれる
-  await dragBy(420);
+  await dragBy(far);
   await expect(handle).toHaveAccessibleName(/現在: 小/);
 
   // ほとんど動かさない操作はタップとして扱い、次の段階へ進む
@@ -88,7 +94,7 @@ test("つまみをドラッグした先にそのまま着地する", async ({ pa
   await expect(handle).toHaveAccessibleName(/現在: 中/);
 });
 
-test("結果カードから地図の該当地点へ寄せられる", async ({ page }) => {
+test("他の候補を選ぶと地図の避難先が入れ替わる", async ({ page }) => {
   await page.goto("/");
   await page
     .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
@@ -96,10 +102,18 @@ test("結果カードから地図の該当地点へ寄せられる", async ({ pa
   await page.getByRole("button", { name: "避難所をさがす" }).click();
   await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 15_000 });
 
-  // カードの「地図」ボタンでシートが畳まれ、地図が見える状態になる
-  const mapButton = page.getByRole("button", { name: /を地図で見る$/ }).first();
-  await mapButton.click();
+  // 2位以下を開き、そのうち1件を選ぶ（1位には入れ替えボタンを出さない）
+  const others = page.getByText("他の候補");
+  await others.scrollIntoViewIfNeeded();
+  await others.click();
+  const pick = page.getByRole("button", { name: /を地図に表示する$/ }).first();
+  const label = (await pick.getAttribute("aria-label")) ?? "";
+  const name = label.replace("を地図に表示する", "");
+  await pick.click();
+
+  // 地図を見せるためシートが畳まれ、選んだ施設が先頭に来る
   await expect(page.getByRole("button", { name: /情報パネルの高さを変える（現在: 小）/ })).toBeVisible();
+  await expect(page.locator("aside")).toContainText(name);
 });
 
 test("指で操作する画面では主要な操作要素が44px以上ある", async ({ page }) => {
@@ -151,13 +165,16 @@ test("根拠と2位以下は畳まれていて、開くと中身が出る", asyn
   await expect(page.getByText("が1位？")).toBeHidden();
 
   // 開けば根拠が読める
+  await reason.scrollIntoViewIfNeeded();
   await reason.click();
   await expect(page.getByText("が1位？")).toBeVisible();
 
-  // 2位以下も開けば出る（1位のカードは畳みの外にあるので常に見えている）
+  // 2位以下も開けば出る（1位のカードは畳みの外にあるので常に見えている）。
+  // 入れ替えボタンは2位以下にだけ付くので、候補が複数あれば1つ以上出る
+  await others.scrollIntoViewIfNeeded();
   await others.click();
-  const mapButtons = page.getByRole("button", { name: /を地図で見る$/ });
-  expect(await mapButtons.count()).toBeGreaterThan(1);
+  const pickButtons = page.getByRole("button", { name: /を地図に表示する$/ });
+  expect(await pickButtons.count()).toBeGreaterThan(0);
 });
 
 // OSがダークモードでも配色が崩れないこと。
@@ -232,4 +249,30 @@ test("つまみを続けて叩いても1段ずつ進む", async ({ page }) => {
   await handle.click({ delay: 0 });
   await handle.click({ delay: 0 });
   await expect(handle).toHaveAccessibleName(/現在: 小/);
+});
+
+// シートは高さ固定を translateY で下げる作りなので、スクロール領域を可視部分に
+// 収めないと下端が画面外に残り、スクロールしても最後まで読めなくなる(#118)
+test("中段でもシートの中身を最後までスクロールして読める", async ({ page }) => {
+  await page.goto("/");
+  await page
+    .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
+    .fill("大地震で火事が広がっている。足の悪い祖母と逃げたい");
+  await page.getByRole("button", { name: "避難所をさがす" }).click();
+  const handle = page.getByRole("button", { name: /情報パネルの高さを変える/ });
+  await expect(handle).toHaveAccessibleName(/現在: 中/, { timeout: 15_000 });
+
+  // 一番下までスクロールしたとき、最後の要素が画面内に収まること
+  const bottom = await page.evaluate(() => {
+    const sc = document.querySelector("aside > div:last-child") as HTMLElement | null;
+    if (!sc) return null;
+    sc.scrollTop = sc.scrollHeight;
+    const last = sc.lastElementChild as HTMLElement | null;
+    if (!last) return null;
+    const r = last.getBoundingClientRect();
+    return { bottom: r.bottom, viewport: window.innerHeight };
+  });
+  expect(bottom).not.toBeNull();
+  // 画面の下端より内側にあること（はみ出していれば読めない）
+  expect(bottom!.bottom).toBeLessThanOrEqual(bottom!.viewport + 1);
 });

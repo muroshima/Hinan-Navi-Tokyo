@@ -40,14 +40,7 @@ import {
   type FloodGrid,
   type RouteInfo,
 } from "@/lib/floodRoute";
-import {
-  createRecognition,
-  canRecognize,
-  canSpeak,
-  speak,
-  stopSpeaking,
-  type SpeechRecognitionLike,
-} from "@/lib/speech";
+import { canSpeak, speak, stopSpeaking } from "@/lib/speech";
 import {
   rankEvacuations,
   explainDecision,
@@ -279,6 +272,10 @@ export default function Home() {
     null
   );
   const focusSeq = useRef(0);
+  // 地図に出す避難先。既定は1位で、候補カードから入れ替える(#118)
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  // 地図上のレイヤー操作パネルの開閉(#118)。既定は閉じて地図を覆わない
+  const [layersOpen, setLayersOpen] = useState(false);
   // 値を増やすとシートの中身が先頭までスクロールする
   const [sheetScrollSignal, setSheetScrollSignal] = useState(0);
   // スマホで検索したあとは入力・設定欄を畳み、避難先を先に見せる（デスクトップは常に開いたまま）
@@ -290,9 +287,6 @@ export default function Home() {
   const timelineReqId = useRef(0); // 最新リクエスト以外のレスポンスを破棄するための識別子
   // 出力言語・音声入出力（アクセシビリティ／多言語）
   const [lang, setLang] = useState<Lang>("ja");
-  const [listening, setListening] = useState(false);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const [voiceIn, setVoiceIn] = useState(false);
   const [voiceOut, setVoiceOut] = useState(false);
   // 家族・支援者への共有（URL/QR）
   const [shareUrl, setShareUrl] = useState<string | null>(null);
@@ -301,68 +295,13 @@ export default function Home() {
     // 音声機能の対応可否はマウント後に判定（SSRと不一致を避ける）。
     // setStateはマイクロタスクに逃がす（effect内の同期setStateを避ける。Promiseは広く対応）
     Promise.resolve().then(() => {
-      setVoiceIn(canRecognize());
       setVoiceOut(canSpeak());
     });
-    // アンマウント時は音声認識・読み上げを停止（マイク取得や読み上げの継続を防ぐ）
+    // アンマウント時は読み上げを停止（読み上げの継続を防ぐ）
     return () => {
-      const rec = recognitionRef.current;
-      if (rec) {
-        // ハンドラを外してからstop（stop後のonendでアンマウント後setStateが走らないように）
-        rec.onresult = null;
-        rec.onend = null;
-        rec.onerror = null;
-        rec.stop();
-      }
-      recognitionRef.current = null;
       stopSpeaking();
     };
   }, []);
-
-  // 音声認識を確実に停止し、ref/stateを同期クリア（onend待ちに依存しない）
-  function stopRecognition() {
-    const rec = recognitionRef.current;
-    if (rec) {
-      rec.onresult = null;
-      rec.onend = null;
-      rec.onerror = null;
-      rec.stop();
-    }
-    recognitionRef.current = null;
-    setListening(false);
-  }
-
-  // 音声入力の開始/停止（Web Speech API・対応ブラウザのみ）
-  function toggleVoiceInput() {
-    if (listening) {
-      stopRecognition();
-      return;
-    }
-    const rec = createRecognition(lang);
-    if (!rec) return;
-    rec.onresult = (e) => {
-      const t = e.results[0]?.[0]?.transcript ?? "";
-      if (t) setText((prev) => (prev ? `${prev} ${t}` : t));
-    };
-    // 自然終了・エラー終了でも state と ref を一貫してクリア
-    rec.onend = () => {
-      setListening(false);
-      recognitionRef.current = null;
-    };
-    rec.onerror = () => {
-      setListening(false);
-      recognitionRef.current = null;
-    };
-    recognitionRef.current = rec;
-    setListening(true);
-    try {
-      rec.start();
-    } catch {
-      // start()が例外を投げ得る（権限・多重開始等）。失敗時はロールバック
-      recognitionRef.current = null;
-      setListening(false);
-    }
-  }
 
   // タイムラインを読み上げる（SpeechSynthesis）。区切りは言語に応じて切替
   function speakTimeline() {
@@ -600,12 +539,21 @@ export default function Home() {
     return lookupQuakeRisk(origin, quakeIndex, quakeGrid);
   }, [attrs, origin, quakeIndex, quakeGrid]);
 
-  const ranked: RankedEvac[] = useMemo(() => {
+  const rankedRaw: RankedEvac[] = useMemo(() => {
     if (!submitted || all.length === 0) return [];
     const base = rankEvacuations(all, origin, attrs, 20);
     const withToilets = enrichToiletNeeds(base, toiletIdx, attrs);
     return enrichQuakeRisk(withToilets, quakeIndex, quakeGrid, attrs, originQuakeRisk);
   }, [submitted, all, origin, attrs, toiletIdx, quakeIndex, quakeGrid, originQuakeRisk]);
+
+  // 選ばれた避難先を先頭に並べ替える。地図・経路・根拠が同じ1件を指すようにして、
+  // 「地図に出ている場所」と「説明されている場所」が食い違わないようにする(#118)
+  const ranked: RankedEvac[] = useMemo(() => {
+    if (!pickedId) return rankedRaw;
+    const i = rankedRaw.findIndex((r) => r.feature.properties.id === pickedId);
+    if (i <= 0) return rankedRaw;
+    return [rankedRaw[i], ...rankedRaw.slice(0, i), ...rankedRaw.slice(i + 1)];
+  }, [rankedRaw, pickedId]);
 
   // 帰宅困難者モード（#106）: 地震 × 外出中。指定避難所は自宅を失った人の受け皿であり、
   // 帰宅できないだけの人がまず向かうべきなのは一時滞在施設。近い順に提示する
@@ -833,6 +781,7 @@ export default function Home() {
       setAttrs({ ...DEFAULT_ATTRS, ...a, hazard });
       setSource(source);
       setSubmitted(true);
+      setPickedId(null); // 新しい検索では選択を解除して1位に戻す
       // 結果が出たらシートを引き上げ、入力欄は畳んで避難先を先頭に見せる
       setSnap((s) => (s === "peek" ? "half" : s));
       setShowControls(false);
@@ -1002,20 +951,24 @@ export default function Home() {
                 </span>
                 <span className="flex shrink-0 items-center gap-1">
                   {/* スマホでは一覧と地図を同時に見られないので、カードから位置を確かめられるようにする */}
-                  <button
-                    onClick={() => {
-                      setFocus({
-                        id: r.feature.properties.id,
-                        coordinates: r.feature.geometry.coordinates,
-                        seq: focusSeq.current++,
-                      });
-                      setSnap("peek"); // 地図を広く見せる
-                    }}
-                    aria-label={`${r.feature.properties.name}を地図で見る`}
-                    className="inline-flex min-h-[44px] items-center rounded border border-slate-300 px-2 text-slate-700 active:bg-slate-100 md:hidden"
-                  >
-                    {t("showOnMap")}
-                  </button>
+                  {/* 1位以外は「この避難先にする」。押すと地図・経路・根拠がこの施設に入れ替わる(#118) */}
+                  {i !== 0 && (
+                    <button
+                      onClick={() => {
+                        setPickedId(r.feature.properties.id);
+                        setFocus({
+                          id: r.feature.properties.id,
+                          coordinates: r.feature.geometry.coordinates,
+                          seq: focusSeq.current++,
+                        });
+                        setSnap("peek"); // スマホでは地図を広く見せる
+                      }}
+                      aria-label={`${r.feature.properties.name}を地図に表示する`}
+                      className="inline-flex min-h-[44px] items-center rounded border border-blue-300 px-2 text-blue-700 hover:bg-blue-50"
+                    >
+                      {t("pickThis")}
+                    </button>
+                  )}
                   <a
                     href={gmapsWalkingUrl(origin, r.feature.geometry.coordinates)}
                     target="_blank"
@@ -1116,8 +1069,6 @@ export default function Home() {
             value={lang}
             onChange={(e) => {
               setLang(e.target.value as Lang);
-              // 録音中なら停止（認識言語のズレ防止）
-              stopRecognition();
               // 既存タイムライン・共有リンクは別言語のため破棄し、進行中の生成・読み上げも無効化
               timelineReqId.current++;
               setTimeline(null);
@@ -1134,19 +1085,6 @@ export default function Home() {
               </option>
             ))}
           </select>
-          {voiceIn && (
-            <button
-              onClick={toggleVoiceInput}
-              aria-pressed={listening}
-              className={`ml-auto rounded-md border px-2 py-1 text-xs ${
-                listening
-                  ? "border-red-500 bg-red-50 text-red-700"
-                  : "border-slate-300 text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              {listening ? `● ${t("voiceStop")}` : t("voiceInput")}
-            </button>
-          )}
         </div>
 
         {/* 現在地（手動入力 or GPS） */}
@@ -1521,234 +1459,6 @@ export default function Home() {
             </Disclosure>
           )}
         </div>
-        {submitted && (
-        <>
-        {/* 重ねて見るレイヤー群。検索後だけ出す。相談中は何に重ねるのか分からないため(#118)。
-            スマホでは画面が縦に短く、設定を先に並べると肝心の避難先までスクロールが要るため */}
-        {/* ハザードレイヤ トグル */}
-        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="mb-1 text-xs font-semibold text-slate-700">ハザード重ね表示</div>
-          <div className="flex flex-wrap gap-1">
-            {HAZARD_LAYERS.map((h) => {
-              const on = hazards.includes(h.key);
-              return (
-                <button
-                  key={h.key}
-                  onClick={() => toggleHazard(h.key)}
-                  className={`rounded-full border px-2 py-1 text-xs ${
-                    on
-                      ? "border-orange-500 bg-orange-100 text-orange-800"
-                      : "border-slate-300 text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  {on ? "● " : "○ "}
-                  {h.label}
-                </button>
-              );
-            })}
-          </div>
-          <Source label={t("dataSource")}>出典: ハザードマップポータルサイト(国土交通省)</Source>
-          <button
-            onClick={() => setThreeD((v) => !v)}
-            aria-pressed={threeD}
-            className={`mt-2 w-full rounded-md border px-2 py-1 text-xs ${
-              threeD
-                ? "border-blue-500 bg-blue-100 text-blue-800"
-                : "border-slate-300 text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            {threeD ? "3D地形 ON（坂・起伏を表示）" : "3D地形で坂・起伏を見る"}
-          </button>
-          <button
-            onClick={() => setBuildings3d((v) => !v)}
-            aria-pressed={buildings3d}
-            className={`mt-1 w-full rounded-md border px-2 py-1 text-xs ${
-              buildings3d
-                ? "border-blue-600 bg-blue-100 text-blue-800"
-                : "border-slate-300 text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            {buildings3d
-              ? "建物3D ON（高い建物＝垂直避難先・拡大で表示）"
-              : "建物3Dで垂直避難先を見る（水害時・23区）"}
-          </button>
-          <p className="mt-1 text-xs text-slate-600">建物は<b>高いほど濃い緑</b>＝上階への避難に適します。</p>
-          <Source label={t("dataSource")}>建物: Project PLATEAU(国土交通省) CC BY 4.0</Source>
-        </div>
-
-        {/* 地震の危険度レイヤ（#106）。地震には重ねる浸水タイルが無いかわりに、
-            町丁目の地域危険度と想定震度・液状化を面で見せる */}
-        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="mb-1 text-xs font-semibold text-slate-700">地震の危険度（町丁目）</div>
-          <div className="flex flex-wrap gap-1">
-            {(
-              [
-                { key: "totalRank", label: "総合" },
-                { key: "buildingRank", label: "建物倒壊" },
-                { key: "fireRank", label: "火災（延焼）" },
-              ] as const
-            ).map((it) => {
-              const on = quakeRiskLayer === it.key;
-              return (
-                <button
-                  key={it.key}
-                  onClick={() => setQuakeRiskLayer(on ? null : it.key)}
-                  aria-pressed={on}
-                  className={`rounded-full border px-2 py-1 text-xs ${
-                    on
-                      ? "border-red-500 bg-red-100 text-red-800"
-                      : "border-slate-300 text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  {on ? "● " : "○ "}
-                  {it.label}
-                </button>
-              );
-            })}
-          </div>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {(
-              [
-                { key: "shindo", label: "想定震度" },
-                { key: "liquefaction", label: "液状化" },
-              ] as const
-            ).map((it) => {
-              const on = quakeGridLayer === it.key;
-              return (
-                <button
-                  key={it.key}
-                  onClick={() => setQuakeGridLayer(on ? null : it.key)}
-                  aria-pressed={on}
-                  className={`rounded-full border px-2 py-1 text-xs ${
-                    on
-                      ? "border-blue-500 bg-blue-100 text-blue-800"
-                      : "border-slate-300 text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  {on ? "● " : "○ "}
-                  {it.label}
-                </button>
-              );
-            })}
-          </div>
-          {quakeRiskLayer && (
-            <div className="mt-1 flex items-center gap-1 text-xs text-slate-600">
-              <span>低</span>
-              {["#fef9c3", "#fde68a", "#fb923c", "#ef4444", "#991b1b"].map((c, i) => (
-                <span
-                  key={c}
-                  title={`ランク${i + 1}（${RANK_LABEL[i + 1]}）`}
-                  className="inline-block h-2.5 w-5 rounded-sm"
-                  style={{ backgroundColor: c }}
-                />
-              ))}
-              <span>高</span>
-              <span className="ml-1">ランク1〜5</span>
-            </div>
-          )}
-          <p className="mt-1 text-xs text-slate-600">
-            想定震度・液状化は{quakeGrid?.scenario ?? "都心南部直下地震"}のケース。
-            <b>液状化データは沖積低地など対象地域のみ</b>で、色が付かない場所は「対象外」であり安全を意味しません。
-          </p>
-          <Source label={t("dataSource")}>
-            出典: 地震に関する地域危険度測定調査（第9回・東京都都市整備局）／首都直下地震等による東京の被害想定（令和4年度・東京都総務局）— CC BY 4.0
-          </Source>
-        </div>
-
-        {/* 生活継続レイヤー（給水拠点・公衆Wi-Fi） */}
-        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="mb-1 text-xs font-semibold text-slate-700">生活継続レイヤー（避難後の備え）</div>
-          <div className="flex flex-wrap gap-1">
-            {([
-              // dot は MapView の点レイヤの色。トグルの選択状態(青)とは別に、
-              // 「地図のどの色の点か」が分かるよう色見本を持たせる
-              { key: "water", label: "給水拠点", dot: "#0ea5e9", on: "border-blue-500 bg-blue-100 text-blue-800" },
-              { key: "wifi", label: "公衆Wi-Fi", dot: "#10b981", on: "border-blue-500 bg-blue-100 text-blue-800" },
-            ] as const).map((it) => {
-              const active = lifelineShow.includes(it.key);
-              return (
-                <button
-                  key={it.key}
-                  onClick={() => toggleLifeline(it.key)}
-                  aria-pressed={active}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs ${
-                    active ? it.on : "border-slate-300 text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  {/* 地図の点と同じ色。塗りが選択中／枠だけが未選択 */}
-                  <span
-                    aria-hidden="true"
-                    className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border"
-                    style={{
-                      backgroundColor: active ? it.dot : "transparent",
-                      borderColor: it.dot,
-                    }}
-                  />
-                  {it.label}
-                </button>
-              );
-            })}
-            <button
-              onClick={() => setShowBusStops((v) => !v)}
-              aria-pressed={showBusStops}
-              className={`rounded-full border px-2 py-1 text-xs ${
-                showBusStops
-                  ? "border-blue-500 bg-blue-100 text-blue-800"
-                  : "border-slate-300 text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              {/* 地図の点と同じ色。塗りが選択中／枠だけが未選択 */}
-              <span
-                aria-hidden="true"
-                className="mr-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full border align-middle"
-                style={{ backgroundColor: showBusStops ? "#a855f7" : "transparent", borderColor: "#a855f7" }}
-              />
-              バス停
-            </button>
-            <button
-              onClick={() => setShowAccessible((v) => !v)}
-              aria-pressed={showAccessible}
-              className={`rounded-full border px-2 py-1 text-xs ${
-                showAccessible
-                  ? "border-orange-500 bg-orange-100 text-orange-800"
-                  : "border-slate-300 text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              {/* 地図の点と同じ色。塗りが選択中／枠だけが未選択 */}
-              <span
-                aria-hidden="true"
-                className="mr-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full border align-middle"
-                style={{ backgroundColor: showAccessible ? "#f59e0b" : "transparent", borderColor: "#f59e0b" }}
-              />
-              バリアフリー施設
-            </button>
-            <button
-              onClick={() => setShowTempStay((v) => !v)}
-              aria-pressed={showTempStay}
-              className={`rounded-full border px-2 py-1 text-xs ${
-                showTempStay
-                  ? "border-blue-500 bg-blue-100 text-blue-800"
-                  : "border-slate-300 text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              {/* 地図の点と同じ色。塗りが選択中／枠だけが未選択 */}
-              <span
-                aria-hidden="true"
-                className="mr-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full border align-middle"
-                style={{ backgroundColor: showTempStay ? "#4f46e5" : "transparent", borderColor: "#4f46e5" }}
-              />
-              一時滞在施設
-            </button>
-          </div>
-          <p className="mt-1 text-xs text-slate-600">
-            <b>バス停は地図を拡大すると表示</b>されます。バリアフリー施設は避難経路上で立ち寄れる休憩先、一時滞在施設は帰宅困難者の待機先（都立）です。
-          </p>
-          <Source label={t("dataSource")}>
-            出典: 東京都オープンデータ（災害時給水ステーション／FREE Wi-Fi & TOKYO／「だれでも東京」施設情報／都立の一時滞在施設）・都営バスGTFS（東京都交通局／ODPT）— CC BY 4.0。一時滞在施設の座標は国土地理院APIでジオコーディング
-          </Source>
-        </div>
-        </>
-        )}
       </BottomSheet>
 
       {/* 以下は結果表示中のみ。相談中は地図もレイヤ操作も出さない(#118) */}
@@ -1801,17 +1511,258 @@ export default function Home() {
           quakeGridLayer={quakeGridLayer}
           focus={focus}
         />
+      {/* 重ねるレイヤーの操作(#118)。サイドバーに置くと避難先より先に設定が並んで
+            肝心の情報が埋もれるので、地図の上に固定する。既定は閉じて地図を覆わない */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col items-center gap-2 p-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:items-start md:pl-3">
+          <div className="pointer-events-auto flex max-w-full items-center gap-2">
+            <span className="max-w-[52vw] truncate rounded-full bg-white/95 px-3 py-1.5 text-xs text-slate-700 shadow-md md:max-w-none">
+              {originLabel}
+            </span>
+            <button
+              onClick={() => setLayersOpen((v) => !v)}
+              aria-expanded={layersOpen}
+              className="flex min-h-[36px] items-center gap-1 rounded-full bg-white/95 px-3 text-xs font-semibold text-slate-700 shadow-md hover:bg-white"
+            >
+              <span aria-hidden="true" className={layersOpen ? "rotate-90" : ""}>
+                ▸
+              </span>
+              {t("layers")}
+            </button>
+          </div>
+          {layersOpen && (
+            <div className="pointer-events-auto max-h-[70dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-slate-50/98 p-2 shadow-xl backdrop-blur">
+              <div className="flex flex-col gap-2">
+
+          {/* 重ねて見るレイヤー群。検索後だけ出す。相談中は何に重ねるのか分からないため(#118)。
+              スマホでは画面が縦に短く、設定を先に並べると肝心の避難先までスクロールが要るため */}
+          {/* ハザードレイヤ トグル */}
+          <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <div className="mb-1 text-xs font-semibold text-slate-700">ハザード重ね表示</div>
+            <div className="flex flex-wrap gap-1">
+              {HAZARD_LAYERS.map((h) => {
+                const on = hazards.includes(h.key);
+                return (
+                  <button
+                    key={h.key}
+                    onClick={() => toggleHazard(h.key)}
+                    className={`rounded-full border px-2 py-1 text-xs ${
+                      on
+                        ? "border-orange-500 bg-orange-100 text-orange-800"
+                        : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {on ? "● " : "○ "}
+                    {h.label}
+                  </button>
+                );
+              })}
+            </div>
+            <Source label={t("dataSource")}>出典: ハザードマップポータルサイト(国土交通省)</Source>
+            <button
+              onClick={() => setThreeD((v) => !v)}
+              aria-pressed={threeD}
+              className={`mt-2 w-full rounded-md border px-2 py-1 text-xs ${
+                threeD
+                  ? "border-blue-500 bg-blue-100 text-blue-800"
+                  : "border-slate-300 text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              {threeD ? "3D地形 ON（坂・起伏を表示）" : "3D地形で坂・起伏を見る"}
+            </button>
+            <button
+              onClick={() => setBuildings3d((v) => !v)}
+              aria-pressed={buildings3d}
+              className={`mt-1 w-full rounded-md border px-2 py-1 text-xs ${
+                buildings3d
+                  ? "border-blue-600 bg-blue-100 text-blue-800"
+                  : "border-slate-300 text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              {buildings3d
+                ? "建物3D ON（高い建物＝垂直避難先・拡大で表示）"
+                : "建物3Dで垂直避難先を見る（水害時・23区）"}
+            </button>
+            <p className="mt-1 text-xs text-slate-600">建物は<b>高いほど濃い緑</b>＝上階への避難に適します。</p>
+            <Source label={t("dataSource")}>建物: Project PLATEAU(国土交通省) CC BY 4.0</Source>
+          </div>
+
+          {/* 地震の危険度レイヤ（#106）。地震には重ねる浸水タイルが無いかわりに、
+              町丁目の地域危険度と想定震度・液状化を面で見せる */}
+          <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <div className="mb-1 text-xs font-semibold text-slate-700">地震の危険度（町丁目）</div>
+            <div className="flex flex-wrap gap-1">
+              {(
+                [
+                  { key: "totalRank", label: "総合" },
+                  { key: "buildingRank", label: "建物倒壊" },
+                  { key: "fireRank", label: "火災（延焼）" },
+                ] as const
+              ).map((it) => {
+                const on = quakeRiskLayer === it.key;
+                return (
+                  <button
+                    key={it.key}
+                    onClick={() => setQuakeRiskLayer(on ? null : it.key)}
+                    aria-pressed={on}
+                    className={`rounded-full border px-2 py-1 text-xs ${
+                      on
+                        ? "border-red-500 bg-red-100 text-red-800"
+                        : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {on ? "● " : "○ "}
+                    {it.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {(
+                [
+                  { key: "shindo", label: "想定震度" },
+                  { key: "liquefaction", label: "液状化" },
+                ] as const
+              ).map((it) => {
+                const on = quakeGridLayer === it.key;
+                return (
+                  <button
+                    key={it.key}
+                    onClick={() => setQuakeGridLayer(on ? null : it.key)}
+                    aria-pressed={on}
+                    className={`rounded-full border px-2 py-1 text-xs ${
+                      on
+                        ? "border-blue-500 bg-blue-100 text-blue-800"
+                        : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {on ? "● " : "○ "}
+                    {it.label}
+                  </button>
+                );
+              })}
+            </div>
+            {quakeRiskLayer && (
+              <div className="mt-1 flex items-center gap-1 text-xs text-slate-600">
+                <span>低</span>
+                {["#fef9c3", "#fde68a", "#fb923c", "#ef4444", "#991b1b"].map((c, i) => (
+                  <span
+                    key={c}
+                    title={`ランク${i + 1}（${RANK_LABEL[i + 1]}）`}
+                    className="inline-block h-2.5 w-5 rounded-sm"
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+                <span>高</span>
+                <span className="ml-1">ランク1〜5</span>
+              </div>
+            )}
+            <p className="mt-1 text-xs text-slate-600">
+              想定震度・液状化は{quakeGrid?.scenario ?? "都心南部直下地震"}のケース。
+              <b>液状化データは沖積低地など対象地域のみ</b>で、色が付かない場所は「対象外」であり安全を意味しません。
+            </p>
+            <Source label={t("dataSource")}>
+              出典: 地震に関する地域危険度測定調査（第9回・東京都都市整備局）／首都直下地震等による東京の被害想定（令和4年度・東京都総務局）— CC BY 4.0
+            </Source>
+          </div>
+
+          {/* 生活継続レイヤー（給水拠点・公衆Wi-Fi） */}
+          <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <div className="mb-1 text-xs font-semibold text-slate-700">生活継続レイヤー（避難後の備え）</div>
+            <div className="flex flex-wrap gap-1">
+              {([
+                // dot は MapView の点レイヤの色。トグルの選択状態(青)とは別に、
+                // 「地図のどの色の点か」が分かるよう色見本を持たせる
+                { key: "water", label: "給水拠点", dot: "#0ea5e9", on: "border-blue-500 bg-blue-100 text-blue-800" },
+                { key: "wifi", label: "公衆Wi-Fi", dot: "#10b981", on: "border-blue-500 bg-blue-100 text-blue-800" },
+              ] as const).map((it) => {
+                const active = lifelineShow.includes(it.key);
+                return (
+                  <button
+                    key={it.key}
+                    onClick={() => toggleLifeline(it.key)}
+                    aria-pressed={active}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs ${
+                      active ? it.on : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {/* 地図の点と同じ色。塗りが選択中／枠だけが未選択 */}
+                    <span
+                      aria-hidden="true"
+                      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border"
+                      style={{
+                        backgroundColor: active ? it.dot : "transparent",
+                        borderColor: it.dot,
+                      }}
+                    />
+                    {it.label}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => setShowBusStops((v) => !v)}
+                aria-pressed={showBusStops}
+                className={`rounded-full border px-2 py-1 text-xs ${
+                  showBusStops
+                    ? "border-blue-500 bg-blue-100 text-blue-800"
+                    : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {/* 地図の点と同じ色。塗りが選択中／枠だけが未選択 */}
+                <span
+                  aria-hidden="true"
+                  className="mr-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full border align-middle"
+                  style={{ backgroundColor: showBusStops ? "#a855f7" : "transparent", borderColor: "#a855f7" }}
+                />
+                バス停
+              </button>
+              <button
+                onClick={() => setShowAccessible((v) => !v)}
+                aria-pressed={showAccessible}
+                className={`rounded-full border px-2 py-1 text-xs ${
+                  showAccessible
+                    ? "border-orange-500 bg-orange-100 text-orange-800"
+                    : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {/* 地図の点と同じ色。塗りが選択中／枠だけが未選択 */}
+                <span
+                  aria-hidden="true"
+                  className="mr-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full border align-middle"
+                  style={{ backgroundColor: showAccessible ? "#f59e0b" : "transparent", borderColor: "#f59e0b" }}
+                />
+                バリアフリー施設
+              </button>
+              <button
+                onClick={() => setShowTempStay((v) => !v)}
+                aria-pressed={showTempStay}
+                className={`rounded-full border px-2 py-1 text-xs ${
+                  showTempStay
+                    ? "border-blue-500 bg-blue-100 text-blue-800"
+                    : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {/* 地図の点と同じ色。塗りが選択中／枠だけが未選択 */}
+                <span
+                  aria-hidden="true"
+                  className="mr-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full border align-middle"
+                  style={{ backgroundColor: showTempStay ? "#4f46e5" : "transparent", borderColor: "#4f46e5" }}
+                />
+                一時滞在施設
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-slate-600">
+              <b>バス停は地図を拡大すると表示</b>されます。バリアフリー施設は避難経路上で立ち寄れる休憩先、一時滞在施設は帰宅困難者の待機先（都立）です。
+            </p>
+            <Source label={t("dataSource")}>
+              出典: 東京都オープンデータ（災害時給水ステーション／FREE Wi-Fi & TOKYO／「だれでも東京」施設情報／都立の一時滞在施設）・都営バスGTFS（東京都交通局／ODPT）— CC BY 4.0。一時滞在施設の座標は国土地理院APIでジオコーディング
+            </Source>
+          </div>
+              </div>
+            </div>
+          )}
+        </div>
       </main>
 
-      {/* モバイル: 地図が全画面になったぶん、現在地だけは常に見えるようにする。
-          ノッチ・ステータスバーに潜らないよう safe-area を見込む */}
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center p-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:hidden"
-      >
-        <span className="pointer-events-auto max-w-[92%] truncate rounded-full bg-white/95 px-3 py-1.5 text-xs text-slate-700 shadow-md">
-          {originLabel}
-        </span>
-      </div>
 
       {/* モバイル: 現在地取得のFAB。シートを畳んでいるときだけ出し、地図の操作を妨げない */}
       {snap === "peek" && (

@@ -148,7 +148,16 @@ const ROUTE_CASING_WIDTH: maplibregl.ExpressionSpecification = [
   17, 15,
 ];
 
-// 危険な経路の破線パターン。視差の軽減が有効な環境ではこの形のまま静止させる
+// 経路の色。赤の破線で統一する(#118)
+const ROUTE_COLOR = "#dc2626";
+// 目的地の色。経路の赤と被らないよう濃紺にする(#118)
+const DEST_COLOR = "#1e293b";
+// パルスの1周期(ms)と半径の振れ幅
+const PULSE_MS = 1600;
+const PULSE_MIN = 12;
+const PULSE_MAX = 26;
+
+// 経路の破線パターン。視差の軽減が有効な環境ではこの形のまま静止させる
 const DASH_STATIC: [number, number] = [2, 1.5];
 
 // 破線を少しずつずらして「流れる」ように見せる連番（marching ants）。
@@ -626,54 +635,19 @@ export default function MapView({
         },
         "all-pts"
       );
-      // 実線(青): 通常。深い浸水想定を通らない場合と、判定できない場合をまとめる。
-      // 以前は「回避=緑」と分けていたが、緑は安全のお墨付きに見える一方、
-      // 実際は想定区域図に照らして通っていないだけで当日の冠水・通行止めは保証しない。
-      // 利用者の行動も変わらないため、判定不能と同じ扱いにした(#110)
+      // 経路は1本だけ。危険度で色を分けず、赤の流れる破線で統一する(#118)。
+      // 災害種別ごとに色が変わるように見えて分かりにくかったため、
+      // 地図は「これが避難経路」だけを示し、危険の内容は文章側（浸水・延焼チェック）に任せる
       map.addLayer(
         {
           id: "route-line",
           type: "line",
           source: "route",
-          filter: ["==", ["get", "risk"], "normal"],
-          layout: { "line-cap": "round", "line-join": "round" },
-          paint: {
-            "line-width": ROUTE_WIDTH,
-            "line-opacity": 0.95,
-            "line-color": "#1d4ed8",
-          },
-        },
-        "all-pts"
-      );
-      // 破線(橙): 注意。くるぶし〜膝下の浸水想定。流れがあれば危険だが歩ける場合もある
-      map.addLayer(
-        {
-          id: "route-line-caution",
-          type: "line",
-          source: "route",
-          filter: ["==", ["get", "risk"], "caution"],
           layout: { "line-cap": "butt", "line-join": "round" },
           paint: {
             "line-width": ROUTE_WIDTH,
             "line-opacity": 1,
-            "line-color": "#ea580c",
-            "line-dasharray": DASH_STATIC,
-          },
-        },
-        "all-pts"
-      );
-      // 破線(赤): 危険。膝上以上の浸水想定で歩行が困難になる。ここだけ破線を流して注意を引く
-      map.addLayer(
-        {
-          id: "route-line-danger",
-          type: "line",
-          source: "route",
-          filter: ["==", ["get", "risk"], "danger"],
-          layout: { "line-cap": "butt", "line-join": "round" },
-          paint: {
-            "line-width": ROUTE_WIDTH,
-            "line-opacity": 1,
-            "line-color": "#dc2626",
+            "line-color": ROUTE_COLOR,
             "line-dasharray": DASH_STATIC,
           },
         },
@@ -681,14 +655,28 @@ export default function MapView({
       );
 
       map.addSource("ranked", { type: "geojson", data: emptyFC() });
+      // 目的地の外側で広がって消えるリング。点滅(フラッシュ)ではなく脈打つ表現にする
+      // （WCAG 2.3.1 の光過敏性発作リスクを避けつつ、視線を集める）
+      map.addLayer({
+        id: "ranked-pulse",
+        type: "circle",
+        source: "ranked",
+        paint: {
+          "circle-radius": 14,
+          "circle-color": DEST_COLOR,
+          "circle-opacity": 0.35,
+          "circle-stroke-width": 0,
+        },
+      });
+      // 目的地の本体。経路の赤と色が被らないよう濃紺にし、白枠で地図から浮かせる
       map.addLayer({
         id: "ranked-pts",
         type: "circle",
         source: "ranked",
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["get", "rank"], 0, 12, 19, 6],
-          "circle-color": ["case", ["==", ["get", "rank"], 0], "#dc2626", "#2563eb"],
-          "circle-stroke-width": 2,
+          "circle-radius": 11,
+          "circle-color": DEST_COLOR,
+          "circle-stroke-width": 3,
           "circle-stroke-color": "#ffffff",
         },
       });
@@ -699,7 +687,7 @@ export default function MapView({
         layout: {
           "text-field": ["get", "label"],
           "text-font": ["Open Sans Regular"],
-          "text-size": 11,
+          "text-size": 12,
           "text-offset": [0, 1.4],
           "text-anchor": "top",
         },
@@ -749,28 +737,33 @@ export default function MapView({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !loaded) return;
-    const feats = ranked.map((r, i) => ({
-      type: "Feature" as const,
-      geometry: r.feature.geometry,
-      properties: {
-        rank: i,
-        label: i === 0 ? `★ ${r.feature.properties.name}` : r.feature.properties.name,
-      },
-    }));
+    // 表示するのは選ばれた1件だけ(#118)。2位以下も出すと点だらけで
+    // 「どこへ行けばよいのか」が読み取れなくなる。候補の切替はリスト側から行う
+    const dest = ranked[0];
+    const feats = dest
+      ? [
+          {
+            type: "Feature" as const,
+            geometry: dest.feature.geometry,
+            properties: { label: `★ ${dest.feature.properties.name}` },
+          },
+        ]
+      : [];
     (map.getSource("ranked") as maplibregl.GeoJSONSource | undefined)?.setData({
       type: "FeatureCollection",
       features: feats,
     });
     if (ranked.length > 0) {
       const b = new maplibregl.LngLatBounds();
-      ranked.slice(0, 8).forEach((r) => b.extend(r.feature.geometry.coordinates));
+      // 現在地と目的地が収まればよい。候補全部に合わせると引きすぎて経路が読めない
+      b.extend(ranked[0].feature.geometry.coordinates);
       if (origin) b.extend(origin);
       // 地図を検索後に出す構成(#118)では、マウント直後のコンテナ寸法が未確定のまま
       // fitBounds が走り、初期ズーム(11=関東全域)のまま残ることがあった。
       // 寸法を取り込んでから合わせ、次フレームでもう一度当てて取りこぼしを防ぐ
       const fit = () => {
         map.resize();
-        map.fitBounds(b, { padding: 48, maxZoom: 16, duration: 500 });
+        map.fitBounds(b, { padding: { top: 96, bottom: 56, left: 56, right: 56 }, maxZoom: 16, duration: 500 });
       };
       fit();
       requestAnimationFrame(fit);
@@ -1000,14 +993,41 @@ export default function MapView({
     }
   }, [buildings3d, threeD, loaded]);
 
-  // 危険な経路の破線を流して注意を引く(#110)。
-  // 危険な経路が表示されているときだけ動かし、それ以外では requestAnimationFrame を回さない。
-  const routeDanger = routeLine?.risk === "danger";
+  // 目的地のパルス(#118)。点滅ではなく半径が脈打つ表現にして、視線を集める。
+  // 目的地が出ている間だけ回し、視差の軽減が有効なら静止させる
+  const hasDest = ranked.length > 0;
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !loaded || !map.getLayer("route-line-danger")) return;
-    if (!routeDanger || reduceMotion) {
-      map.setPaintProperty("route-line-danger", "line-dasharray", DASH_STATIC);
+    if (!map || !loaded || !map.getLayer("ranked-pulse")) return;
+    if (!hasDest || reduceMotion) {
+      map.setPaintProperty("ranked-pulse", "circle-radius", PULSE_MIN);
+      map.setPaintProperty("ranked-pulse", "circle-opacity", 0.35);
+      return;
+    }
+    let raf = 0;
+    const start = performance.now();
+    const tick = (t: number) => {
+      const phase = ((t - start) % PULSE_MS) / PULSE_MS; // 0→1
+      const r = PULSE_MIN + (PULSE_MAX - PULSE_MIN) * phase;
+      if (map.getLayer("ranked-pulse")) {
+        map.setPaintProperty("ranked-pulse", "circle-radius", r);
+        // 広がるほど薄くして、波紋のように見せる
+        map.setPaintProperty("ranked-pulse", "circle-opacity", 0.4 * (1 - phase));
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [hasDest, reduceMotion, loaded]);
+
+  // 危険な経路の破線を流して注意を引く(#110)。
+  // 危険な経路が表示されているときだけ動かし、それ以外では requestAnimationFrame を回さない。
+  const hasRoute = (routeLine?.coordinates.length ?? 0) > 1;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded || !map.getLayer("route-line")) return;
+    if (!hasRoute || reduceMotion) {
+      map.setPaintProperty("route-line", "line-dasharray", DASH_STATIC);
       return;
     }
     let raf = 0;
@@ -1017,8 +1037,8 @@ export default function MapView({
       if (t - last >= DASH_FRAME_MS) {
         step = (step + 1) % DASH_SEQUENCE.length;
         // スタイル差し替え等でレイヤーが消えている場合に備えて都度確認する
-        if (map.getLayer("route-line-danger")) {
-          map.setPaintProperty("route-line-danger", "line-dasharray", DASH_SEQUENCE[step]);
+        if (map.getLayer("route-line")) {
+          map.setPaintProperty("route-line", "line-dasharray", DASH_SEQUENCE[step]);
         }
         last = t;
       }
@@ -1026,7 +1046,7 @@ export default function MapView({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [routeDanger, reduceMotion, loaded]);
+  }, [hasRoute, reduceMotion, loaded]);
 
   // 結果リストで選ばれた避難所へ寄せる(#107)。
   // スマホでは一覧と地図を同時に見られないため、カードから位置を確かめる導線を用意する

@@ -236,10 +236,26 @@ export default function BottomSheet({
       {/* 中身。シート内のスクロールが背後へ連鎖しないよう overscroll を止める */}
       <div
         ref={scrollRef}
+        // 中身のスクロール領域を「画面に見えているぶん」に収める。
+        // シートは高さ固定を translateY で下げているので、これを指定しないと
+        // スクロール領域の下端が画面外に残り、最後まで読めなくなる(#118)
+        style={
+          mode === "result"
+            ? {
+                maxHeight: `calc(${VISIBLE[snap]}dvh - 44px)`,
+                // ドラッグ中はアニメーションしない。高さが動くとつまみの位置もずれて、
+                // 指の追従がぶれる（掴んだ場所と実際の位置が食い違う）
+                transition:
+                  dragOffset != null || reduceMotion
+                    ? "none"
+                    : "max-height 240ms cubic-bezier(0.4,0,0.2,1)",
+              }
+            : undefined
+        }
         className={
           mode === "consult"
             ? "flex flex-col gap-4 px-5 py-8 pb-[max(2rem,env(safe-area-inset-bottom))]"
-            : "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:p-4"
+            : "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:max-h-none md:p-4"
         }
       >
         {children}
