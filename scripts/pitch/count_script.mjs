@@ -34,7 +34,11 @@ for (const line of lines) {
   if (inOptional) cur.optionalChars += n; else cur.chars += n;
 }
 
-const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+// 先に秒へ丸めてから分秒に割る。剰余のあとで丸めると 599.6 秒が「9:60」になる
+const fmt = (s) => {
+  const t = Math.round(s);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+};
 let totalEst = 0, totalAlloc = 0, warn = 0;
 console.log(`話速 ${CPM}字/分 で計算（許容±${TOLERANCE_SEC}秒）\n`);
 console.log("  " + "セクション".padEnd(30) + "割当   推定   差   実話速");
