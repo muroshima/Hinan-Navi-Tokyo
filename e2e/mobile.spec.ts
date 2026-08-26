@@ -345,3 +345,55 @@ test("シートを畳みきれて、現在地ボタンが隠れない", async ({
   const vh = await page.evaluate(() => window.innerHeight);
   expect(sheet.y).toBeGreaterThan(vh * 0.6);
 });
+
+// つまみは「動かした距離」だけでなく「離した時の勢い」も見る。
+// 勢いを拾わないと、素早く弾いても隣の段にしか行けずフリックが効かない(#118)
+test("素早く弾くと勢いのぶんだけ余計に閉じる", async ({ page }) => {
+  await page.goto("/");
+  await page
+    .getByPlaceholder("例）雨の日、車椅子の母と避難したい")
+    .fill("大地震で火事が広がっている。足の悪い祖母と逃げたい");
+  await page.getByRole("button", { name: "避難所をさがす" }).click();
+  await expect(page.getByRole("link", { name: "ルート" }).first()).toBeVisible({ timeout: 30_000 });
+
+  const handle = page.getByRole("button", { name: /情報パネルの高さを変える/ });
+  const snapName = async () =>
+    (await handle.getAttribute("aria-label"))!.match(/現在: (.+)）/)![1];
+  const goTo = async (want: string) => {
+    for (let i = 0; i < 6; i++) {
+      if ((await snapName()) === want) return;
+      await handle.click();
+      await page.waitForTimeout(400);
+    }
+  };
+  // 同じ距離を、間を置きながら動かす（遅い）／一気に動かす（速い）
+  const dragDown = async (steps: number, waitMs: number) => {
+    const box = (await handle.boundingBox())!;
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    const dy = (await page.evaluate(() => window.innerHeight)) * 0.12;
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    await expect(handle).toHaveAttribute("data-dragging", "true");
+    for (let i = 1; i <= steps; i++) {
+      await page.mouse.move(cx, cy + (dy * i) / steps);
+      if (waitMs) await page.waitForTimeout(waitMs);
+    }
+    await page.mouse.up();
+    await page.waitForTimeout(600);
+  };
+
+  const ORDER = ["最小", "小", "中", "大"];
+  await goTo("中");
+  await dragDown(10, 40); // ゆっくり
+  const slow = await snapName();
+  await goTo("中");
+  await dragDown(3, 0); // 素早く
+  const fast = await snapName();
+
+  // 勢いがあるほうが、同じ距離でもより閉じた段に着く
+  expect(
+    ORDER.indexOf(fast),
+    `素早く弾いた時=${fast} / ゆっくり動かした時=${slow}`
+  ).toBeLessThan(ORDER.indexOf(slow));
+});

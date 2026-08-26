@@ -28,6 +28,20 @@ body {
   overscroll-behavior: none;
 }
 
+/* 押した手応え。押した瞬間に少し沈むと「反応した」と伝わる（#118）。
+   押し込みは離すより速く戻すのではなく、どちらも短く。100ms 前後が目安。
+   動きを控える設定では拡大縮小をやめる（色や背景の変化は各要素側に残る）。
+   つまみ(div role=button)は対象外。ドラッグ中に縮むと掴んだ位置とずれる */
+button {
+  transition: transform 100ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  button:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+}
+
 /* スマホ向けの操作性（#107）。
    パネルがボトムシートになる幅（Tailwind の md 未満）に揃えて切り替え、
    加えて指で操作する端末では幅によらず適用する。

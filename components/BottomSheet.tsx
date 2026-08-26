@@ -66,6 +66,41 @@ function nearestSnap(offset: number): Snap {
   return best;
 }
 
+// 境界を越えた分の抵抗。越えるほど動かなくなる。
+// ぴたりと止めると「固まった」と感じるが、抵抗が続けば「ここで終わり」と伝わる
+const RUBBER_MAX_VH = 4;
+function rubberband(overshootVh: number) {
+  const k = 0.55;
+  const d = 24; // 抵抗が効き始める幅(dvh)
+  return Math.min(RUBBER_MAX_VH, (overshootVh * d * k) / (d + k * Math.abs(overshootVh)));
+}
+
+// 指の勢いから「このまま滑ったらどこで止まるか」を出す（スクロールの慣性と同じ考え方）。
+// 減速率 0.99 は端末のスクロールより短く止まる値。避難先を探す画面で
+// 大きく飛びすぎると、狙った段に入れられない
+function projectVh(velocityPxPerMs: number) {
+  const decel = 0.99;
+  const px = velocityPxPerMs * 1000 * (decel / (1 - decel)) / 1000;
+  return (px / window.innerHeight) * 100;
+}
+
+// 掴んだ位置からの移動量を、シートの下端オフセット(dvh)に直す。
+// 着地の判定は「指を離した位置」から直に計算する。React では pointermove が
+// pointerup より低い優先度で処理されるため、負荷が高いと最後の move が後回しになり、
+// 途中の値を着地点だと思い込んで段が変わらないことがあった（素早く弾くと再現した）
+function offsetAt(clientY: number, d: { startY: number; startOffset: number; reduce: boolean }) {
+  const deltaVh = ((clientY - d.startY) / window.innerHeight) * 100;
+  const raw = d.startOffset + deltaVh;
+  const min = 0;
+  const max = offsetOf("collapsed");
+  // collapsed より下、full より上は抵抗を付けて少しだけ動かす
+  // 動きを控える設定では、境界を越えた弾みを出さずに止める
+  if (d.reduce) return Math.min(max, Math.max(min, raw));
+  if (raw < min) return min - rubberband(min - raw);
+  if (raw > max) return max + rubberband(raw - max);
+  return raw;
+}
+
 export default function BottomSheet({
   mode = "result",
   snap,
@@ -77,7 +112,19 @@ export default function BottomSheet({
 }: Props) {
   // ドラッグ中だけ実オフセットを持ち、離したらスナップ位置へ戻す（null=ドラッグしていない）
   const [dragOffset, setDragOffset] = useState<number | null>(null);
-  const dragging = useRef<{ startY: number; startOffset: number; pointerId: number } | null>(null);
+  const dragging = useRef<{
+    startY: number;
+    startOffset: number;
+    pointerId: number;
+    // 離した瞬間の速度を出すための直近の位置と時刻。
+    // 指の勢いを拾わないと、ゆっくり動かした距離だけで着地が決まり、
+    // 素早く弾いても隣の段にしか行けない（フリックが効かない）
+    lastY: number;
+    lastT: number;
+    velocity: number; // px/ms（下が正）
+    // 掴んだ時点の「動きを控える」設定。ドラッグ中に変わることはないので固定でよい
+    reduce: boolean;
+  } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [reduceMotion, setReduceMotion] = useState(false);
 
@@ -108,15 +155,6 @@ export default function BottomSheet({
     if (scrollTopSignal != null && scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [scrollTopSignal]);
 
-  // 掴んだ位置からの移動量を、シートの下端オフセット(dvh)に直す。
-  // 着地の判定は「指を離した位置」から直に計算する。React では pointermove が
-  // pointerup より低い優先度で処理されるため、負荷が高いと最後の move が後回しになり、
-  // 途中の値を着地点だと思い込んで段が変わらないことがあった（素早く弾くと再現した）
-  const offsetAt = (clientY: number, d: { startY: number; startOffset: number }) => {
-    const deltaVh = ((clientY - d.startY) / window.innerHeight) * 100;
-    // collapsed より下、full より上へは行かせない
-    return Math.min(offsetOf("collapsed"), Math.max(0, d.startOffset + deltaVh));
-  };
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -126,16 +164,32 @@ export default function BottomSheet({
       // 代わりにフォーカスは自分で移し、キーボード操作の起点は保つ
       e.preventDefault();
       (e.currentTarget as HTMLElement).focus();
-      dragging.current = { startY: e.clientY, startOffset: offsetOf(snap), pointerId: e.pointerId };
+      dragging.current = {
+        startY: e.clientY,
+        startOffset: offsetOf(snap),
+        pointerId: e.pointerId,
+        lastY: e.clientY,
+        lastT: e.timeStamp,
+        velocity: 0,
+        reduce: reduceMotion,
+      };
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
       setDragOffset(offsetOf(snap));
     },
-    [snap]
+    [snap, reduceMotion]
   );
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     const d = dragging.current;
     if (!d || d.pointerId !== e.pointerId) return;
+    const dt = e.timeStamp - d.lastT;
+    if (dt > 0) {
+      // 直近の1区間だけだと指の震えを拾うので、前の値と混ぜて滑らかにする
+      const v = (e.clientY - d.lastY) / dt;
+      d.velocity = d.velocity * 0.3 + v * 0.7;
+      d.lastY = e.clientY;
+      d.lastT = e.timeStamp;
+    }
     setDragOffset(offsetAt(e.clientY, d));
   }, []);
 
@@ -154,7 +208,9 @@ export default function BottomSheet({
       // （click 経由にしておくと、支援技術からの操作でも同じ動きになる）
       if (Math.abs(e.clientY - d.startY) < TAP_THRESHOLD_PX) return;
       suppressClick.current = true;
-      onSnapChange(nearestSnap(landed));
+      // 離した位置ではなく、勢いのまま滑った先でスナップ先を決める。
+      // 弱く動かせば隣の段、強く弾けば端まで飛ぶ
+      onSnapChange(nearestSnap(landed + projectVh(d.velocity)));
     },
     [onSnapChange]
   );
@@ -194,7 +250,7 @@ export default function BottomSheet({
           "--sheet-transition":
             dragOffset != null || reduceMotion
               ? "none"
-              : "transform 240ms cubic-bezier(0.4,0,0.2,1)",
+              : "transform 260ms cubic-bezier(0.32,0.72,0,1)",
           ...(desktopWidth ? { "--sidebar-w": `${desktopWidth}px` } : {}),
         } as React.CSSProperties
       }
@@ -267,7 +323,7 @@ export default function BottomSheet({
                 "--sheet-max-h-transition":
                   dragOffset != null || reduceMotion
                     ? "none"
-                    : "max-height 240ms cubic-bezier(0.4,0,0.2,1)",
+                    : "max-height 260ms cubic-bezier(0.32,0.72,0,1)",
               } as React.CSSProperties)
             : undefined
         }

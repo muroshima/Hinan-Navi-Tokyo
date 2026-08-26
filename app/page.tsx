@@ -1782,24 +1782,30 @@ export default function Home() {
       {/* モバイル: 現在地取得のFAB。シートの高さに追従させて隠れないようにする(#118)。
           シートを最大まで開いているときは地図が見えないので出さない */}
       {snap !== "full" && (
-        <button
-          onClick={handleMyLocation}
-          disabled={geoLoading}
-          aria-pressed={originSource === "gps"}
-          aria-label="現在地を取得する"
-          className={`absolute right-4 z-30 flex min-h-[44px] items-center justify-center rounded-full border px-4 text-xs font-semibold shadow-lg disabled:opacity-50 md:hidden ${
-            originSource === "gps"
-              ? "border-blue-600 bg-blue-600 text-white"
-              : "border-slate-300 bg-white text-slate-700 active:bg-slate-100"
-          }`}
-          // シートのすぐ上に置く。高さは BottomSheet 側の値を参照して二重管理にしない
+        // 位置の追従は外側の枠で持つ。ボタン自身は押した時に縮むので、
+        // 同じ要素で transform を二重に使うと打ち消し合う。
+        // bottom ではなく transform で動かす（レイアウトを計算し直させない）
+        <div
+          className="absolute right-4 bottom-3 z-30 md:hidden"
           style={{
-            bottom: `calc(${visibleVh(snap)}dvh + 0.75rem)`,
-            transition: "bottom 240ms cubic-bezier(0.4,0,0.2,1)",
+            transform: `translateY(-${visibleVh(snap)}dvh)`,
+            transition: "transform 260ms cubic-bezier(0.32,0.72,0,1)",
           }}
         >
-          {geoLoading ? t("gpsLoading") : t("currentLocation")}
-        </button>
+          <button
+            onClick={handleMyLocation}
+            disabled={geoLoading}
+            aria-pressed={originSource === "gps"}
+            aria-label="現在地を取得する"
+            className={`flex min-h-[44px] items-center justify-center rounded-full border px-4 text-xs font-semibold shadow-lg disabled:opacity-50 ${
+              originSource === "gps"
+                ? "border-blue-600 bg-blue-600 text-white"
+                : "border-slate-300 bg-white text-slate-700 active:bg-slate-100"
+            }`}
+          >
+            {geoLoading ? t("gpsLoading") : t("currentLocation")}
+          </button>
+        </div>
       )}
       </>
       )}
