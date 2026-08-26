@@ -44,6 +44,20 @@ test("相談してから地図とシートが現れ、検索後は避難先が�
   // つまみをタップすると最大まで開く
   await handle.click();
   await expect(handle).toHaveAttribute("aria-expanded", "true");
+
+  // 避難先カードが、背景情報や共有より前にある。
+  // 「どこへ行けばよいか」を探している人に、経路の注意やタイムラインを
+  // 先に読ませてスクロールさせない（並び順をコメントでなくテストで固定する）
+  const cardTop = (await page.getByRole("link", { name: "ルート" }).first().boundingBox())!.y;
+  for (const later of [
+    "いまいる場所の地震リスク",
+    "この順位になった理由",
+    "あなたのマイ・タイムライン",
+    "家族・支援者に共有",
+  ]) {
+    const box = (await page.getByText(later).first().boundingBox())!;
+    expect(box.y, `「${later}」は避難先カードより後ろに置く`).toBeGreaterThan(cardTop);
+  }
 });
 
 // pointerup のあとに click も発火するため、両方でスナップを変えると必ず1段ずれる。

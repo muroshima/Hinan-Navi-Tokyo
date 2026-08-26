@@ -1222,6 +1222,22 @@ export default function Home() {
           </div>
         )}
 
+        {/* 結果リスト。1位だけ常に見せ、2位以下は畳む（認知負荷を下げる・#118）。
+            探している当人が最初に知りたいのは「どこへ行けばよいか」なので、
+            経路の注意やタイムライン・共有より前に置く。
+            帰宅困難者モードの案内だけは前に残す（外出中は指定避難所ではなく
+            一時滞在施設で待つのが原則で、カードより先に読ませたい） */}
+        <div className="flex flex-col gap-2">
+          {ranked[0] && renderCard(ranked[0], 0)}
+          {ranked.length > 1 && (
+            <Disclosure summary={t("otherCandidates")} count={Math.min(ranked.length, 8) - 1}>
+              <div className="flex flex-col gap-2">
+                {ranked.slice(1, 8).map((r, i) => renderCard(r, i + 1))}
+              </div>
+            </Disclosure>
+          )}
+        </div>
+
         {/* 現在地の地震リスク（#106）。背景情報なので畳んでおく */}
         {originQuakeLines.length > 0 && (
           <Disclosure summary={t("quakeRiskHere")}>
@@ -1446,17 +1462,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* 結果リスト。1位だけ常に見せ、2位以下は畳む（認知負荷を下げる・#118） */}
-        <div className="flex flex-col gap-2">
-          {ranked[0] && renderCard(ranked[0], 0)}
-          {ranked.length > 1 && (
-            <Disclosure summary={t("otherCandidates")} count={Math.min(ranked.length, 8) - 1}>
-              <div className="flex flex-col gap-2">
-                {ranked.slice(1, 8).map((r, i) => renderCard(r, i + 1))}
-              </div>
-            </Disclosure>
-          )}
-        </div>
       </BottomSheet>
 
       {/* 以下は結果表示中のみ。相談中は地図もレイヤ操作も出さない(#118) */}

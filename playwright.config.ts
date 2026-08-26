@@ -4,7 +4,10 @@ import { defineConfig, devices } from "@playwright/test";
 // CI では build → playwright test の順で走らせる（.github/workflows/ci.yml）。
 // ローカルで開発サーバ(3000)を立てたままでも、本番相当のビルドに対して検査できるように
 // ポートを切り替えられる。既定は 3000（開発サーバが居ればそれを再利用する）。
-// `next start` に対して確かめたい時は E2E_PORT=3100 のように別ポートを渡す
+// `next start` に対して確かめたい時は E2E_PORT=3100 のように別ポートを渡す。
+// ⚠️ reuseExistingServer は「そのポートで何か応答すれば」再利用する。自分で立てた
+//    サーバが残っていると、ビルドし直しても古い内容のまま走る（実際に検証が
+//    11分かかって1件しか通らない状態になった）。ビルドを変えたら立て直す
 const PORT = Number(process.env.E2E_PORT ?? 3000);
 const baseURL = `http://localhost:${PORT}`;
 
