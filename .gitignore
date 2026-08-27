@@ -55,6 +55,7 @@ shot_*.jpg
 
 # marp html出力（ビルド生成物。正はdocs/slides.pdf。npxで再生成可能）
 docs/slides.html
+docs/slides_2min.html
 
 # デモ動画（バイナリで履歴肥大。公開版は YouTube、ローカルが再アップ用の正本）
 docs/demo.mp4
