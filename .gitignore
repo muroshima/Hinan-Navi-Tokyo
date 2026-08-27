@@ -57,6 +57,20 @@ shot_*.jpg
 docs/slides.html
 docs/slides_2min.html
 
+# 登壇の手元資料。舞台裏メモ（遅れたら何を捨てるか・言い換えの指示）を含むので
+# 公開リポジトリには置かない。ローカルには残す
+docs/talk_script.md
+docs/talk_script_2min.md
+
+# 本戦当日の2分版。10分版(slides.md)から抜き出したもので、原本を残せば作り直せる
+docs/slides_2min.md
+docs/slides_2min.pdf
+docs/slides_2min.pptx
+
+# 共用PCで Google スライドに変換するためだけの生成物（9MB）。
+# slides.md から `marp-cli --pptx` で作り直せる。PDF は README から参照しているので追跡する
+docs/slides.pptx
+
 # デモ動画（バイナリで履歴肥大。公開版は YouTube、ローカルが再アップ用の正本）
 docs/demo.mp4
 
